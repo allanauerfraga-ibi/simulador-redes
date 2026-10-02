@@ -342,7 +342,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
               <div class="rt-item" onclick="pickMeshKit('amplifi')">🟪 <b>Ubiquiti AmpliFi HD</b><span>4 nós · WiFi 6</span></div>
             </div>
           </div>
-          <button class="menu-action" id="btn-switch" onclick="setMode('add','switch')">🔌 Switch</button>
+          <button class="menu-action" id="btn-switch" onclick="showSwitchPortModal()">🔌 Switch — escolher portas</button>
           <button class="menu-action" id="btn-server" onclick="setMode('add','server')">🖥️ Servidor</button>
           <button class="menu-action" id="btn-firewall" onclick="setMode('add','firewall')">🛡️ Firewall</button>
           <button class="menu-action" id="btn-rack" onclick="showRackModal()">🗄️ Rack de rede</button>
@@ -378,6 +378,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         <div class="menu-grid one">
           <button class="menu-action" id="btn-connect" onclick="setMode('connect')">🔗 Conectar com cabo</button>
           <button class="menu-action" id="btn-wifi" onclick="startWiFiMode()">📶 Conectar por Wi-Fi</button>
+          <button class="menu-action" id="btn-isp-fiber" onclick="startISPFiberMode()">🔷 Fibra óptica entre provedores</button>
           <button class="menu-action" id="btn-backbone" onclick="startBackboneMode()">🟣 Criar backbone</button>
           <button class="menu-action danger" id="btn-delete-link" onclick="setMode('deleteLink')">✂️ Apagar cabo ou enlace</button>
         </div>
@@ -588,6 +589,8 @@ let devices=[],connections=[],packets=[],racks=[];
 let mode='select',addType='',connectFirst=null,selected=null;
 let backboneFirst=null,backboneSecond=null;
 let wifiFirst=null;
+let ispFiberFirst=null;
+let pendingSwitchPorts=24;
 let dragging=null,draggingRack=null,dragOffX=0,dragOffY=0;
 let nextId=1,sTx=0,sRx=0,sDrop=0;
 let nextRackId=1,pendingRackSize=24;
@@ -751,6 +754,24 @@ function undo(){
 // =========================================================
 // DEVICES
 // =========================================================
+function showSwitchPortModal(){
+  showModal(`<h3>🔌 Adicionar switch</h3>
+    <div class="edu-note">Escolha a quantidade de portas Ethernet. Cada conexão ocupará uma porta livre do switch.</div>
+    <label>Quantidade de portas</label>
+    <select id="switch-port-count">
+      <option value="4">4 portas — rede pequena</option>
+      <option value="8">8 portas — laboratório pequeno</option>
+      <option value="16">16 portas — laboratório médio</option>
+      <option value="24" selected>24 portas — laboratório completo</option>
+    </select>
+    <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="prepareSwitchPlacement()">✅ Escolher local</button></div>`);
+}
+function prepareSwitchPlacement(){
+  const ports=+document.getElementById('switch-port-count')?.value;
+  pendingSwitchPorts=[4,8,16,24].includes(ports)?ports:24;
+  closeModal();setMode('add','switch');
+  rackNotice('Switch selecionado',`Clique no espaço de trabalho para adicionar um switch de ${pendingSwitchPorts} portas.`,'ok');
+}
 function addDevice(x,y,type){
   saveHistory();
   const n=devices.filter(d=>d.type===type).length+1;
@@ -762,13 +783,14 @@ function addDevice(x,y,type){
   const d={id:nextId++,x,y,type,name,ip,mask:'255.255.255.0',mac,status:'up',
     interfaces:[{name:type==='phone'?'wlan0':'eth0',ip,mask:'255.255.255.0',status:'up',kind:firstKind,speed:firstSpeed,mac:genMAC()}],
     acl:[],routes:[],label:name,vlan:1,vlanAssigned:false,dhcpEnabled:false,dhcpFrom:''};
-  const ifc={router:4,switch:24,server:2,firewall:4,cloud:2};
+  if(type==='switch')d.portCount=pendingSwitchPorts;
+  const ifc={router:4,switch:d.portCount||24,server:2,firewall:4,cloud:2};
   for(let i=1;i<(ifc[type]||1);i++) d.interfaces.push({name:'eth'+i,ip:'',mask:'255.255.255.0',status:'up',kind:'wired',speed:BW[type]||1000,mac:genMAC()});
   devices.push(d);
   if(getRackAt(x,y))assignRack(d);
   arpTable[ip]=mac; macTable[mac]=d.id;
   updateAll();
-  sysLog(`Dispositivo adicionado: ${name} IP:${ip}`,'lsys');
+  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+d.portCount+' portas':''} IP:${ip}`,'lsys');
   showExplain(type);
   return d;
 }
@@ -1069,6 +1091,62 @@ function cancelBackbone(){backboneFirst=null;backboneSecond=null;closeModal();se
 function formatBandwidth(bw){return bw>=1000?(bw/1000)+' Gbps':bw+' Mbps';}
 
 // =========================================================
+// FIBRA ÓPTICA ENTRE PROVEDORES
+// =========================================================
+function isInternetProvider(dev){
+  return !!(dev&&dev.type==='cloud'&&dev.ispData&&dev.ispData.type==='fibra');
+}
+function startISPFiberMode(){
+  const providers=devices.filter(isInternetProvider);
+  if(providers.length<2){
+    rackNotice('São necessários dois provedores','Adicione pelo menos dois provedores de Internet antes de criar a fibra óptica.');return;
+  }
+  mode='ispFiber';addType='';connectFirst=null;wifiFirst=null;backboneFirst=null;backboneSecond=null;ispFiberFirst=null;selected=null;
+  document.querySelectorAll('#topbar button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-isp-fiber')?.classList.add('active');
+  document.getElementById('s-mode').textContent='Fibra ISP: selecione o primeiro provedor';
+  document.getElementById('explain-icon').textContent='🔷';
+  document.getElementById('explain-text').textContent='Clique no primeiro provedor e depois no segundo. A conexão será criada exclusivamente por fibra óptica.';
+  document.getElementById('explain-bar').classList.remove('activity-active');
+  document.getElementById('explain-bar').classList.add('show');draw();
+}
+function selectISPFiberProvider(dev){
+  if(!isInternetProvider(dev)){
+    rackNotice('Selecione um provedor de Internet','A fibra entre provedores aceita JNNET, LOGA, CJNET, Claro, Vivo, TIM, Oi Fibra ou Brisanet.');return;
+  }
+  if(!ispFiberFirst){
+    ispFiberFirst=dev;selected=dev;updateDevList();draw();
+    document.getElementById('s-mode').textContent='Fibra ISP: selecione o segundo provedor';
+    rackNotice('Primeiro provedor selecionado',`${dev.name}. Agora clique no segundo provedor.`,'ok');return;
+  }
+  if(dev.id===ispFiberFirst.id){rackNotice('Seleção inválida','Escolha outro provedor.');return;}
+  showISPFiberConfig(ispFiberFirst,dev);
+}
+function showISPFiberConfig(a,b){
+  showModal(`<h3>🔷 Fibra óptica entre provedores</h3>
+    <div class="edu-note">A ligação representa um enlace óptico de alta capacidade entre as redes dos dois provedores.</div>
+    <div class="prop-row"><span class="pl">Provedor A</span><span class="pv">${a.ispData?.icon||'🌐'} ${a.name}</span></div>
+    <div class="prop-row" style="margin-bottom:10px"><span class="pl">Provedor B</span><span class="pv">${b.ispData?.icon||'🌐'} ${b.name}</span></div>
+    <label>Velocidade da fibra</label>
+    <select id="isp-fiber-speed"><option value="1000">1 Gbps</option><option value="10000" selected>10 Gbps</option><option value="40000">40 Gbps</option><option value="100000">100 Gbps</option></select>
+    <div class="modal-btns"><button onclick="cancelISPFiber()">Cancelar</button><button class="green" onclick="createISPFiber(${b.id})">🔷 Conectar provedores</button></div>`);
+}
+function createISPFiber(secondId){
+  const a=ispFiberFirst,b=devices.find(d=>d.id===secondId),bw=+document.getElementById('isp-fiber-speed')?.value||10000;
+  if(!isInternetProvider(a)||!isInternetProvider(b)||a.id===b.id){cancelISPFiber();rackNotice('Fibra não criada','Selecione dois provedores diferentes.');return;}
+  const duplicate=connections.find(c=>((c.from===a.id&&c.to===b.id)||(c.from===b.id&&c.to===a.id))&&c.kind==='ispFiber');
+  if(duplicate){duplicate.bw=bw;duplicate.lat=.1;closeModal();ispFiberFirst=null;setMode('select');updateAll();rackNotice('Fibra atualizada',`${a.name} ↔ ${b.name} agora opera em ${formatBandwidth(bw)}.`,'ok');return;}
+  const fromIface=nextFreeInterface(a,'wired'),toIface=nextFreeInterface(b,'wired');
+  if(!fromIface||!toIface){rackNotice('Porta indisponível','Um dos provedores não possui porta Ethernet livre para o enlace óptico.');return;}
+  saveHistory();
+  connections.push({id:nextId++,from:a.id,to:b.id,bw,lat:.1,kind:'ispFiber',medium:'fiber',cableStandard:'Fibra óptica',fromIface,toIface});
+  closeModal();ispFiberFirst=null;setMode('select');updateAll();
+  rackNotice('Provedores conectados',`${a.name} ↔ ${b.name} por fibra óptica de ${formatBandwidth(bw)}.`,'ok');
+  sysLog(`FIBRA ISP: ${a.name} ${fromIface} ↔ ${b.name} ${toIface} | ${formatBandwidth(bw)}`,'lsys');
+}
+function cancelISPFiber(){ispFiberFirst=null;closeModal();setMode('select');draw();}
+
+// =========================================================
 // ROUTING (Dijkstra)
 // =========================================================
 function findPath(sid,eid){
@@ -1145,12 +1223,18 @@ function drawConn(c){
   ctx.save();
   const isBackbone=c.kind==='backbone';
   const isWifi=c.kind==='wifi';
-  if(active){ctx.shadowColor=isBackbone?'#a371f7':(isWifi?'#70e1ff':'#58a6ff');ctx.shadowBlur=14;}
+  const isISPFiber=c.kind==='ispFiber';
+  if(active){ctx.shadowColor=isBackbone?'#a371f7':((isWifi||isISPFiber)?'#70e1ff':'#58a6ff');ctx.shadowBlur=14;}
   ctx.setLineDash(isWifi?[3,6]:(up?[]:[5,4]));
   if(isBackbone){
     ctx.beginPath();ctx.strokeStyle=up?'rgba(163,113,247,.38)':'#3d1c1c';ctx.lineWidth=9;
     ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
     ctx.beginPath();ctx.strokeStyle=active?'#f0d7ff':(up?'#a371f7':'#6b3030');ctx.lineWidth=3;
+    ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  }else if(isISPFiber){
+    ctx.beginPath();ctx.strokeStyle=up?'rgba(56,189,248,.35)':'#3d1c1c';ctx.lineWidth=8;
+    ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    ctx.beginPath();ctx.strokeStyle=active?'#ffffff':(up?'#38bdf8':'#6b3030');ctx.lineWidth=3;
     ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
   }else if(isWifi){
     ctx.beginPath();ctx.strokeStyle=up?(active?'#d7f8ff':'#38bcd8'):'#6b3030';ctx.lineWidth=active?4:2.5;
@@ -1163,13 +1247,13 @@ function drawConn(c){
   // BW label
   const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
   const mediumLabel={fiber:'Fibra',copper:'Cat6A',radio:'Rádio'}[c.medium]||'';
-  const linkLabel=isBackbone?`BACKBONE • ${formatBandwidth(c.bw)}${mediumLabel?' • '+mediumLabel:''}`:(isWifi?`WI-FI • ${c.ssid||'SSID'} • ${c.bw}M`:c.bw+'M');
-  ctx.font=(isBackbone||isWifi)?'bold 8px monospace':'8px monospace';
+  const linkLabel=isISPFiber?`FIBRA ISP • ${formatBandwidth(c.bw)}`:(isBackbone?`BACKBONE • ${formatBandwidth(c.bw)}${mediumLabel?' • '+mediumLabel:''}`:(isWifi?`WI-FI • ${c.ssid||'SSID'} • ${c.bw}M`:c.bw+'M'));
+  ctx.font=(isBackbone||isWifi||isISPFiber)?'bold 8px monospace':'8px monospace';
   const labelW=Math.max(36,ctx.measureText(linkLabel).width+12);
-  ctx.fillStyle=isBackbone?'#24183a':(isWifi?'#0b2933':themeColor('#1c2128','#ffffff'));ctx.beginPath();
+  ctx.fillStyle=isISPFiber?'#082f49':(isBackbone?'#24183a':(isWifi?'#0b2933':themeColor('#1c2128','#ffffff')));ctx.beginPath();
   if(ctx.roundRect)ctx.roundRect(mx-labelW/2,my-8,labelW,15,4);else{ctx.rect(mx-labelW/2,my-8,labelW,15);}
   ctx.fill();
-  ctx.fillStyle=isBackbone?'#d8c3ff':(isWifi?'#70e1ff':themeColor('#6e7681','#40566c'));ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle=isISPFiber?'#bae6fd':(isBackbone?'#d8c3ff':(isWifi?'#70e1ff':themeColor('#6e7681','#40566c')));ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.fillText(linkLabel,mx,my);
   ctx.restore();
 }
@@ -1183,7 +1267,7 @@ function pointToSegmentDistance(px,py,x1,y1,x2,y2){
 function getConnectionAt(x,y){
   return connections.slice().reverse().find(c=>{
     const a=devices.find(d=>d.id===c.from),b=devices.find(d=>d.id===c.to);if(!a||!b)return false;
-    return pointToSegmentDistance(x,y,a.x,a.y,b.x,b.y)<(c.kind==='backbone'?12:(c.kind==='wifi'?11:9));
+    return pointToSegmentDistance(x,y,a.x,a.y,b.x,b.y)<((c.kind==='backbone'||c.kind==='ispFiber')?12:(c.kind==='wifi'?11:9));
   });
 }
 function deleteConnectionAt(x,y){
@@ -1200,7 +1284,7 @@ function removeConnection(conn){
     if(phone){phone.wifiRouterId=null;phone.ssid='';phone.gw='';}
   }
   connections=connections.filter(c=>c.id!==conn.id);updateAll();
-  const kind=conn.kind==='backbone'?'Backbone':(conn.kind==='wifi'?'Conexão Wi-Fi':'Cabo de rede');
+  const kind=conn.kind==='backbone'?'Backbone':(conn.kind==='ispFiber'?'Fibra entre provedores':(conn.kind==='wifi'?'Conexão Wi-Fi':'Cabo de rede'));
   rackNotice(`${kind} removido`,`${a?.name||'Dispositivo'} ↔ ${b?.name||'Dispositivo'}.`,'ok');
   sysLog(`${kind} removido: ${a?.name||'?'} ↔ ${b?.name||'?'}`,'lwarn');
   if(selected&&!selected._rack&&devices.some(d=>d.id===selected.id))updateProp(selected);
@@ -1208,7 +1292,7 @@ function removeConnection(conn){
 
 function drawDev(d){
   const isSel=selected&&selected.id===d.id;
-  const isConn=(connectFirst&&connectFirst.id===d.id)||(backboneFirst&&backboneFirst.id===d.id)||(wifiFirst&&wifiFirst.id===d.id);
+  const isConn=(connectFirst&&connectFirst.id===d.id)||(backboneFirst&&backboneFirst.id===d.id)||(wifiFirst&&wifiFirst.id===d.id)||(ispFiberFirst&&ispFiberFirst.id===d.id);
   const isDown=d.status==='down';
   const col=isDown?'#555':COLORS[d.type];
   ctx.save();
@@ -1326,9 +1410,10 @@ function drawDev(d){
     rr2(d.x-sw/2,d.y-sh/2,sw,sh,4);ctx.fillStyle=sg3;ctx.fill();
     ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':col);ctx.lineWidth=isSel||isConn?2.5:1.5;ctx.stroke();
     if(!isDown){ctx.fillStyle='#1f3022';ctx.beginPath();ctx.moveTo(d.x-sw/2,d.y-sh/2);ctx.lineTo(d.x-sw/2+4,d.y-sh/2-3);ctx.lineTo(d.x+sw/2+4,d.y-sh/2-3);ctx.lineTo(d.x+sw/2,d.y-sh/2);ctx.closePath();ctx.fill();}
-    // 8 ports
-    for(let i=0;i<8;i++){
-      const px=d.x-sw*.38+i*sw*.095;
+    // Portas representadas no painel frontal; o total real aparece à direita.
+    const visiblePorts=Math.min(d.portCount||d.interfaces?.length||24,8);
+    for(let i=0;i<visiblePorts;i++){
+      const px=d.x-sw*.38+i*(sw*.76/Math.max(1,visiblePorts-1));
       ctx.fillStyle='#040a04';ctx.strokeStyle='#162016';ctx.lineWidth=.4;
       ctx.fillRect(px-3,d.y-3,6,5);ctx.strokeRect(px-3,d.y-3,6,5);
       const act=Math.random()>.3;
@@ -1337,6 +1422,8 @@ function drawDev(d){
     }
     ctx.fillStyle=isDown?'#111':'#3fb950';ctx.shadowBlur=isDown?0:6;ctx.shadowColor='#3fb950';
     ctx.beginPath();ctx.arc(d.x-sw/2+5,d.y,2,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle=isDown?'#555':'#a7f3b0';ctx.font='bold 6px monospace';ctx.textAlign='right';ctx.textBaseline='bottom';
+    ctx.fillText(`${d.portCount||d.interfaces?.length||24}P`,d.x+sw/2-2,d.y+sh/2-1);
 
   } else if(d.type==='server'){
     const rw2=32,rh2=38;
@@ -1532,6 +1619,7 @@ canvas.addEventListener('mousedown',e=>{
   if(mode==='add'){addDevice(x,y,addType);return;}
   if(mode==='deleteLink'){deleteConnectionAt(x,y);return;}
   if(mode==='wifi'){selectWiFiDevice(dev);return;}
+  if(mode==='ispFiber'){selectISPFiberProvider(dev);return;}
   if(mode==='backbone'){selectBackboneDevice(dev);return;}
   if(mode==='connect'){
     if(dev){
@@ -1568,14 +1656,15 @@ function getAt(x,y){return devices.slice().reverse().find(d=>{const dx=x-d.x,dy=
 function setMode(m,type){
   mode=m;addType=type||'';connectFirst=null;
   if(m!=='wifi')wifiFirst=null;
+  if(m!=='ispFiber')ispFiberFirst=null;
   canvas.style.cursor=m==='deleteLink'?'crosshair':'default';
   if(m!=='backbone'){backboneFirst=null;backboneSecond=null;}
   document.querySelectorAll('#topbar button').forEach(b=>b.classList.remove('active'));
-  const id=type?'btn-'+type:(m==='connect'?'btn-connect':(m==='wifi'?'btn-wifi':(m==='deleteLink'?'btn-delete-link':(m==='select'?'btn-select':null))));
+  const id=type?'btn-'+type:(m==='connect'?'btn-connect':(m==='wifi'?'btn-wifi':(m==='ispFiber'?'btn-isp-fiber':(m==='deleteLink'?'btn-delete-link':(m==='select'?'btn-select':null)))));
   if(id){const btn=document.getElementById(id);if(btn)btn.classList.add('active');}
   if(m==='select')document.getElementById('btn-select-quick')?.classList.add('active');
   if(!document.getElementById('right')?.classList.contains('terminal-hidden'))document.getElementById('btn-terminal-quick')?.classList.add('active');
-  const lbl={select:'Selecionar (arrastar)',connect:'Conectar — clique no 1º dispositivo',wifi:'Wi-Fi — selecione celular e roteador sem fio',deleteLink:'Apagar cabo — clique diretamente na conexão',add:'Adicionar: '+LABELS[type||'']};
+  const lbl={select:'Selecionar (arrastar)',connect:'Conectar — clique no 1º dispositivo',wifi:'Wi-Fi — selecione celular e roteador sem fio',ispFiber:'Fibra ISP — selecione dois provedores',deleteLink:'Apagar cabo — clique diretamente na conexão',add:'Adicionar: '+LABELS[type||'']};
   document.getElementById('s-mode').textContent=lbl[m]||m;
   if(m==='deleteLink'){
     document.getElementById('explain-icon').textContent='✂️';
@@ -1621,7 +1710,7 @@ function clearAll(){
   if(!confirm('Limpar toda a topologia?'))return;
   saveHistory();
   devices=[];connections=[];packets=[];racks=[];arpTable={};macTable={};selected=null;
-  connectFirst=null;backboneFirst=null;backboneSecond=null;wifiFirst=null;
+  connectFirst=null;backboneFirst=null;backboneSecond=null;wifiFirst=null;ispFiberFirst=null;
   dragging=null;draggingRack=null;sTx=0;sRx=0;sDrop=0;classroom.lastScore=null;classroom.faults=[];classroom.faultSnapshot=null;
   closeModal();setMode('select');updateProp(null);updateAll();
   rackNotice('Rede limpa','Todos os dispositivos, racks e conexões foram removidos. Use Desfazer para restaurar a topologia.','ok');
@@ -2160,6 +2249,7 @@ function updateProp(dev){
   document.getElementById('prop-box').innerHTML=`
     <h4 style="color:#58a6ff;font-size:12px;margin-bottom:8px;">${ICONS[dev.type]} ${dev.name}</h4>
     <div class="prop-row"><span class="pl">Tipo</span><span class="pv">${LABELS[dev.type]}</span></div>
+    ${dev.type==='switch'?`<div class="prop-row"><span class="pl">Portas Ethernet</span><span class="pv">${dev.portCount||dev.interfaces?.length||24}</span></div>`:''}
     <div class="prop-row"><span class="pl">IP</span><span class="pv">${dev.ip}</span></div>
     <div class="prop-row"><span class="pl">Máscara</span><span class="pv">${dev.mask}</span></div>
     <div class="prop-row"><span class="pl">VLAN</span><span class="pv" style="color:${networkGroupColor(dev)}">${dev.vlan||1}</span></div>
@@ -2181,7 +2271,7 @@ function updateProp(dev){
       const other=devices.find(d=>d.id===(c.from===dev.id?c.to:c.from));
       const localPort=c.from===dev.id?c.fromIface:c.toIface,remotePort=c.from===dev.id?c.toIface:c.fromIface;
       const speedControl=c.kind==='cable'?`<button onclick="openCableSpeedConfig(${c.id})" title="Alterar velocidade do cabo" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">⚙️ ${formatBandwidth(c.bw||100)}</button>`:formatBandwidth(c.bw||100);
-      return `${c.kind==='backbone'?'🟣':c.kind==='wifi'?'📶':'🔗'} ${localPort||'-'} ↔ ${other?.name||'Dispositivo'} ${remotePort||''} · ${c.medium==='fiber'?'Fibra':c.kind==='wifi'?'Wi-Fi':'Ethernet'} · ${speedControl} <button class="danger" onclick="deleteConnectionById(${c.id})" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">Apagar</button>`;
+      return `${c.kind==='backbone'?'🟣':c.kind==='ispFiber'?'🔷':c.kind==='wifi'?'📶':'🔗'} ${localPort||'-'} ↔ ${other?.name||'Dispositivo'} ${remotePort||''} · ${c.kind==='ispFiber'?'Fibra ISP':c.medium==='fiber'?'Fibra':c.kind==='wifi'?'Wi-Fi':'Ethernet'} · ${speedControl} <button class="danger" onclick="deleteConnectionById(${c.id})" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">Apagar</button>`;
     }).join('<br>'):'Nenhuma conexão.'}</div>`;
 }
 function dev_shutdown(id){
@@ -2204,7 +2294,7 @@ function updateDevList(){
         <span><span class="dot ${d.status==='up'?'dot-up':'dot-down'}"></span><span class="dev-name">${d.name}</span></span>
         <span style="font-size:9px;color:#6e7681">${LABELS[d.type]}</span>
       </div>
-      <div class="dev-sub">${d.ip} · VLAN ${d.vlan||1}${d.dhcpFrom?' · DHCP':''}</div>
+      <div class="dev-sub">${d.ip} · VLAN ${d.vlan||1}${d.type==='switch'?' · '+(d.portCount||d.interfaces?.length||24)+' portas':''}${d.dhcpFrom?' · DHCP':''}</div>
     </div>`).join('');
 }
 function selectDev(id){selected=devices.find(d=>d.id===id);updateDevList();updateProp(selected);draw();}
