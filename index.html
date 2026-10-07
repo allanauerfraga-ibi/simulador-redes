@@ -904,18 +904,58 @@ function rackUnitNeed(dev){
 function isRackCompatible(dev){return RACKABLE_TYPES.includes(dev.type)&&!(dev.type==='server'&&serverTypeOf(dev)==='tower')&&!(dev.type==='switch'&&switchFormOf(dev)==='desktop');}
 function rackAssets(rack){return devices.filter(d=>d.rackId===rack.id).sort((a,b)=>(a.rackSlotU??999)-(b.rackSlotU??999)||a.id-b.id);}
 function rackUsedUnits(rack,exceptId){return rackAssets(rack).filter(d=>d.id!==exceptId).reduce((sum,d)=>sum+rackUnitNeed(d),0);}
-function organizeRackAssets(rack){
-  if(!rack)return;
+function rackGeometry(rack){
   const innerTop=rack.y-rack.h/2+32;
   const usableHeight=rack.h-44;
   const pixelsPerU=usableHeight/rack.size;
-  let nextUnit=0;
+  return {innerTop,usableHeight,pixelsPerU};
+}
+function rackSlotFree(rack,start,need,exceptId=null){
+  if(start<0||start+need>rack.size)return false;
+  return !rackAssets(rack).some(d=>{
+    if(d.id===exceptId)return false;
+    const slot=Number.isFinite(d.rackSlotU)?Math.round(d.rackSlotU):0;
+    const units=Math.max(1,rackUnitNeed(d));
+    return start<slot+units&&start+need>slot;
+  });
+}
+function findFreeRackSlot(rack,need,preferred=0,exceptId=null){
+  const max=Math.max(0,rack.size-need);
+  const wanted=Math.max(0,Math.min(max,Math.round(preferred)||0));
+  const candidates=Array.from({length:max+1},(_,i)=>i).sort((a,b)=>Math.abs(a-wanted)-Math.abs(b-wanted)||a-b);
+  return candidates.find(slot=>rackSlotFree(rack,slot,need,exceptId))??null;
+}
+function rackSlotFromY(rack,y,need){
+  const {innerTop,pixelsPerU}=rackGeometry(rack);
+  return Math.max(0,Math.min(rack.size-need,Math.round((y-innerTop)/pixelsPerU-need/2)));
+}
+function syncRackAssetPosition(rack,dev){
+  const {innerTop,pixelsPerU}=rackGeometry(rack);
+  const need=Math.max(1,rackUnitNeed(dev));
+  dev.x=rack.x;
+  dev.y=innerTop+(dev.rackSlotU+need/2)*pixelsPerU;
+}
+function organizeRackAssets(rack,options={}){
+  if(!rack)return;
+  const compact=!!options.compact;
+  const occupied=Array(rack.size).fill(false);
+  let nextCompact=0;
   rackAssets(rack).forEach(dev=>{
     const need=Math.max(1,rackUnitNeed(dev));
-    dev.rackSlotU=nextUnit;
-    dev.x=rack.x;
-    dev.y=innerTop+(nextUnit+need/2)*pixelsPerU;
-    nextUnit+=need;
+    const max=Math.max(0,rack.size-need);
+    let preferred=compact?nextCompact:(Number.isFinite(dev.rackSlotU)?Math.max(0,Math.min(max,Math.round(dev.rackSlotU))):0);
+    let slot=null;
+    const candidates=Array.from({length:max+1},(_,i)=>i).sort((a,b)=>compact?a-b:Math.abs(a-preferred)-Math.abs(b-preferred)||a-b);
+    for(const candidate of candidates){
+      let free=true;
+      for(let u=candidate;u<candidate+need;u++)if(occupied[u]){free=false;break;}
+      if(free){slot=candidate;break;}
+    }
+    if(slot===null)return;
+    dev.rackSlotU=slot;
+    for(let u=slot;u<slot+need;u++)occupied[u]=true;
+    syncRackAssetPosition(rack,dev);
+    if(compact)nextCompact=slot+need;
   });
 }
 function rackNotice(title,message,type='err'){
@@ -948,18 +988,50 @@ function assignRack(dev){
     document.getElementById('explain-icon').textContent='⚠️';document.getElementById('explain-text').textContent=`Instalação recusada: capacidade insuficiente. Livre: ${free}U; necessário: ${need}U.`;document.getElementById('explain-bar').classList.remove('activity-active');document.getElementById('explain-bar').classList.add('show');
     return;
   }
+  const preferredSlot=rackSlotFromY(rack,dev.y,need);
+  const availableSlot=findFreeRackSlot(rack,need,preferredSlot,dev.id);
+  if(availableSlot===null){
+    if(previousRack?.id===rack.id){syncRackAssetPosition(rack,dev);}else{dev.rackId=null;delete dev.rackSlotU;dev.x=Math.min(canvas.width-45,rack.x+rack.w/2+55);dev.y=rack.y;}
+    rackNotice('Posição sem espaço',`${dev.name} precisa de ${need}U consecutiva(s). Solte em outra posição livre do rack.`);
+    sysLog(`${dev.name} não movido: não há ${need}U consecutiva(s) na posição escolhida.`,'lwarn');
+    return;
+  }
   dev.rackId=rack.id;
-  dev.rackSlotU=used;
+  dev.rackSlotU=availableSlot;
   if(previousRack&&previousRack.id!==rack.id)organizeRackAssets(previousRack);
-  organizeRackAssets(rack);
-  rackNotice('Equipamento instalado',`${dev.name} foi encaixado em ${rack.name}. Ocupação: ${used+need}U de ${rack.size}U.`,'ok');
-  sysLog(`${dev.name} instalado em ${rack.name}.`,'lsys');
+  syncRackAssetPosition(rack,dev);
+  rackNotice('Equipamento instalado',`${dev.name} foi encaixado em ${rack.name}, na posição U${availableSlot+1}. Ocupação: ${used+need}U de ${rack.size}U.`,'ok');
+  sysLog(`${dev.name} instalado em ${rack.name}, posição U${availableSlot+1}.`,'lsys');
 }
 function detachRackAsset(id){
   const dev=devices.find(d=>d.id===id);if(!dev)return;
   const rack=racks.find(r=>r.id===dev.rackId);
   dev.rackId=null;delete dev.rackSlotU;dev.x+=(rack?.w||110)/2+45;
   organizeRackAssets(rack);updateAll();updateProp(dev);
+}
+function setRackAssetSlot(id,slot){
+  const dev=devices.find(d=>d.id===id);if(!dev)return;
+  const rack=racks.find(r=>r.id===dev.rackId);if(!rack)return;
+  const need=Math.max(1,rackUnitNeed(dev));
+  const target=Math.max(0,Math.min(rack.size-need,Math.round(+slot||0)));
+  if(target===dev.rackSlotU)return;
+  if(!rackSlotFree(rack,target,need,dev.id)){
+    rackNotice('Posição ocupada',`U${target+1}${need>1?' até U'+(target+need):''} não possui espaço suficiente para ${dev.name}. Escolha outra posição.`);
+    updateRackProp(rack);return;
+  }
+  saveHistory();dev.rackSlotU=target;syncRackAssetPosition(rack,dev);updateAll();updateRackProp(rack);
+  rackNotice('Posição alterada',`${dev.name} foi movido para U${target+1}.`,'ok');
+  sysLog(`${dev.name} movido manualmente para U${target+1} em ${rack.name}.`,'lsys');
+}
+function moveRackAssetUnit(id,direction){
+  const dev=devices.find(d=>d.id===id);if(!dev)return;
+  setRackAssetSlot(id,(dev.rackSlotU||0)+direction);
+}
+function compactRackAssets(rackId){
+  const rack=racks.find(r=>r.id===rackId);if(!rack)return;
+  saveHistory();organizeRackAssets(rack,{compact:true});updateAll();updateRackProp(rack);
+  rackNotice('Rack organizado',`${rack.name} foi reorganizado automaticamente a partir da U1.`,'ok');
+  sysLog(`${rack.name}: organização automática aplicada.`,'lsys');
 }
 function drawRack(r){
   const isSel=selected&&selected._rack&&selected.id===r.id;
@@ -971,9 +1043,14 @@ function drawRack(r){
   ctx.fillStyle=body;ctx.strokeStyle=isSel?'#f78166':'#526170';ctx.lineWidth=isSel?2.5:1.5;
   ctx.beginPath();if(ctx.roundRect)ctx.roundRect(left,top,r.w,r.h,8);else ctx.rect(left,top,r.w,r.h);ctx.fill();ctx.stroke();ctx.shadowBlur=0;
   ctx.fillStyle='#0a0f15';ctx.fillRect(left+13,top+30,r.w-26,r.h-42);
-  ctx.strokeStyle='rgba(118,144,168,.18)';ctx.lineWidth=.7;
-  const slots=Math.max(1,Math.floor((r.h-42)/7));
-  for(let i=0;i<=slots;i++){const sy=top+34+i*7;ctx.beginPath();ctx.moveTo(left+17,sy);ctx.lineTo(left+r.w-17,sy);ctx.stroke();}
+  const {innerTop,pixelsPerU}=rackGeometry(r);
+  ctx.strokeStyle='rgba(118,144,168,.22)';ctx.lineWidth=.7;
+  for(let i=0;i<=r.size;i++){
+    const sy=innerTop+i*pixelsPerU;ctx.beginPath();ctx.moveTo(left+17,sy);ctx.lineTo(left+r.w-17,sy);ctx.stroke();
+    if(i<r.size&&(i===0||(i+1)%4===0)){
+      ctx.fillStyle='rgba(174,190,205,.7)';ctx.font='6px monospace';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText('U'+(i+1),left+18,sy+1);
+    }
+  }
   ctx.fillStyle='#111a23';ctx.fillRect(left+5,top+5,r.w-10,21);
   ctx.fillStyle='#dce8f5';ctx.font='bold 10px "Segoe UI",sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(r.name,left+13,top+15);
   ctx.fillStyle='#58a6ff';ctx.font='bold 9px monospace';ctx.textAlign='right';ctx.fillText(r.size+'U',left+r.w-13,top+15);
@@ -994,7 +1071,9 @@ function updateRackProp(rack){
     <div class="prop-row"><span class="pl">Ocupação</span><span class="pv">${used}U de ${rack.size}U</span></div>
     <div class="prop-row"><span class="pl">Espaço livre</span><span class="pv" style="color:${free?'#3fb950':'#f85149'}">${free}U</span></div>
     <div class="prop-row"><span class="pl">Estrutura</span><span class="pv">19 polegadas</span></div>
-    <div class="rack-assets"><b style="color:#dce8f5">Equipamentos no rack</b><br>${assets.length?assets.map(d=>`${ICONS[d.type]} ${d.name} — ${rackUnitNeed(d)}U ${(d.type==='patchPanel'||d.type==='switch')?`<button onclick="showRackCableModal(${d.id})" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">🔗 Cabo</button>`:''}<button onclick="detachRackAsset(${d.id})" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">Retirar</button>`).join('<br>'):'Nenhum ativo instalado.<br>Arraste um equipamento para dentro.'}</div>
+    <div class="rack-assets"><b style="color:#dce8f5">Organização manual</b><br>${assets.length?assets.map(d=>{const need=Math.max(1,rackUnitNeed(d)),max=rack.size-need;return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #30363d"><div>${ICONS[d.type]} <b>${d.name}</b> · ${need}U</div><div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:4px"><select aria-label="Posição de ${d.name}" onchange="setRackAssetSlot(${d.id},this.value)" style="width:auto;min-width:72px;padding:2px 4px;font-size:9px">${Array.from({length:max+1},(_,i)=>`<option value="${i}" ${i===d.rackSlotU?'selected':''}>U${i+1}${i===0?' · topo':''}</option>`).join('')}</select><button onclick="moveRackAssetUnit(${d.id},-1)" title="Mover uma unidade para cima" style="padding:2px 6px;font-size:9px">↑</button><button onclick="moveRackAssetUnit(${d.id},1)" title="Mover uma unidade para baixo" style="padding:2px 6px;font-size:9px">↓</button>${(d.type==='patchPanel'||d.type==='switch')?`<button onclick="showRackCableModal(${d.id})" style="padding:2px 5px;font-size:8px">🔗 Cabo</button>`:''}<button onclick="detachRackAsset(${d.id})" style="padding:2px 5px;font-size:8px">Retirar</button></div></div>`;}).join(''):'Nenhum ativo instalado.<br>Arraste um equipamento para dentro.'}</div>
+    ${assets.length?`<button onclick="compactRackAssets('${rack.id}')" style="margin-top:8px;width:100%;font-size:9px">↕️ Organizar automaticamente</button>`:''}
+    <div style="margin-top:8px;padding:8px;border-left:3px solid #58a6ff;background:#101923;border-radius:5px;font-size:9px;line-height:1.5;color:#9fc9f3"><b>Como organizar:</b> arraste o equipamento verticalmente dentro do rack e solte na posição desejada, ou selecione diretamente uma posição U. Os espaços vazios serão mantidos.</div>
     <div style="margin-top:8px;padding:8px;border-left:3px solid #d29922;background:#1b1810;border-radius:5px;font-size:9px;line-height:1.5;color:#c7b98d"><b>Compatibilidade:</b> servidor rack ocupa 2U; switch rack e patch panel ocupam 1U; roteadores e firewalls usam 4U. Equipamentos de mesa permanecem fora do rack.</div>`;
 }
 
@@ -1767,7 +1846,7 @@ canvas.addEventListener('mousemove',e=>{
   const tip=document.getElementById('tip');
   if(dev){
     tip.style.display='block';tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-40)+'px';
-    tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b>${dev.type==='server'?`<br>Formato: <b style="color:#bc8cff">${serverFormatLabel(dev)}</b>`:dev.type==='switch'?`<br>Formato: <b style="color:#56d364">${switchFormatLabel(dev)}</b>`:dev.type==='patchPanel'?`<br>Tipo: <b style="color:#f2cc60">Passivo · 1U · ${dev.portCount||24} portas</b>`:''}${dev.type==='patchPanel'?'':`<br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code>`}<br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b>`;
+    tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b>${dev.type==='server'?`<br>Formato: <b style="color:#bc8cff">${serverFormatLabel(dev)}</b>`:dev.type==='switch'?`<br>Formato: <b style="color:#56d364">${switchFormatLabel(dev)}</b>`:dev.type==='patchPanel'?`<br>Tipo: <b style="color:#f2cc60">Passivo · 1U · ${dev.portCount||24} portas</b>`:''}${dev.rackId?`<br>Posição no rack: <b style="color:#58a6ff">U${(dev.rackSlotU||0)+1}</b>`:''}${dev.type==='patchPanel'?'':`<br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code>`}<br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b>`;
   }else{tip.style.display='none';}
 });
 canvas.addEventListener('mouseup',()=>{const moved=dragging;if(moved)assignRack(moved);dragging=null;draggingRack=null;updateAll();if(moved)updateProp(moved);});
@@ -2397,7 +2476,7 @@ function updateProp(dev){
     <div class="prop-row"><span class="pl">Status</span><span class="pv" style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</span></div>
     <div class="prop-row"><span class="pl">Conexões</span><span class="pv">${numConns}</span></div>
     <div class="prop-row"><span class="pl">Backbones</span><span class="pv" style="color:${numBackbones?'#c9a7ff':'#8b949e'}">${numBackbones}</span></div>
-    <div class="prop-row"><span class="pl">Instalação</span><span class="pv">${installedRack?'🗄️ '+installedRack.name:(dev.type==='server'&&serverTypeOf(dev)==='tower'?'Torre — fora do rack':'Fora do rack')}</span></div>
+    <div class="prop-row"><span class="pl">Instalação</span><span class="pv">${installedRack?'🗄️ '+installedRack.name+' · U'+((dev.rackSlotU||0)+1):(dev.type==='server'&&serverTypeOf(dev)==='tower'?'Torre — fora do rack':'Fora do rack')}</span></div>
     <div class="prop-row"><span class="pl">ACLs</span><span class="pv">${dev.acl?.length||0}</span></div>
     <div style="margin-top:8px;font-size:9px;color:#8b949e">${EXPLAIN[dev.type]?.substring(0,100)+'...'}</div>
     <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;">
