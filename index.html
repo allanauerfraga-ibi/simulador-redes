@@ -847,6 +847,10 @@ function addDevice(x,y,type){
   return d;
 }
 function genIP(type,n){
+  if(type==='pc'&&classroom.activity==='lan4')return `192.168.${n<=3?1:2}.${n<=3?n:n-3}`;
+  if(type==='pc'&&classroom.activity==='lan5')return `192.168.${n<=4?1:2}.${n<=4?n:n-4}`;
+  if(type==='router'&&['lan4','lan5'].includes(classroom.activity))return '192.168.1.'+(255-n);
+  if(type==='server'&&classroom.activity==='lan5')return `192.168.${n%2?1:2}.${100+Math.ceil(n/2)}`;
   if(type==='server')return '192.168.1.'+(100+n);
   const b={pc:'192.168.1',phone:'192.168.10',router:'10.0.0',switch:'172.16.0',server:'192.168.0',firewall:'10.10.0',cloud:'203.0.113'};
   return (b[type]||'10.0.0')+'.'+n;
@@ -2013,12 +2017,38 @@ function showActivityModal(){
   }).join('');
   showModal(`<h3>✅ Atividades com correção automática</h3><div class="edu-note">Escolha uma sala e avance do nível 1 ao 5. Durante a montagem, o enunciado e o botão Corrigir permanecerão na barra exclusiva da atividade. Cada nível possui critérios próprios de equipamentos, conexões, endereçamento e comunicação.</div><label>Nome do aluno ou grupo</label><input id="activity-student" value="${classroom.studentName||''}" placeholder="Ex.: Grupo 1">${rooms}${classroom.activity?`<div class="modal-btns"><button onclick="closeModal()">Fechar</button><button class="green" onclick="evaluateClassActivity()">✅ Corrigir atividade atual</button></div>`:'<div class="modal-btns"><button onclick="closeModal()">Fechar</button></div>'}`);
 }
+function applyClassActivityAddressPlan(key){
+  if(!['lan1','lan2','lan3','lan4','lan5'].includes(key))return false;
+  const pcs=devices.filter(d=>d.type==='pc');
+  const servers=devices.filter(d=>d.type==='server');
+  const routers=devices.filter(d=>d.type==='router');
+  const planned=[];
+  const plan=(dev,ip)=>{if(dev&&dev.ip!==ip)planned.push({dev,ip});};
+  pcs.forEach((dev,i)=>{
+    let network=1,host=i+1;
+    if(key==='lan4'&&i>=3){network=2;host=i-2;}
+    if(key==='lan5'&&i>=4){network=2;host=i-3;}
+    plan(dev,`192.168.${network}.${host}`);
+  });
+  if(key==='lan3')servers.forEach((dev,i)=>plan(dev,`192.168.1.${101+i}`));
+  if(key==='lan5')servers.forEach((dev,i)=>plan(dev,`192.168.${i%2?2:1}.${101+Math.floor(i/2)}`));
+  if(['lan4','lan5'].includes(key))routers.forEach((dev,i)=>plan(dev,`192.168.1.${254-i}`));
+  const needsSecondRouterNetwork=['lan4','lan5'].includes(key)&&routers.some((dev,i)=>dev.interfaces?.[1]&&dev.interfaces[1].ip!==`192.168.2.${254-i}`);
+  if(!planned.length&&!needsSecondRouterNetwork)return false;
+  saveHistory();
+  planned.forEach(({dev,ip})=>{dev.ip=ip;dev.mask='255.255.255.0';if(dev.interfaces?.[0]){dev.interfaces[0].ip=ip;dev.interfaces[0].mask='255.255.255.0';}});
+  if(['lan4','lan5'].includes(key))routers.forEach((dev,i)=>{if(dev.interfaces?.[1]){dev.interfaces[1].ip=`192.168.2.${254-i}`;dev.interfaces[1].mask='255.255.255.0';}});
+  arpTable={};macTable={};devices.filter(d=>d.type!=='patchPanel').forEach(d=>{arpTable[d.ip]=d.mac;macTable[d.mac]=d.id;});
+  updateAll();
+  return true;
+}
 function startClassActivity(key){
   classroom.studentName=document.getElementById('activity-student')?.value.trim()||classroom.studentName;
-  classroom.activity=key;classroom.lastScore=null;closeModal();
+  classroom.activity=key;classroom.lastScore=null;
+  const addressPlanApplied=applyClassActivityAddressPlan(key);closeModal();
   const a=CLASS_ACTIVITIES[key];
   syncActivityBar();
-  rackNotice('Atividade iniciada',a.title+': o enunciado e o botão “Corrigir” permanecerão visíveis durante a montagem.','ok');sysLog(`ATIVIDADE: ${a.title} iniciada.`,'lsys');
+  rackNotice('Atividade iniciada',a.title+': o enunciado e o botão “Corrigir” permanecerão visíveis durante a montagem.'+(addressPlanApplied?' O endereçamento necessário foi preparado automaticamente.':''),'ok');sysLog(`ATIVIDADE: ${a.title} iniciada${addressPlanApplied?' com endereçamento automático':''}.`,'lsys');
 }
 function activityChecks(key){
   const activity=CLASS_ACTIVITIES[key];if(!activity)return [['Atividade válida',false]];
@@ -2034,11 +2064,11 @@ function activityChecks(key){
   if(room==='lan'&&level===1)return [
     ['Pelo menos 3 computadores',pcs.length>=3],['Pelo menos 1 switch',switches.length>=1],
     ['Cada PC conectado diretamente a um switch',pcs.length>=3&&directlyConnectedTo(pcs,switches)],
-    ['PCs na mesma rede /24',pcs.length>=3&&new Set(pcs.map(d=>d.ip.split('.').slice(0,3).join('.'))).size===1],['Comunicação entre os PCs',pairReachable(pcs)]
+    ['PCs na mesma rede /24',pcs.length>=3&&validIPs(pcs)&&subnetCount(pcs)===1],['Comunicação entre os PCs',pairReachable(pcs)]
   ];
   if(room==='lan'&&level===2)return [
     ['Pelo menos 4 computadores',pcs.length>=4],['Pelo menos 2 switches',switches.length>=2],['Cada PC ligado a um switch',pcs.length>=4&&directlyConnectedTo(pcs,switches)],
-    ['Switches interligados',directLink(switches,switches)],['PCs na mesma rede /24',pcs.length>=4&&subnetCount(pcs)===1],['Comunicação fim a fim',pairReachable(pcs)]
+    ['Switches interligados',directLink(switches,switches)],['PCs na mesma rede /24',pcs.length>=4&&validIPs(pcs)&&subnetCount(pcs)===1],['Comunicação fim a fim',pairReachable(pcs)]
   ];
   if(room==='lan'&&level===3)return [
     ['Pelo menos 4 PCs, 2 switches e 1 servidor',pcs.length>=4&&switches.length>=2&&servers.length>=1],['PCs ligados aos switches',directlyConnectedTo(pcs,switches)],['Servidor ligado a um switch',directLink(servers,switches)],
@@ -2046,11 +2076,11 @@ function activityChecks(key){
   ];
   if(room==='lan'&&level===4)return [
     ['Pelo menos 6 PCs, 2 switches e 1 roteador',pcs.length>=6&&switches.length>=2&&routers.length>=1],['PCs ligados aos switches',directlyConnectedTo(pcs,switches)],
-    ['Pelo menos duas redes /24',pcs.length>=6&&subnetCount(pcs)>=2],['Roteador conectado à infraestrutura',directLink(routers,switches)],['Comunicação entre todos os PCs',pairReachable(pcs)]
+    ['Pelo menos duas redes /24',pcs.length>=6&&validIPs(pcs)&&subnetCount(pcs)>=2],['Roteador conectado à infraestrutura',directLink(routers,switches)],['Comunicação entre todos os PCs',pairReachable(pcs)]
   ];
   if(room==='lan')return [
     ['8 PCs, 3 switches, roteador e firewall',pcs.length>=8&&switches.length>=3&&routers.length>=1&&firewalls.length>=1],['Pelo menos 2 servidores',servers.length>=2],['Servidor instalado em rack',servers.some(s=>s.rackId)],
-    ['Pelo menos duas sub-redes /24',subnetCount(pcs)>=2],['Firewall conectado à rede',connections.some(c=>firewalls.some(f=>c.from===f.id||c.to===f.id))],['Comunicação entre os clientes',pairReachable(pcs)]
+    ['Pelo menos duas sub-redes /24',pcs.length>=8&&validIPs(pcs)&&subnetCount(pcs)>=2],['Firewall conectado à rede',connections.some(c=>firewalls.some(f=>c.from===f.id||c.to===f.id))],['Comunicação entre os clientes',pairReachable(pcs)]
   ];
   const wifiLinked=phones.filter(p=>connections.some(c=>c.kind==='wifi'&&(c.from===p.id||c.to===p.id)));
   if(room==='wifi'&&level===1)return [
@@ -3419,9 +3449,8 @@ function addDevIface(id){
 }
 function autoIP(id){
   const d=devices.find(x=>x.id==id);if(!d)return;
-  const base_={pc:'192.168.1',phone:'192.168.10',router:'10.0.0',switch:'172.16.0',server:'192.168.0',firewall:'10.10.0',cloud:'203.0.113'}[d.type]||'10.0.0';
   const n=devices.filter(x=>x.type===d.type).indexOf(d)+1;
-  const newIP=d.type==='server'?'192.168.1.'+(100+n):base_+'.'+n;
+  const newIP=genIP(d.type,n);
   delete arpTable[d.ip];d.ip=newIP;arpTable[newIP]=d.mac;
   if(d.interfaces[0])d.interfaces[0].ip=newIP;
   updateAll();renderIPManager();
@@ -3430,9 +3459,8 @@ function autoIP(id){
 function autoIPAll(){
   const counts={};
   devices.forEach(d=>{
-    const base_={pc:'192.168.1',phone:'192.168.10',router:'10.0.0',switch:'172.16.0',server:'192.168.0',firewall:'10.10.0',cloud:'203.0.113'}[d.type]||'10.0.0';
     counts[d.type]=(counts[d.type]||0)+1;
-    const newIP=d.type==='server'?'192.168.1.'+(100+counts[d.type]):base_+'.'+counts[d.type];
+    const newIP=genIP(d.type,counts[d.type]);
     delete arpTable[d.ip];d.ip=newIP;arpTable[newIP]=d.mac;
     if(d.interfaces[0])d.interfaces[0].ip=newIP;
   });
