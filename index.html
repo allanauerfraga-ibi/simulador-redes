@@ -847,6 +847,7 @@ function addDevice(x,y,type){
   return d;
 }
 function genIP(type,n){
+  if(type==='server')return '192.168.1.'+(100+n);
   const b={pc:'192.168.1',phone:'192.168.10',router:'10.0.0',switch:'172.16.0',server:'192.168.0',firewall:'10.10.0',cloud:'203.0.113'};
   return (b[type]||'10.0.0')+'.'+n;
 }
@@ -2041,7 +2042,7 @@ function activityChecks(key){
   ];
   if(room==='lan'&&level===3)return [
     ['Pelo menos 4 PCs, 2 switches e 1 servidor',pcs.length>=4&&switches.length>=2&&servers.length>=1],['PCs ligados aos switches',directlyConnectedTo(pcs,switches)],['Servidor ligado a um switch',directLink(servers,switches)],
-    ['Todos na mesma rede /24',subnetCount([...pcs,...servers])===1],['Todos os PCs alcançam o servidor',pcs.length>=4&&pcs.every(p=>servers.some(s=>!!findPath(p.id,s.id)))]
+    ['Todos na mesma rede /24 (PCs e servidor)',pcs.length>=4&&servers.length>=1&&validIPs([...pcs,...servers])&&subnetCount([...pcs,...servers])===1],['Todos os PCs alcançam o servidor',pcs.length>=4&&pcs.every(p=>servers.some(s=>!!findPath(p.id,s.id)))]
   ];
   if(room==='lan'&&level===4)return [
     ['Pelo menos 6 PCs, 2 switches e 1 roteador',pcs.length>=6&&switches.length>=2&&routers.length>=1],['PCs ligados aos switches',directlyConnectedTo(pcs,switches)],
@@ -3420,7 +3421,7 @@ function autoIP(id){
   const d=devices.find(x=>x.id==id);if(!d)return;
   const base_={pc:'192.168.1',phone:'192.168.10',router:'10.0.0',switch:'172.16.0',server:'192.168.0',firewall:'10.10.0',cloud:'203.0.113'}[d.type]||'10.0.0';
   const n=devices.filter(x=>x.type===d.type).indexOf(d)+1;
-  const newIP=base_+'.'+n;
+  const newIP=d.type==='server'?'192.168.1.'+(100+n):base_+'.'+n;
   delete arpTable[d.ip];d.ip=newIP;arpTable[newIP]=d.mac;
   if(d.interfaces[0])d.interfaces[0].ip=newIP;
   updateAll();renderIPManager();
@@ -3431,7 +3432,7 @@ function autoIPAll(){
   devices.forEach(d=>{
     const base_={pc:'192.168.1',phone:'192.168.10',router:'10.0.0',switch:'172.16.0',server:'192.168.0',firewall:'10.10.0',cloud:'203.0.113'}[d.type]||'10.0.0';
     counts[d.type]=(counts[d.type]||0)+1;
-    const newIP=base_+'.'+counts[d.type];
+    const newIP=d.type==='server'?'192.168.1.'+(100+counts[d.type]):base_+'.'+counts[d.type];
     delete arpTable[d.ip];d.ip=newIP;arpTable[newIP]=d.mac;
     if(d.interfaces[0])d.interfaces[0].ip=newIP;
   });
