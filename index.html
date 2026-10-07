@@ -1348,8 +1348,8 @@ function drawConn(c){
   ctx.setLineDash([]);
   // BW label
   const rackForCable=isRackCable?racks.find(r=>r.id===a.rackId&&r.id===b.rackId):null;
-  const mx=isRackCable?(rackForCable?rackForCable.x+rackForCable.w/2+17:Math.max(a.x,b.x)+50):(a.x+b.x)/2;
-  const my=(a.y+b.y)/2;
+  const mx=isRackCable?(rackForCable?rackForCable.x+rackForCable.w/2+52:Math.max(a.x,b.x)+70):(a.x+b.x)/2;
+  const my=(a.y+b.y)/2+(isRackCable?17:0);
   const mediumLabel={fiber:'Fibra',copper:'Cat6A',radio:'Rádio'}[c.medium]||'';
   const linkLabel=isRackCable?`PATCH • ${formatBandwidth(c.bw)}`:(isISPFiber?`FIBRA ISP • ${formatBandwidth(c.bw)}`:(isBackbone?`BACKBONE • ${formatBandwidth(c.bw)}${mediumLabel?' • '+mediumLabel:''}`:(isWifi?`WI-FI • ${c.ssid||'SSID'} • ${c.bw}M`:c.bw+'M')));
   ctx.font=(isBackbone||isWifi||isISPFiber)?'bold 8px monospace':'8px monospace';
