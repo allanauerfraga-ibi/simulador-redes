@@ -343,7 +343,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
             </div>
           </div>
           <button class="menu-action" id="btn-switch" onclick="showSwitchPortModal()">🔌 Switch — escolher portas</button>
-          <button class="menu-action" id="btn-server" onclick="setMode('add','server')">🖥️ Servidor</button>
+          <button class="menu-action" id="btn-server" onclick="showServerTypeModal()" title="Escolher servidor rack ou torre">🖥️ Servidor — rack ou torre</button>
           <button class="menu-action" id="btn-firewall" onclick="setMode('add','firewall')">🛡️ Firewall</button>
           <button class="menu-action" id="btn-rack" onclick="showRackModal()">🗄️ Rack de rede</button>
           <button class="menu-action" id="btn-cloud" onclick="setMode('add','cloud')">☁️ Nuvem / Internet</button>
@@ -591,6 +591,7 @@ let backboneFirst=null,backboneSecond=null;
 let wifiFirst=null;
 let ispFiberFirst=null;
 let pendingSwitchPorts=24;
+let pendingServerType='rack';
 let dragging=null,draggingRack=null,dragOffX=0,dragOffY=0;
 let nextId=1,sTx=0,sRx=0,sDrop=0;
 let nextRackId=1,pendingRackSize=24;
@@ -693,7 +694,7 @@ const RACK_SIZES={
   42:{label:'Rack padrão 42U',height:336}
 };
 const RACKABLE_TYPES=['server','switch','router','firewall'];
-const RACK_UNIT_NEED={server:6,switch:4,router:4,firewall:4};
+const RACK_UNIT_NEED={server:2,switch:4,router:4,firewall:4};
 
 // =========================================================
 // CANVAS RESIZE
@@ -744,6 +745,7 @@ function undo(){
   if(!history.length)return;
   const snap=history.pop();
   devices=snap.devices;connections=snap.connections;racks=snap.racks||[];
+  racks.forEach(organizeRackAssets);
   selected=null;arpTable={};macTable={};
   devices.forEach(d=>{arpTable[d.ip]=d.mac;macTable[d.mac]=d.id;});
   if(!history.length)document.querySelectorAll('#btn-undo,#btn-undo-quick').forEach(btn=>btn.disabled=true);
@@ -772,10 +774,28 @@ function prepareSwitchPlacement(){
   closeModal();setMode('add','switch');
   rackNotice('Switch selecionado',`Clique no espaço de trabalho para adicionar um switch de ${pendingSwitchPorts} portas.`,'ok');
 }
+function showServerTypeModal(){
+  showModal(`<h3>🖥️ Adicionar servidor</h3>
+    <div class="edu-note">Escolha o formato físico. O modelo rack 2U pode ser encaixado em rack de 19 polegadas; o modelo torre deve permanecer fora do rack.</div>
+    <label>Formato do servidor</label>
+    <select id="server-type">
+      <option value="rack" selected>Servidor rack 2U — instalável em rack</option>
+      <option value="tower">Servidor torre — uso fora do rack</option>
+    </select>
+    <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="prepareServerPlacement()">✅ Escolher local</button></div>`);
+}
+function prepareServerPlacement(){
+  pendingServerType=document.getElementById('server-type')?.value==='tower'?'tower':'rack';
+  closeModal();setMode('add','server');
+  const label=pendingServerType==='rack'?'servidor rack 2U':'servidor torre';
+  rackNotice('Formato selecionado',`Clique no espaço de trabalho para adicionar o ${label}.`,'ok');
+}
+function serverTypeOf(dev){return dev?.serverType==='tower'?'tower':'rack';}
+function serverFormatLabel(dev){return serverTypeOf(dev)==='tower'?'Servidor torre':'Servidor rack 2U';}
 function addDevice(x,y,type){
   saveHistory();
   const n=devices.filter(d=>d.type===type).length+1;
-  const name=LABELS[type]+n;
+  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:LABELS[type]+n;
   const ip=genIP(type,n);
   const mac=genMAC();
   const firstKind=type==='phone'?'wireless':'wired';
@@ -784,13 +804,14 @@ function addDevice(x,y,type){
     interfaces:[{name:type==='phone'?'wlan0':'eth0',ip,mask:'255.255.255.0',status:'up',kind:firstKind,speed:firstSpeed,mac:genMAC()}],
     acl:[],routes:[],label:name,vlan:1,vlanAssigned:false,dhcpEnabled:false,dhcpFrom:''};
   if(type==='switch')d.portCount=pendingSwitchPorts;
+  if(type==='server')d.serverType=pendingServerType==='tower'?'tower':'rack';
   const ifc={router:4,switch:d.portCount||24,server:2,firewall:4,cloud:2};
   for(let i=1;i<(ifc[type]||1);i++) d.interfaces.push({name:'eth'+i,ip:'',mask:'255.255.255.0',status:'up',kind:'wired',speed:BW[type]||1000,mac:genMAC()});
   devices.push(d);
   if(getRackAt(x,y))assignRack(d);
   arpTable[ip]=mac; macTable[mac]=d.id;
   updateAll();
-  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+d.portCount+' portas':''} IP:${ip}`,'lsys');
+  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+d.portCount+' portas':type==='server'?' · '+serverFormatLabel(d):''} IP:${ip}`,'lsys');
   showExplain(type);
   return d;
 }
@@ -844,8 +865,24 @@ function showExplainRack(){
 function getRackAt(x,y){
   return racks.slice().reverse().find(r=>x>=r.x-r.w/2&&x<=r.x+r.w/2&&y>=r.y-r.h/2&&y<=r.y+r.h/2);
 }
-function rackAssets(rack){return devices.filter(d=>d.rackId===rack.id);}
-function rackUsedUnits(rack,exceptId){return rackAssets(rack).filter(d=>d.id!==exceptId).reduce((sum,d)=>sum+(RACK_UNIT_NEED[d.type]||0),0);}
+function rackUnitNeed(dev){return dev.type==='server'?(serverTypeOf(dev)==='rack'?2:0):(RACK_UNIT_NEED[dev.type]||0);}
+function isRackCompatible(dev){return RACKABLE_TYPES.includes(dev.type)&&!(dev.type==='server'&&serverTypeOf(dev)==='tower');}
+function rackAssets(rack){return devices.filter(d=>d.rackId===rack.id).sort((a,b)=>(a.rackSlotU??999)-(b.rackSlotU??999)||a.id-b.id);}
+function rackUsedUnits(rack,exceptId){return rackAssets(rack).filter(d=>d.id!==exceptId).reduce((sum,d)=>sum+rackUnitNeed(d),0);}
+function organizeRackAssets(rack){
+  if(!rack)return;
+  const innerTop=rack.y-rack.h/2+32;
+  const usableHeight=rack.h-44;
+  const pixelsPerU=usableHeight/rack.size;
+  let nextUnit=0;
+  rackAssets(rack).forEach(dev=>{
+    const need=Math.max(1,rackUnitNeed(dev));
+    dev.rackSlotU=nextUnit;
+    dev.x=rack.x;
+    dev.y=innerTop+(nextUnit+need/2)*pixelsPerU;
+    nextUnit+=need;
+  });
+}
 function rackNotice(title,message,type='err'){
   document.querySelectorAll('.rack-notice').forEach(n=>n.remove());
   const n=document.createElement('div');n.className='rack-notice '+type;
@@ -854,37 +891,40 @@ function rackNotice(title,message,type='err'){
 }
 function assignRack(dev){
   const rack=getRackAt(dev.x,dev.y);
-  if(!rack){dev.rackId=null;return;}
-  if(!RACKABLE_TYPES.includes(dev.type)){
-    dev.rackId=null;
+  const previousRack=racks.find(r=>r.id===dev.rackId);
+  if(!rack){dev.rackId=null;delete dev.rackSlotU;if(previousRack)organizeRackAssets(previousRack);return;}
+  if(!isRackCompatible(dev)){
+    dev.rackId=null;delete dev.rackSlotU;
     dev.x=Math.min(canvas.width-45,rack.x+rack.w/2+55);dev.y=rack.y;
-    const reason=dev.type==='pc'?'Computadores são equipamentos de mesa e não possuem formato padrão de montagem em rack de 19 polegadas.':dev.type==='phone'?'Celulares são dispositivos móveis sem formato de montagem em rack; eles se conectam por Wi-Fi ao roteador sem fio.':'A nuvem representa a Internet/WAN, portanto é um elemento lógico e não um equipamento físico instalável.';
-    rackNotice('Não foi possível instalar no rack',`${dev.name}: ${reason} Use servidor, switch, roteador ou firewall.`);
+    if(previousRack)organizeRackAssets(previousRack);
+    const reason=dev.type==='server'?'O servidor torre possui gabinete vertical e não encaixa diretamente em um rack padrão de 19 polegadas. Adicione um Servidor Rack 2U para instalar no rack.':dev.type==='pc'?'Computadores são equipamentos de mesa e não possuem formato padrão de montagem em rack de 19 polegadas.':dev.type==='phone'?'Celulares são dispositivos móveis sem formato de montagem em rack; eles se conectam por Wi-Fi ao roteador sem fio.':'A nuvem representa a Internet/WAN, portanto é um elemento lógico e não um equipamento físico instalável.';
+    rackNotice('Não foi possível instalar no rack',`${dev.name}: ${reason}`);
     sysLog(`Rack recusou ${dev.name}: equipamento não rackável.`,'lwarn');
     document.getElementById('explain-icon').textContent='⚠️';document.getElementById('explain-text').textContent=reason;document.getElementById('explain-bar').classList.remove('activity-active');document.getElementById('explain-bar').classList.add('show');
     return;
   }
-  const assets=rackAssets(rack).filter(d=>d.id!==dev.id);
-  const need=RACK_UNIT_NEED[dev.type]||4,used=rackUsedUnits(rack,dev.id),free=rack.size-used;
+  const need=rackUnitNeed(dev),used=rackUsedUnits(rack,dev.id),free=rack.size-used;
   if(need>free){
-    dev.rackId=null;
+    dev.rackId=null;delete dev.rackSlotU;
     dev.x=Math.min(canvas.width-45,rack.x+rack.w/2+55);dev.y=rack.y;
+    if(previousRack)organizeRackAssets(previousRack);
     rackNotice('Rack sem espaço disponível',`${rack.name} possui ${free}U livre(s), mas ${dev.name} precisa de ${need}U. Retire outro equipamento ou utilize um rack maior.`);
     sysLog(`${dev.name} não instalado: ${rack.name} tem ${free}U livre(s) e o ativo exige ${need}U.`,'lwarn');
     document.getElementById('explain-icon').textContent='⚠️';document.getElementById('explain-text').textContent=`Instalação recusada: capacidade insuficiente. Livre: ${free}U; necessário: ${need}U.`;document.getElementById('explain-bar').classList.remove('activity-active');document.getElementById('explain-bar').classList.add('show');
     return;
   }
   dev.rackId=rack.id;
-  const slot=assets.length;
-  dev.x=rack.x;
-  const step=(rack.h-62)/Math.max(1,Math.floor(rack.size/4));
-  dev.y=rack.y-rack.h/2+43+slot*step;
+  dev.rackSlotU=used;
+  if(previousRack&&previousRack.id!==rack.id)organizeRackAssets(previousRack);
+  organizeRackAssets(rack);
   rackNotice('Equipamento instalado',`${dev.name} foi encaixado em ${rack.name}. Ocupação: ${used+need}U de ${rack.size}U.`,'ok');
   sysLog(`${dev.name} instalado em ${rack.name}.`,'lsys');
 }
 function detachRackAsset(id){
   const dev=devices.find(d=>d.id===id);if(!dev)return;
-  dev.rackId=null;dev.x+=110;updateAll();updateProp(dev);
+  const rack=racks.find(r=>r.id===dev.rackId);
+  dev.rackId=null;delete dev.rackSlotU;dev.x+=(rack?.w||110)/2+45;
+  organizeRackAssets(rack);updateAll();updateProp(dev);
 }
 function drawRack(r){
   const isSel=selected&&selected._rack&&selected.id===r.id;
@@ -919,8 +959,8 @@ function updateRackProp(rack){
     <div class="prop-row"><span class="pl">Ocupação</span><span class="pv">${used}U de ${rack.size}U</span></div>
     <div class="prop-row"><span class="pl">Espaço livre</span><span class="pv" style="color:${free?'#3fb950':'#f85149'}">${free}U</span></div>
     <div class="prop-row"><span class="pl">Estrutura</span><span class="pv">19 polegadas</span></div>
-    <div class="rack-assets"><b style="color:#dce8f5">Equipamentos no rack</b><br>${assets.length?assets.map(d=>`${ICONS[d.type]} ${d.name} — ${RACK_UNIT_NEED[d.type]}U <button onclick="detachRackAsset(${d.id})" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">Retirar</button>`).join('<br>'):'Nenhum ativo instalado.<br>Arraste um equipamento para dentro.'}</div>
-    <div style="margin-top:8px;padding:8px;border-left:3px solid #d29922;background:#1b1810;border-radius:5px;font-size:9px;line-height:1.5;color:#c7b98d"><b>Compatibilidade:</b> servidores usam 6U; switches, roteadores e firewalls usam 4U. PCs, celulares e Cloud não entram porque não são ativos físicos padrão rack 19″.</div>`;
+    <div class="rack-assets"><b style="color:#dce8f5">Equipamentos no rack</b><br>${assets.length?assets.map(d=>`${ICONS[d.type]} ${d.name} — ${rackUnitNeed(d)}U <button onclick="detachRackAsset(${d.id})" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">Retirar</button>`).join('<br>'):'Nenhum ativo instalado.<br>Arraste um equipamento para dentro.'}</div>
+    <div style="margin-top:8px;padding:8px;border-left:3px solid #d29922;background:#1b1810;border-radius:5px;font-size:9px;line-height:1.5;color:#c7b98d"><b>Compatibilidade:</b> servidores rack ocupam 2U; switches, roteadores e firewalls usam 4U. Servidores torre, PCs, celulares e Cloud permanecem fora do rack.</div>`;
 }
 
 // =========================================================
@@ -1426,34 +1466,36 @@ function drawDev(d){
     ctx.fillText(`${d.portCount||d.interfaces?.length||24}P`,d.x+sw/2-2,d.y+sh/2-1);
 
   } else if(d.type==='server'){
-    const rw2=32,rh2=38;
+    const isTower=serverTypeOf(d)==='tower';
+    const mountedRack=racks.find(r=>r.id===d.rackId);
+    const rw2=isTower?34:(mountedRack?mountedRack.w-34:62);
+    const rh2=isTower?50:(mountedRack?Math.max(11,2*(mountedRack.h-44)/mountedRack.size-1):22);
     const sg4=ctx.createLinearGradient(d.x-rw2/2,d.y-rh2/2,d.x-rw2/2,d.y+rh2/2);
     sg4.addColorStop(0,isDown?'#222':'#262626');sg4.addColorStop(1,isDown?'#111':'#101010');
     rr2(d.x-rw2/2,d.y-rh2/2,rw2,rh2,3);ctx.fillStyle=sg4;ctx.fill();
     ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':col);ctx.lineWidth=isSel||isConn?2.5:1.5;ctx.stroke();
-    if(!isDown){ctx.fillStyle='#303030';ctx.beginPath();ctx.moveTo(d.x-rw2/2,d.y-rh2/2);ctx.lineTo(d.x-rw2/2+5,d.y-rh2/2-4);ctx.lineTo(d.x+rw2/2+5,d.y-rh2/2-4);ctx.lineTo(d.x+rw2/2,d.y-rh2/2);ctx.closePath();ctx.fill();}
-    // 4 rack units
-    for(let u=0;u<4;u++){
-      const uy=d.y-rh2/2+2+u*(rh2-4)/4;const uh=(rh2-4)/4-1;
-      const ug=ctx.createLinearGradient(d.x-rw2/2+1,uy,d.x-rw2/2+1,uy+uh);
-      ug.addColorStop(0,isDown?'#1c1c1c':'#2a2a2a');ug.addColorStop(1,isDown?'#111':'#181818');
-      rr2(d.x-rw2/2+1,uy,rw2-2,uh,1);ctx.fillStyle=ug;ctx.fill();
-      ctx.strokeStyle='#2a2a2a';ctx.lineWidth=.4;rr2(d.x-rw2/2+1,uy,rw2-2,uh,1);ctx.stroke();
-      for(let b=0;b<2;b++){
-        ctx.fillStyle='#141414';ctx.fillRect(d.x-rw2/2+2+b*13,uy+1,11,uh-2);
-        ctx.fillStyle='#1e1e1e';ctx.fillRect(d.x-rw2/2+3+b*13,uy+uh-3,9,1.5);
-        const act2=Math.random()>.5;
-        ctx.fillStyle=isDown?'#111':(act2?'#ff8c00':'#1a1a1a');ctx.shadowBlur=isDown?0:(act2?5:0);ctx.shadowColor='#ff8c00';
-        ctx.beginPath();ctx.arc(d.x-rw2/2+4+b*13,uy+2.5,1.2,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    if(isTower){
+      if(!isDown){ctx.fillStyle='#343434';ctx.beginPath();ctx.moveTo(d.x-rw2/2,d.y-rh2/2);ctx.lineTo(d.x-rw2/2+5,d.y-rh2/2-5);ctx.lineTo(d.x+rw2/2+5,d.y-rh2/2-5);ctx.lineTo(d.x+rw2/2,d.y-rh2/2);ctx.closePath();ctx.fill();}
+      for(let b=0;b<3;b++){
+        const by=d.y-rh2/2+6+b*9;
+        ctx.fillStyle='#151515';ctx.strokeStyle='#363636';ctx.lineWidth=.6;ctx.fillRect(d.x-rw2/2+5,by,rw2-10,7);ctx.strokeRect(d.x-rw2/2+5,by,rw2-10,7);
+        ctx.fillStyle='#444';ctx.fillRect(d.x+rw2/2-9,by+2,2,3);
       }
-      ctx.fillStyle=isDown?'#111':(u<3?'#3fb950':'#333');ctx.shadowBlur=isDown?0:(u<3?6:0);ctx.shadowColor='#3fb950';
-      ctx.beginPath();ctx.arc(d.x+rw2/2-4,uy+uh/2,2,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+      ctx.fillStyle='#090909';ctx.beginPath();ctx.arc(d.x,d.y+rh2/2-10,6,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#333';ctx.lineWidth=1;for(let a=0;a<Math.PI*2;a+=Math.PI/4){ctx.beginPath();ctx.moveTo(d.x,d.y+rh2/2-10);ctx.lineTo(d.x+Math.cos(a)*5,d.y+rh2/2-10+Math.sin(a)*5);ctx.stroke();}
+      ctx.fillStyle=isDown?'#333':'#3fb950';ctx.shadowBlur=isDown?0:8;ctx.shadowColor='#3fb950';ctx.beginPath();ctx.arc(d.x+rw2/2-6,d.y+rh2/2-5,2.5,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    }else{
+      const panelY=d.y-rh2/2+2,panelH=Math.max(7,rh2-4);
+      ctx.fillStyle=isDown?'#181818':'#232323';ctx.fillRect(d.x-rw2/2+4,panelY,rw2-8,panelH);
+      const bayCount=mountedRack?6:4;
+      const bayW=Math.max(8,(rw2-28)/bayCount);
+      for(let b=0;b<bayCount;b++){
+        const bx=d.x-rw2/2+8+b*bayW;
+        ctx.fillStyle='#111';ctx.strokeStyle='#383838';ctx.lineWidth=.4;ctx.fillRect(bx,panelY+2,bayW-2,Math.max(3,panelH-4));ctx.strokeRect(bx,panelY+2,bayW-2,Math.max(3,panelH-4));
+      }
+      ctx.fillStyle=isDown?'#333':'#3fb950';ctx.shadowBlur=isDown?0:7;ctx.shadowColor='#3fb950';ctx.beginPath();ctx.arc(d.x+rw2/2-7,d.y,2.2,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+      ctx.fillStyle='#d0d7de';ctx.font=`bold ${mountedRack?6:7}px monospace`;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText('SRV 2U',d.x-rw2/2+7,d.y);
     }
-    // power btn
-    const pbg2=isDown?'#1a1a1a':ctx.createRadialGradient(d.x+rw2/2-5,d.y+rh2/2-5,0,d.x+rw2/2-5,d.y+rh2/2-5,4);
-    if(!isDown){pbg2.addColorStop(0,'#5aff8a');pbg2.addColorStop(1,'#1a6a30');}
-    ctx.fillStyle=pbg2;ctx.shadowBlur=isDown?0:10;ctx.shadowColor='#3fb950';
-    ctx.beginPath();ctx.arc(d.x+rw2/2-5,d.y+rh2/2-5,3.5,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
 
   } else if(d.type==='firewall'){
     const fw2=44,fh3=26;
@@ -1527,6 +1569,8 @@ function drawDev(d){
     ctx.globalAlpha=isDown?.25:1;ctx.font='18px serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(ICONS[d.type],d.x,d.y);ctx.globalAlpha=1;
   }
+
+  if(d.type==='server'&&d.rackId){ctx.restore();return;}
 
   // ── STATUS DOT ───────────────────────────────
   ctx.beginPath();ctx.arc(d.x+20,d.y-20,5,0,Math.PI*2);
@@ -1637,13 +1681,13 @@ canvas.addEventListener('mousedown',e=>{
 });
 canvas.addEventListener('mousemove',e=>{
   if(dragging){const r=canvas.getBoundingClientRect();dragging.x=e.clientX-r.left-dragOffX;dragging.y=e.clientY-r.top-dragOffY;draw();}
-  if(draggingRack){const r=canvas.getBoundingClientRect(),nx=e.clientX-r.left-dragOffX,ny=e.clientY-r.top-dragOffY;const dx=nx-draggingRack.x,dy=ny-draggingRack.y;draggingRack.x=nx;draggingRack.y=ny;rackAssets(draggingRack).forEach(d=>{d.x+=dx;d.y+=dy;});selected={...draggingRack,_rack:true};draw();}
+  if(draggingRack){const r=canvas.getBoundingClientRect(),nx=e.clientX-r.left-dragOffX,ny=e.clientY-r.top-dragOffY;draggingRack.x=nx;draggingRack.y=ny;organizeRackAssets(draggingRack);selected={...draggingRack,_rack:true};draw();}
   const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
   const dev=getAt(x,y);
   const tip=document.getElementById('tip');
   if(dev){
     tip.style.display='block';tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-40)+'px';
-    tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b><br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code><br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b><br><span style="color:#d2a679;font-size:9px">Use o botão ⌨️ Terminal para comandos</span>`;
+    tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b>${dev.type==='server'?`<br>Formato: <b style="color:#bc8cff">${serverFormatLabel(dev)}</b>`:''}<br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code><br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b><br><span style="color:#d2a679;font-size:9px">Use o botão ⌨️ Terminal para comandos</span>`;
   }else{tip.style.display='none';}
 });
 canvas.addEventListener('mouseup',()=>{const moved=dragging;if(moved)assignRack(moved);dragging=null;draggingRack=null;updateAll();if(moved)updateProp(moved);});
@@ -1696,12 +1740,14 @@ function deleteSelected(){
   saveHistory();
   if(selected._rack){
     const rack=racks.find(r=>r.id===selected.id);
-    if(rack){rackAssets(rack).forEach((d,i)=>{d.rackId=null;d.x=rack.x+rack.w/2+55;d.y=rack.y-30+i*38;});racks=racks.filter(r=>r.id!==rack.id);sysLog(`Rack removido: ${rack.name}. Os ativos foram mantidos.`,'lwarn');}
+    if(rack){rackAssets(rack).forEach((d,i)=>{d.rackId=null;delete d.rackSlotU;d.x=rack.x+rack.w/2+55;d.y=rack.y-30+i*38;});racks=racks.filter(r=>r.id!==rack.id);sysLog(`Rack removido: ${rack.name}. Os ativos foram mantidos.`,'lwarn');}
     selected=null;updateAll();updateProp(null);return;
   }
+  const oldRack=racks.find(r=>r.id===selected.rackId);
   connections=connections.filter(c=>c.from!==selected.id&&c.to!==selected.id);
   delete arpTable[selected.ip];delete macTable[selected.mac];
   devices=devices.filter(d=>d.id!==selected.id);
+  organizeRackAssets(oldRack);
   sysLog(`Deletado: ${selected.name}`,'lwarn');
   selected=null;updateAll();
 }
@@ -1743,7 +1789,9 @@ function loadTopology(){
     const rd=new FileReader();rd.onload=ev=>{
       const dt=JSON.parse(ev.target.result);
       devices=dt.devices||[];connections=dt.connections||[];racks=dt.racks||[];nextId=dt.nextId||100;nextRackId=dt.nextRackId||1;
+      devices.forEach(d=>{if(d.type==='server'&&!d.serverType)d.serverType='rack';});
       devices.forEach(ensureInterfaceMetadata);
+      racks.forEach(organizeRackAssets);
       if(dt.classroom){
         classroom={...classroom,...dt.classroom,role:'student',faults:[],faultSnapshot:null};
         const legacyActivities={lan:'lan1',wifi:'wifi1',backbone:'backbone1',vlan:'vlan1'};
@@ -2249,6 +2297,7 @@ function updateProp(dev){
   document.getElementById('prop-box').innerHTML=`
     <h4 style="color:#58a6ff;font-size:12px;margin-bottom:8px;">${ICONS[dev.type]} ${dev.name}</h4>
     <div class="prop-row"><span class="pl">Tipo</span><span class="pv">${LABELS[dev.type]}</span></div>
+    ${dev.type==='server'?`<div class="prop-row"><span class="pl">Formato</span><span class="pv" style="color:#bc8cff">${serverFormatLabel(dev)}</span></div>`:''}
     ${dev.type==='switch'?`<div class="prop-row"><span class="pl">Portas Ethernet</span><span class="pv">${dev.portCount||dev.interfaces?.length||24}</span></div>`:''}
     <div class="prop-row"><span class="pl">IP</span><span class="pv">${dev.ip}</span></div>
     <div class="prop-row"><span class="pl">Máscara</span><span class="pv">${dev.mask}</span></div>
@@ -2259,7 +2308,7 @@ function updateProp(dev){
     <div class="prop-row"><span class="pl">Status</span><span class="pv" style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</span></div>
     <div class="prop-row"><span class="pl">Conexões</span><span class="pv">${numConns}</span></div>
     <div class="prop-row"><span class="pl">Backbones</span><span class="pv" style="color:${numBackbones?'#c9a7ff':'#8b949e'}">${numBackbones}</span></div>
-    <div class="prop-row"><span class="pl">Instalação</span><span class="pv">${installedRack?'🗄️ '+installedRack.name:'Fora do rack'}</span></div>
+    <div class="prop-row"><span class="pl">Instalação</span><span class="pv">${installedRack?'🗄️ '+installedRack.name:(dev.type==='server'&&serverTypeOf(dev)==='tower'?'Torre — fora do rack':'Fora do rack')}</span></div>
     <div class="prop-row"><span class="pl">ACLs</span><span class="pv">${dev.acl?.length||0}</span></div>
     <div style="margin-top:8px;font-size:9px;color:#8b949e">${EXPLAIN[dev.type]?.substring(0,100)+'...'}</div>
     <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;">
@@ -2294,7 +2343,7 @@ function updateDevList(){
         <span><span class="dot ${d.status==='up'?'dot-up':'dot-down'}"></span><span class="dev-name">${d.name}</span></span>
         <span style="font-size:9px;color:#6e7681">${LABELS[d.type]}</span>
       </div>
-      <div class="dev-sub">${d.ip} · VLAN ${d.vlan||1}${d.type==='switch'?' · '+(d.portCount||d.interfaces?.length||24)+' portas':''}${d.dhcpFrom?' · DHCP':''}</div>
+      <div class="dev-sub">${d.ip} · VLAN ${d.vlan||1}${d.type==='switch'?' · '+(d.portCount||d.interfaces?.length||24)+' portas':''}${d.type==='server'?' · '+(serverTypeOf(d)==='tower'?'Torre':'Rack 2U'):''}${d.dhcpFrom?' · DHCP':''}</div>
     </div>`).join('');
 }
 function selectDev(id){selected=devices.find(d=>d.id===id);updateDevList();updateProp(selected);draw();}
@@ -3336,7 +3385,7 @@ canvas.addEventListener('dblclick',function(e){
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#70e1ff;"></span> Celular / Wi-Fi</div>
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff8c00;"></span> Roteador</div>
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3fb950;"></span> Switch</div>
-    <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f85149;"></span> Servidor</div>
+    <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f85149;"></span> Servidor rack / torre</div>
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff6b9d;"></span> Firewall</div>
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#c4b5fd;"></span> Cloud/ISP</div>
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#70e1ff;"></span> Requisição de ping</div>
@@ -3349,7 +3398,7 @@ canvas.addEventListener('dblclick',function(e){
 <script>
 // ── 3D RENDERER ───────────────────────────────────────────
 const DEV_COLORS_3D = {pc:'#4dabf7',phone:'#70e1ff',router:'#ff8c00',switch:'#3fb950',server:'#f85149',firewall:'#ff6b9d',cloud:'#c4b5fd'};
-const DEV_SHAPES = {pc:'pc',phone:'phone',router:'router',switch:'switch',server:'server',firewall:'firewall',cloud:'cloud'};
+const DEV_SHAPES = {pc:'pc',phone:'phone',router:'router',switch:'switch',server:'serverRack',firewall:'firewall',cloud:'cloud'};
 
 let _3d = {
   running:false, animating:true, showLabels:true,
@@ -3399,6 +3448,7 @@ function build3DScene(){
       color:DEV_COLORS_3D[d.type]||'#888',
       ispData:d.ispData||null,
       routerType:d.routerType||null,
+      serverType:d.type==='server'?serverTypeOf(d):null,
       px:0,py:0,pz:0 // projected
     };
   });
@@ -3689,7 +3739,7 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha) {
     ctx.fillStyle='rgba(255,255,255,0.07)';ctx.font=`bold ${Math.max(5,r*.25)}px monospace`;
     ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('24-PORT MANAGED SWITCH',x,y+sh/2-1);
 
-  } else if (shape === 'server') {
+  } else if (shape === 'serverRack' || shape === 'server') {
     const srw=s*.95,srh=s*1.35;
     ctx.shadowBlur=22;ctx.shadowColor='#f8514944';
     const srf=ctx.createLinearGradient(x-srw/2,y-srh/2,x-srw/2,y+srh/2);
@@ -3735,6 +3785,22 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha) {
     // Vent holes bottom
     ctx.fillStyle='rgba(0,0,0,0.5)';
     for(let v=0;v<8;v++) ctx.fillRect(x-srw/2+4+v*8,y+srh/2-5,5,3);
+
+  } else if (shape === 'serverTower') {
+    const tw=s*.78,th=s*1.55;
+    ctx.shadowBlur=22;ctx.shadowColor='#f8514944';
+    const tf=ctx.createLinearGradient(x-tw/2,y-th/2,x+tw/2,y+th/2);
+    tf.addColorStop(0,'#333');tf.addColorStop(1,'#0c0c0c');
+    iso3D(x-tw/2,y-th/2,tw,th,7,'#3b3b3b','#171717',tf);
+    ctx.strokeStyle='#555';ctx.lineWidth=1.2;rr(x-tw/2,y-th/2,tw,th,4);ctx.stroke();ctx.shadowBlur=0;
+    for(let b=0;b<3;b++){
+      const by=y-th/2+8+b*12;
+      ctx.fillStyle='#141414';ctx.strokeStyle='#444';ctx.lineWidth=.6;ctx.fillRect(x-tw/2+5,by,tw-10,9);ctx.strokeRect(x-tw/2+5,by,tw-10,9);
+      ctx.fillStyle='#555';ctx.fillRect(x+tw/2-10,by+3,3,3);
+    }
+    ctx.fillStyle='#080808';ctx.beginPath();ctx.arc(x,y+th/2-15,9,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#333';ctx.lineWidth=1;for(let a=0;a<Math.PI*2;a+=Math.PI/4){ctx.beginPath();ctx.moveTo(x,y+th/2-15);ctx.lineTo(x+Math.cos(a)*8,y+th/2-15+Math.sin(a)*8);ctx.stroke();}
+    led(x+tw/2-8,y+th/2-7,3,'#3fb950',10);
 
   } else if (shape === 'firewall') {
     const fw=s*1.18,fh=s*.48;
@@ -3922,7 +3988,7 @@ function render3DLoop(){
   // Draw nodes
   sorted.forEach(n=>{
     const r=Math.max(10,20*n.pscale);
-    const shape=DEV_SHAPES[n.type]||'sphere';
+    const shape=n.type==='server'?(n.serverType==='tower'?'serverTower':'serverRack'):(DEV_SHAPES[n.type]||'sphere');
     // Glow
     ctx.save();ctx.shadowBlur=20*n.pscale;ctx.shadowColor=n.color;
     drawShape3D(ctx,shape,n.px,n.py,r,n.color,0.92);
@@ -4037,6 +4103,7 @@ function show3DInfo(n){
     ${dev?.ssid?`<div><span style="color:#6e7681">Wi-Fi:</span> <code style="color:#70e1ff">${dev.ssid}</code></div>`:''}
     ${n.ispData?`<div><span style="color:#6e7681">ISP:</span> ${n.ispData.name}</div>`:''}
     ${n.routerType?`<div><span style="color:#6e7681">Modelo:</span> ${n.routerType}</div>`:''}
+    ${n.type==='server'?`<div><span style="color:#6e7681">Formato:</span> ${n.serverType==='tower'?'Servidor torre':'Servidor rack 2U'}</div>`:''}
     <div style="margin-top:6px;font-size:9px;color:#6e7681">Clique em outro ponto para fechar</div>`;
 }
 
