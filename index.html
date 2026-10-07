@@ -2357,7 +2357,10 @@ function updateStats(){
   document.getElementById('s-drop').textContent=sDrop;
   document.getElementById('s-classroom').textContent=classroom.role==='teacher'?'Professor':'Aluno';
 }
-function updateAll(){updateDevList();updateStats();draw();}
+function updateAll(){
+  updateDevList();updateStats();draw();
+  if(selected?._rack){const liveRack=racks.find(r=>r.id===selected.id);if(liveRack)updateRackProp(liveRack);}
+}
 function sysLog(msg,cls='lsys'){
   const div=document.getElementById('log');
   const d=document.createElement('div');d.className=cls;
