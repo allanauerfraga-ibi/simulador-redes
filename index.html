@@ -322,7 +322,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         <div class="menu-title">Equipamentos e infraestrutura</div>
         <div class="menu-grid">
           <button class="menu-action" id="btn-pc" onclick="preparePCPlacement('notebook')" title="Notebook realista com tela, teclado e touchpad">💻 Notebook</button>
-          <button class="menu-action" id="btn-pc-complete" onclick="preparePCPlacement('complete')" title="Computador completo com monitor, gabinete, teclado e mouse">🖥️ Computador completo</button>
+          <button class="menu-action" id="btn-pc-complete" onclick="preparePCPlacement('complete')" title="Computador com monitor, gabinete, teclado e mouse">🖥️ Computador</button>
           <button class="menu-action" id="btn-phone" onclick="setMode('add','phone')" title="Celular conectado por Wi-Fi">📱 Celular</button>
           <div style="position:relative;display:flex;">
             <button class="menu-action" id="btn-router" onclick="setMode('add','router')" title="Roteia pacotes entre redes" style="border-radius:6px 0 0 6px;flex:1;">🔀 Roteador</button>
@@ -824,11 +824,11 @@ function prepareServerPlacement(){
 function preparePCPlacement(style){
   pendingPCStyle=style==='complete'?'complete':'notebook';
   setMode('add','pc');
-  document.getElementById('s-mode').textContent=pendingPCStyle==='complete'?'Adicionar: Computador completo':'Adicionar: Notebook';
-  rackNotice(pendingPCStyle==='complete'?'Computador completo selecionado':'Notebook selecionado',pendingPCStyle==='complete'?'Clique no espaço de trabalho para adicionar monitor, gabinete, teclado e mouse.':'Clique no espaço de trabalho para adicionar o notebook realista.','ok');
+  document.getElementById('s-mode').textContent=pendingPCStyle==='complete'?'Adicionar: Computador':'Adicionar: Notebook';
+  rackNotice(pendingPCStyle==='complete'?'Computador selecionado':'Notebook selecionado',pendingPCStyle==='complete'?'Clique no espaço de trabalho para adicionar monitor, gabinete, teclado e mouse.':'Clique no espaço de trabalho para adicionar o notebook realista.','ok');
 }
 function pcStyleOf(dev){return dev?.pcStyle==='complete'?'complete':'notebook';}
-function pcFormatLabel(dev){return pcStyleOf(dev)==='complete'?'Computador completo':'Notebook';}
+function pcFormatLabel(dev){return pcStyleOf(dev)==='complete'?'Computador':'Notebook';}
 function serverTypeOf(dev){return dev?.serverType==='tower'?'tower':'rack';}
 function serverFormatLabel(dev){return serverTypeOf(dev)==='tower'?'Servidor torre':'Servidor rack 2U';}
 function switchFormOf(dev){return dev?.switchForm==='desktop'?'desktop':'rack';}
@@ -836,7 +836,7 @@ function switchFormatLabel(dev){return switchFormOf(dev)==='rack'?'Switch rack 1
 function addDevice(x,y,type){
   saveHistory();
   const n=devices.filter(d=>d.type===type).length+1;
-  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:type==='switch'?`Switch ${pendingSwitchForm==='rack'?'Rack':'Mesa'} ${n}`:type==='patchPanel'?`Patch Panel ${n}`:type==='pc'?(pendingPCStyle==='complete'?`Computador Completo ${n}`:`Notebook ${n}`):LABELS[type]+n;
+  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:type==='switch'?`Switch ${pendingSwitchForm==='rack'?'Rack':'Mesa'} ${n}`:type==='patchPanel'?`Patch Panel ${n}`:type==='pc'?(pendingPCStyle==='complete'?`Computador ${n}`:`Notebook ${n}`):LABELS[type]+n;
   const ip=type==='patchPanel'?'Sem IP':genIP(type,n);
   const mac=type==='patchPanel'?'—':genMAC();
   const firstKind=type==='phone'?'wireless':'wired';
@@ -1567,7 +1567,7 @@ function drawDev(d){
       ctx.fillStyle=isDown?'#111':'#1b2830';ctx.strokeStyle='#556873';rr2(d.x-7,d.y+20,14,4.4,1);ctx.fill();ctx.stroke();
       ctx.fillStyle='rgba(255,255,255,.28)';rr2(d.x-11,d.y+24,22,1.1,.5);ctx.fill();
     }else{
-      // Computador completo: monitor, gabinete, teclado e mouse.
+      // Computador: monitor, gabinete, teclado e mouse.
       const cx=d.x-5,mw=39,mh=31;
       const mg=ctx.createLinearGradient(cx-mw/2,d.y-mh/2,cx+mw/2,d.y+mh/2);mg.addColorStop(0,isDown?'#1a1a1a':'#415363');mg.addColorStop(.18,isDown?'#111':'#22313d');mg.addColorStop(1,isDown?'#070707':'#09131b');
       ctx.fillStyle=mg;rr2(cx-mw/2,d.y-mh/2,mw,mh,4);ctx.fill();ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':col);ctx.lineWidth=isSel||isConn?2.5:1.5;ctx.stroke();
@@ -4037,7 +4037,7 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha, node) {
       ctx.fillStyle='#1b2830';ctx.strokeStyle='#607681';rr(x-bw*.13,by+bh*.67,bw*.26,bh*.22,2);ctx.fill();ctx.stroke();
       ctx.fillStyle='rgba(255,255,255,.28)';rr(x-bw*.22,by+bh-2,bw*.44,1.5,.7);ctx.fill();
     }else{
-      // Computador completo 3D: monitor, teclado, gabinete e mouse.
+      // Computador 3D: monitor, teclado, gabinete e mouse.
       const mw=s*1.02,mh=s*.72,mx=x-s*.12;
       const fg=ctx.createLinearGradient(mx-mw/2,y-mh/2,mx+mw/2,y+mh/2);fg.addColorStop(0,'#405564');fg.addColorStop(1,'#0c1820');iso3D(mx-mw/2,y-mh/2,mw,mh,6,'#526a78','#172832',fg);
       ctx.fillStyle='#07101a';rr(mx-mw/2+5,y-mh/2+5,mw-10,mh-16,2);ctx.fill();const sg=ctx.createLinearGradient(mx-mw/2+6,y-mh/2+6,mx+mw/2-6,y+mh/2-17);sg.addColorStop(0,'#17628a');sg.addColorStop(1,'#351b59');ctx.fillStyle=sg;rr(mx-mw/2+6,y-mh/2+6,mw-12,mh-18,2);ctx.fill();led(mx,y-mh/2+3,1.5,'#4dabf7',4);
