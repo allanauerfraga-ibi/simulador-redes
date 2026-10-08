@@ -321,7 +321,8 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
       <div class="menu-panel wide">
         <div class="menu-title">Equipamentos e infraestrutura</div>
         <div class="menu-grid">
-          <button class="menu-action" id="btn-pc" onclick="setMode('add','pc')" title="Computador pessoal">💻 PC</button>
+          <button class="menu-action" id="btn-pc" onclick="preparePCPlacement('standard')" title="Computador pessoal com monitor e teclado">💻 PC realista</button>
+          <button class="menu-action" id="btn-pc-complete" onclick="preparePCPlacement('complete')" title="Computador completo com monitor, gabinete, teclado e mouse">🖥️ Computador completo</button>
           <button class="menu-action" id="btn-phone" onclick="setMode('add','phone')" title="Celular conectado por Wi-Fi">📱 Celular</button>
           <div style="position:relative;display:flex;">
             <button class="menu-action" id="btn-router" onclick="setMode('add','router')" title="Roteia pacotes entre redes" style="border-radius:6px 0 0 6px;flex:1;">🔀 Roteador</button>
@@ -588,6 +589,7 @@ const canvas=document.getElementById('canvas');
 const ctx=canvas.getContext('2d');
 const area=document.getElementById('canvas-area');
 let devices=[],connections=[],packets=[],racks=[];
+let tracerouteRun=null,tracerouteSeq=0;
 let mode='select',addType='',connectFirst=null,selected=null;
 let backboneFirst=null,backboneSecond=null;
 let wifiFirst=null;
@@ -596,6 +598,7 @@ let pendingSwitchPorts=24;
 let pendingSwitchForm='rack';
 let pendingPatchPorts=24;
 let pendingServerType='rack';
+let pendingPCStyle='standard';
 let dragging=null,draggingRack=null,dragOffX=0,dragOffY=0;
 let nextId=1,sTx=0,sRx=0,sDrop=0;
 let nextRackId=1,pendingRackSize=24;
@@ -818,6 +821,13 @@ function prepareServerPlacement(){
   const label=pendingServerType==='rack'?'servidor rack 2U':'servidor torre';
   rackNotice('Formato selecionado',`Clique no espaço de trabalho para adicionar o ${label}.`,'ok');
 }
+function preparePCPlacement(style){
+  pendingPCStyle=style==='complete'?'complete':'standard';
+  setMode('add','pc');
+  rackNotice(pendingPCStyle==='complete'?'Computador completo selecionado':'PC realista selecionado',pendingPCStyle==='complete'?'Clique no espaço de trabalho para adicionar monitor, gabinete, teclado e mouse.':'Clique no espaço de trabalho para adicionar o computador.','ok');
+}
+function pcStyleOf(dev){return dev?.pcStyle==='complete'?'complete':'standard';}
+function pcFormatLabel(dev){return pcStyleOf(dev)==='complete'?'Computador completo':'PC com monitor e teclado';}
 function serverTypeOf(dev){return dev?.serverType==='tower'?'tower':'rack';}
 function serverFormatLabel(dev){return serverTypeOf(dev)==='tower'?'Servidor torre':'Servidor rack 2U';}
 function switchFormOf(dev){return dev?.switchForm==='desktop'?'desktop':'rack';}
@@ -825,7 +835,7 @@ function switchFormatLabel(dev){return switchFormOf(dev)==='rack'?'Switch rack 1
 function addDevice(x,y,type){
   saveHistory();
   const n=devices.filter(d=>d.type===type).length+1;
-  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:type==='switch'?`Switch ${pendingSwitchForm==='rack'?'Rack':'Mesa'} ${n}`:type==='patchPanel'?`Patch Panel ${n}`:LABELS[type]+n;
+  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:type==='switch'?`Switch ${pendingSwitchForm==='rack'?'Rack':'Mesa'} ${n}`:type==='patchPanel'?`Patch Panel ${n}`:type==='pc'&&pendingPCStyle==='complete'?`Computador Completo ${n}`:LABELS[type]+n;
   const ip=type==='patchPanel'?'Sem IP':genIP(type,n);
   const mac=type==='patchPanel'?'—':genMAC();
   const firstKind=type==='phone'?'wireless':'wired';
@@ -836,13 +846,14 @@ function addDevice(x,y,type){
   if(type==='switch'){d.portCount=pendingSwitchPorts;d.switchForm=pendingSwitchForm==='desktop'?'desktop':'rack';}
   if(type==='patchPanel')d.portCount=pendingPatchPorts;
   if(type==='server')d.serverType=pendingServerType==='tower'?'tower':'rack';
+  if(type==='pc')d.pcStyle=pendingPCStyle==='complete'?'complete':'standard';
   const ifc={router:4,switch:d.portCount||24,patchPanel:d.portCount||24,server:2,firewall:4,cloud:2};
   for(let i=1;i<(ifc[type]||1);i++) d.interfaces.push({name:type==='patchPanel'?'porta'+(i+1):'eth'+i,ip:'',mask:'255.255.255.0',status:'up',kind:'wired',speed:BW[type]||1000,mac:type==='patchPanel'?'—':genMAC()});
   devices.push(d);
   if(getRackAt(x,y))assignRack(d);
   if(type!=='patchPanel'){arpTable[ip]=mac;macTable[mac]=d.id;}
   updateAll();
-  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+switchFormatLabel(d)+' · '+d.portCount+' portas':type==='patchPanel'?' · passivo · '+d.portCount+' portas':type==='server'?' · '+serverFormatLabel(d):''}${type==='patchPanel'?'':' IP:'+ip}`,'lsys');
+  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+switchFormatLabel(d)+' · '+d.portCount+' portas':type==='patchPanel'?' · passivo · '+d.portCount+' portas':type==='server'?' · '+serverFormatLabel(d):type==='pc'?' · '+pcFormatLabel(d):''}${type==='patchPanel'?'':' IP:'+ip}`,'lsys');
   showExplain(type);
   return d;
 }
@@ -1381,6 +1392,7 @@ function draw(){
   connections.forEach(drawConn);
   packets.forEach(drawPkt);
   devices.forEach(drawDev);
+  drawTracerouteOverlay();
 }
 
 function drawGrid(){
@@ -1515,39 +1527,50 @@ function drawDev(d){
   const R=24; // device body radius
 
   if(d.type==='pc'){
-    // Monitor shape
-    const mw=46,mh=34;
-    const mg=ctx.createLinearGradient(d.x-mw/2,d.y-mh/2,d.x+mw/2,d.y+mh/2);
-    mg.addColorStop(0,isDown?'#1a1a1a':'#263645');mg.addColorStop(1,isDown?'#0d0d0d':'#0d1b26');
-    rr2(d.x-mw/2,d.y-mh/2,mw,mh,5);ctx.fillStyle=mg;ctx.fill();
+    const complete=pcStyleOf(d)==='complete',cx=d.x+(complete?-5:0),mw=complete?39:46,mh=31;
+    // Monitor com moldura, profundidade e tela semelhante a um computador real.
+    ctx.shadowBlur=isDown?3:12;ctx.shadowColor=isDown?'#000':'#4dabf766';
+    const mg=ctx.createLinearGradient(cx-mw/2,d.y-mh/2,cx+mw/2,d.y+mh/2);
+    mg.addColorStop(0,isDown?'#1a1a1a':'#415363');mg.addColorStop(.18,isDown?'#111':'#22313d');mg.addColorStop(1,isDown?'#070707':'#09131b');
+    rr2(cx-mw/2,d.y-mh/2,mw,mh,4);ctx.fillStyle=mg;ctx.fill();ctx.shadowBlur=0;
     ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':col);ctx.lineWidth=isSel||isConn?2.5:1.5;ctx.stroke();
-    // Screen
-    const sg2=ctx.createLinearGradient(d.x-mw/2+3,d.y-mh/2+3,d.x+mw/2-3,d.y+mh/2-12);
-    sg2.addColorStop(0,isDown?'#111':'#0f3060');sg2.addColorStop(1,isDown?'#080808':'#040f1e');
-    rr2(d.x-mw/2+3,d.y-mh/2+3,mw-6,mh-14,3);ctx.fillStyle=sg2;ctx.fill();
+    const sx=cx-mw/2+3,sy=d.y-mh/2+3,sw=mw-6,sh=mh-9;
+    const sg2=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);
+    sg2.addColorStop(0,isDown?'#111':'#164b75');sg2.addColorStop(.55,isDown?'#090909':'#0b284d');sg2.addColorStop(1,isDown?'#050505':'#351b59');
+    rr2(sx,sy,sw,sh,2);ctx.fillStyle=sg2;ctx.fill();
     if(!isDown){
-      // screen shine
-      ctx.fillStyle='rgba(140,200,255,0.07)';rr2(d.x-mw/2+3,d.y-mh/2+3,mw-6,(mh-14)*.45,3);ctx.fill();
-      // code lines
-      const lc=['#3fb95055','#4dabf755','#ff8c0044'];
-      for(let i=0;i<3;i++){ctx.fillStyle=lc[i%3];ctx.fillRect(d.x-mw/2+5,d.y-mh/2+6+i*6,(mw-10)*(0.4+i*.15),2);}
-      // windows on screen
-      [['#1f4a7a','#133','#1a3060'],['#2a1050','#311','#18084a']].forEach(([c1],i)=>{
-        const wx=d.x-mw/2+4+i*20,wy=d.y-mh/2+4,ww=17,wh=12;
-        const wg2=ctx.createLinearGradient(wx,wy,wx,wy+wh);wg2.addColorStop(0,c1);wg2.addColorStop(1,'#060c18');
-        ctx.fillStyle=wg2;rr2(wx,wy,ww,wh,2);ctx.fill();
-        ctx.fillStyle='rgba(255,255,255,0.05)';ctx.fillRect(wx+1,wy+1,ww-2,4);
-      });
+      // Área de trabalho, janela aberta, barra de tarefas e brilho do vidro.
+      ctx.fillStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.moveTo(sx+1,sy+1);ctx.lineTo(sx+sw*.42,sy+1);ctx.lineTo(sx+sw*.18,sy+sh-1);ctx.lineTo(sx+1,sy+sh-1);ctx.closePath();ctx.fill();
+      ctx.fillStyle='rgba(5,12,22,.78)';rr2(sx+4,sy+4,sw-9,sh-9,1.5);ctx.fill();
+      ctx.fillStyle='#205887';ctx.fillRect(sx+4,sy+4,sw-9,3.5);
+      ['#ff7b72','#f2cc60','#56d364'].forEach((c,i)=>{ctx.fillStyle=c;ctx.beginPath();ctx.arc(sx+6+i*3,sy+5.8,.8,0,Math.PI*2);ctx.fill();});
+      ctx.fillStyle='rgba(88,166,255,.45)';for(let i=0;i<3;i++)ctx.fillRect(sx+6,sy+10+i*3.2,(sw-14)*(1-i*.16),1.1);
+      ctx.fillStyle='rgba(3,10,18,.82)';ctx.fillRect(sx,sy+sh-3,sw,3);
+      ['#4dabf7','#56d364','#d2a8ff'].forEach((c,i)=>{ctx.fillStyle=c;rr2(cx-5+i*4,sy+sh-2.5,2.3,2.1,.5);ctx.fill();});
     }
-    // chin
-    ctx.fillStyle=isDown?'#111':'#1a2a38';ctx.fillRect(d.x-mw/2+1,d.y+mh/2-12,mw-2,11);
-    // stand
-    ctx.fillStyle=isDown?'#111':'#1e2d3a';ctx.strokeStyle='#243040';ctx.lineWidth=.8;
-    ctx.fillRect(d.x-3,d.y+mh/2-1,6,9);ctx.strokeRect(d.x-3,d.y+mh/2-1,6,9);
-    rr2(d.x-10,d.y+mh/2+8,20,4,2);ctx.fillStyle=isDown?'#111':'#1e2d3a';ctx.fill();ctx.stroke();
-    // cam
-    ctx.fillStyle='#223344';ctx.beginPath();ctx.arc(d.x,d.y-mh/2+2.5,2,0,Math.PI*2);ctx.fill();
-    if(!isDown){ctx.fillStyle='#4dabf7';ctx.beginPath();ctx.arc(d.x,d.y-mh/2+2.5,.7,0,Math.PI*2);ctx.fill();}
+    // Webcam, botão de energia e pedestal.
+    ctx.fillStyle='#02070b';ctx.beginPath();ctx.arc(cx,d.y-mh/2+1.9,1.25,0,Math.PI*2);ctx.fill();
+    if(!isDown){ctx.fillStyle='#4dabf7';ctx.beginPath();ctx.arc(cx,d.y-mh/2+1.9,.42,0,Math.PI*2);ctx.fill();}
+    ctx.fillStyle=isDown?'#111':'#1e2d3a';ctx.strokeStyle='#31424f';ctx.lineWidth=.7;
+    ctx.fillRect(cx-2.5,d.y+mh/2,5,5);ctx.strokeRect(cx-2.5,d.y+mh/2,5,5);
+    rr2(cx-9,d.y+mh/2+5,18,3,1.5);ctx.fill();ctx.stroke();
+    ctx.fillStyle=isDown?'#222':'#3fb950';ctx.beginPath();ctx.arc(cx+mw/2-3,d.y+mh/2-2,1,0,Math.PI*2);ctx.fill();
+    // Teclado inclinado com fileiras de teclas.
+    ctx.fillStyle=isDown?'#111':'#202c35';ctx.strokeStyle='#3a4b58';rr2(cx-14,d.y+mh/2+9,28,6,2);ctx.fill();ctx.stroke();
+    ctx.strokeStyle='rgba(180,205,220,.28)';ctx.lineWidth=.45;
+    for(let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(cx-11+i*5,d.y+mh/2+10.5);ctx.lineTo(cx-11+i*5,d.y+mh/2+13.5);ctx.stroke();}
+    if(complete){
+      // Gabinete torre com baias, ventilação, botão e iluminação frontal.
+      const tx=d.x+16,ty=d.y-16,tw=14,th=33,tg=ctx.createLinearGradient(tx,ty,tx+tw,ty+th);
+      tg.addColorStop(0,isDown?'#191919':'#344754');tg.addColorStop(.3,isDown?'#101010':'#18242d');tg.addColorStop(1,isDown?'#050505':'#080d12');
+      ctx.fillStyle=tg;rr2(tx,ty,tw,th,3);ctx.fill();ctx.strokeStyle=isSel?'#f78166':'#4d6270';ctx.stroke();
+      ctx.fillStyle='#05090c';rr2(tx+2,ty+3,tw-4,5,1);ctx.fill();
+      ctx.strokeStyle='rgba(120,180,210,.32)';ctx.lineWidth=.55;for(let i=0;i<4;i++){ctx.beginPath();ctx.moveTo(tx+3,ty+12+i*3);ctx.lineTo(tx+tw-3,ty+12+i*3);ctx.stroke();}
+      ctx.fillStyle=isDown?'#333':'#4dabf7';ctx.shadowColor='#4dabf7';ctx.shadowBlur=isDown?0:6;ctx.beginPath();ctx.arc(tx+tw/2,ty+th-5,2,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+      // Mouse ao lado do teclado.
+      ctx.fillStyle=isDown?'#111':'#263640';ctx.strokeStyle='#435663';rr2(d.x+12,d.y+mh/2+9,7,8,3.5);ctx.fill();ctx.stroke();
+      ctx.strokeStyle='#71838f';ctx.beginPath();ctx.moveTo(d.x+15.5,d.y+mh/2+10);ctx.lineTo(d.x+15.5,d.y+mh/2+13);ctx.stroke();
+    }
 
   } else if(d.type==='phone'){
     const pw=30,ph=50,left=d.x-pw/2,top=d.y-ph/2;
@@ -1802,12 +1825,38 @@ function drawPkt(p){
   const px=a.x+(b.x-a.x)*p.prog,py=a.y+(b.y-a.y)*p.prog;
   ctx.save();
   ctx.shadowColor=p.color;ctx.shadowBlur=15;
-  ctx.beginPath();ctx.arc(px,py,9,0,Math.PI*2);
+  const radius=p.type==='TRACE'?11:9;
+  ctx.beginPath();ctx.arc(px,py,radius,0,Math.PI*2);
   ctx.fillStyle='#0d1117';ctx.fill();
-  ctx.strokeStyle=p.color;ctx.lineWidth=2.5;ctx.stroke();
-  ctx.font='bold 8px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.strokeStyle=p.color;ctx.lineWidth=p.type==='TRACE'?3:2.5;ctx.stroke();
+  ctx.font=`bold ${p.type==='TRACE'?9:8}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.fillStyle=p.color;
-  ctx.fillText(p.type?p.type[0]:'P',px,py);
+  ctx.fillText(p.type==='TRACE'?(p.traceHop||'T'):(p.type?p.type[0]:'P'),px,py);
+  ctx.restore();
+}
+
+function drawTracerouteOverlay(){
+  if(!tracerouteRun)return;
+  const run=tracerouteRun,current=devices.find(d=>d.id===run.currentHopId);
+  const pulse=5+Math.sin(Date.now()/130)*3;
+  [...run.results.map(r=>r.id),run.currentHopId].filter(Boolean).forEach(id=>{
+    const d=devices.find(x=>x.id===id);if(!d)return;
+    const reached=run.results.some(r=>r.id===id);
+    ctx.save();ctx.strokeStyle=reached?'#3fb950':'#ffd166';ctx.lineWidth=3;ctx.shadowColor=ctx.strokeStyle;ctx.shadowBlur=12;
+    ctx.beginPath();ctx.arc(d.x,d.y,31+(reached?0:pulse),0,Math.PI*2);ctx.stroke();ctx.restore();
+  });
+  const w=Math.min(286,canvas.width-28),lineH=15;
+  const rows=Math.min(run.results.length,5),h=58+rows*lineH;
+  const x=canvas.width-w-14,y=14;
+  ctx.save();ctx.shadowColor='#000';ctx.shadowBlur=15;ctx.fillStyle=themeColor('rgba(10,18,28,.94)','rgba(255,255,255,.96)');
+  if(ctx.roundRect)ctx.roundRect(x,y,w,h,9);else ctx.rect(x,y,w,h);ctx.fill();ctx.shadowBlur=0;
+  ctx.strokeStyle=run.status==='complete'?'#3fb950':'#ffd166';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='bold 11px "Segoe UI",sans-serif';ctx.fillStyle=run.status==='complete'?'#3fb950':'#ffd166';
+  ctx.fillText(run.status==='complete'?'✓ TRACEROUTE CONCLUÍDO':'◉ TRACEROUTE EM ANDAMENTO',x+12,y+15);
+  ctx.font='9px monospace';ctx.fillStyle=themeColor('#c9d1d9','#26394b');
+  ctx.fillText(`${run.srcName}  →  ${run.dstName}`,x+12,y+32);
+  if(run.status!=='complete')ctx.fillText(`Sonda ${run.current+1}/${run.hops.length}: ${current?.name||'preparando...'}`,x+12,y+46);
+  run.results.slice(-5).forEach((r,i)=>{ctx.fillStyle='#3fb950';ctx.fillText(`${r.hop}. ${r.name} (${r.ip}) — ${r.lat} ms`,x+12,y+53+i*lineH);});
   ctx.restore();
 }
 
@@ -1816,13 +1865,14 @@ function drawPkt(p){
 // =========================================================
 function animate(){
   packets=packets.filter(p=>{
-    p.prog+=0.022;
+    p.prog+=p.speed||0.022;
     if(p.prog>=1){
       p.prog=0;p.step++;
       if(p.step>=p.path.length-1){
         sRx++;updateStats();
         const dst=devices.find(d=>d.id===p.path[p.path.length-1]);
         sysLog(`📥 RX [${p.type}] ${p.from}→${p.to} recebido em ${dst?.name}`,'lrx');
+        if(typeof p.onComplete==='function')setTimeout(p.onComplete,0);
         return false;
       }
       const cur=devices.find(d=>d.id===p.path[p.step]);
@@ -2329,24 +2379,68 @@ function calcLat(t1,t2){if(t1==='cloud'||t2==='cloud')return 20;if(t1==='phone'|
 
 function showTracerouteModal(){
   showModal(`<h3>🔍 Traceroute</h3>
+    <div class="edu-note">O teste enviará uma sonda animada para cada salto. Roteadores, firewall, nuvem e o destino serão destacados na topologia enquanto o resultado aparece no Terminal CLI.</div>
     <label>De</label><select id="tr-from">${devOpts()}</select>
     <label>Para</label><select id="tr-to">${devOpts(true)}</select>
-    <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="doTraceroute()">Rastrear</button></div>`);
+    <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="doTraceroute()">▶ Animar rastreamento</button></div>`);
 }
 function doTraceroute(){
   const fid=+document.getElementById('tr-from').value,tid=+document.getElementById('tr-to').value;
   closeModal();
   const src=devices.find(d=>d.id===fid),dst=devices.find(d=>d.id===tid);
+  if(!src||!dst){rackNotice('Traceroute não iniciado','Adicione e selecione dois equipamentos válidos.');return;}
+  if(src.id===dst.id){rackNotice('Origem e destino iguais','Escolha equipamentos diferentes para visualizar os saltos.');return;}
   document.getElementById('cli-dev').value=fid;updatePrompt();
   cliPrint(`${src?.name}# traceroute ${dst?.ip}`,'c-cmd');
-  const path=findPath(fid,tid);
-  if(!path){cliPrint('Sem rota para o destino.','c-err');return;}
-  cliPrint(`traceroute to ${dst?.ip}, ${path.length} hops:`,'c-info');
-  path.forEach((id,i)=>{
+  runAnimatedTraceroute(src,dst);
+}
+function getTracerouteHops(path,destinationId){
+  return path.filter((id,index)=>{
+    if(index===0)return false;
     const d=devices.find(x=>x.id===id);
-    const lat=(i+1)*calcLat(src?.type,dst?.type);
-    cliPrint(` ${i+1}  ${d?.name||'?'}  (${d?.ip||'?'})  ${lat} ms`,'c-data');
+    return id===destinationId||['router','firewall','cloud'].includes(d?.type);
   });
+}
+function tracerouteLatency(path,endId){
+  const endIndex=path.indexOf(endId);let total=0;
+  for(let i=0;i<endIndex;i++){
+    const a=path[i],b=path[i+1],link=connections.find(c=>(c.from===a&&c.to===b)||(c.from===b&&c.to===a));
+    total+=Number(link?.lat)||1;
+  }
+  return Math.max(.1,Math.round(total*10)/10);
+}
+function runAnimatedTraceroute(src,dst){
+  const path=findPath(src.id,dst.id);
+  if(!path||path.length<2){tracerouteRun=null;cliPrint('Sem rota para o destino.','c-err');rackNotice('Destino inalcançável',`Não existe um caminho ativo entre ${src.name} e ${dst.name}.`);return false;}
+  const hops=getTracerouteHops(path,dst.id);
+  if(!hops.length){tracerouteRun=null;cliPrint('Nenhum salto válido encontrado.','c-err');return false;}
+  const token=++tracerouteSeq;
+  tracerouteRun={token,status:'running',srcId:src.id,dstId:dst.id,srcName:src.name,dstName:dst.name,path,hops,current:0,currentHopId:null,results:[]};
+  cliPrint(`traceroute to ${dst.ip}, ${hops.length} salto(s) detectado(s):`,'c-info');
+  rackNotice('Traceroute iniciado',`Acompanhe as sondas numeradas de ${src.name} até ${dst.name}.`,'ok');
+  const nextHop=()=>{
+    const run=tracerouteRun;if(!run||run.token!==token)return;
+    if(run.current>=run.hops.length){
+      run.status='complete';run.currentHopId=null;
+      cliPrint(`Rastreamento concluído: ${run.results.length} salto(s), destino alcançado.`,'c-ok');
+      rackNotice('Traceroute concluído',`${dst.name} foi alcançado em ${run.results.length} salto(s).`,'ok');
+      sysLog(`🔍 TRACEROUTE concluído: ${src.name} → ${dst.name} | ${run.results.length} salto(s)`,'lsys');
+      setTimeout(()=>{if(tracerouteRun?.token===token){tracerouteRun=null;draw();}},4000);return;
+    }
+    const hopId=run.hops[run.current],hop=devices.find(d=>d.id===hopId),endIndex=run.path.indexOf(hopId);
+    const probePath=run.path.slice(0,endIndex+1),hopNumber=run.current+1;
+    run.currentHopId=hopId;
+    packets.push({path:probePath,step:0,prog:0,speed:.04,type:'TRACE',payload:`TTL=${hopNumber}`,from:src.name,to:hop?.name,color:'#ffd166',traceHop:hopNumber,onComplete:()=>{
+      const active=tracerouteRun;if(!active||active.token!==token)return;
+      const lat=tracerouteLatency(run.path,hopId);
+      active.results.push({hop:hopNumber,id:hopId,name:hop?.name||'?',ip:hop?.ip||'?',lat});
+      cliPrint(` ${hopNumber}  ${hop?.name||'?'}  (${hop?.ip||'?'})  ${lat} ms`,'c-data');
+      sysLog(`🔍 TRACE salto ${hopNumber}/${run.hops.length}: ${hop?.name||'?'} (${hop?.ip||'?'})`,'lsys');
+      active.current++;active.currentHopId=null;setTimeout(nextHop,380);
+    }});
+    sTx++;updateStats();sysLog(`🔍 TRACE sonda ${hopNumber}: ${src.name} → ${hop?.name||'?'}`,'ltx');
+  };
+  setTimeout(nextHop,250);return true;
 }
 
 function showARPModal(){
@@ -2476,9 +2570,9 @@ function processCLI(cmd,dev){
   if(p[0]==='traceroute'||p[0]==='tracert'){
     const dst=devices.find(d=>d.ip===p[1]);if(!dst){cliPrint('Host não encontrado.','c-err');return;}
     const src=dev||devices[0];
-    const path=findPath(src.id,dst.id);if(!path){cliPrint('Sem rota.','c-err');return;}
-    cliPrint(`traceroute to ${p[1]}, ${path.length} hops max`,'c-info');
-    path.forEach((id,i)=>{const d=devices.find(x=>x.id===id);cliPrint(` ${i+1}  ${d?.name||'?'}  (${d?.ip||'?'})  ${(i+1)*calcLat(src?.type,dst.type)} ms`,'c-data');});
+    if(!src){cliPrint('Selecione um dispositivo de origem.','c-err');return;}
+    if(src.id===dst.id){cliPrint('A origem e o destino devem ser diferentes.','c-err');return;}
+    runAnimatedTraceroute(src,dst);
     return;
   }
   if(p[0]==='ip'&&p[1]==='address'){
@@ -2522,6 +2616,7 @@ function updateProp(dev){
   document.getElementById('prop-box').innerHTML=`
     <h4 style="color:#58a6ff;font-size:12px;margin-bottom:8px;">${ICONS[dev.type]} ${dev.name}</h4>
     <div class="prop-row"><span class="pl">Tipo</span><span class="pv">${LABELS[dev.type]}</span></div>
+    ${dev.type==='pc'?`<div class="prop-row"><span class="pl">Modelo</span><span class="pv" style="color:#4dabf7">${pcFormatLabel(dev)}</span></div>`:''}
     ${dev.type==='server'?`<div class="prop-row"><span class="pl">Formato</span><span class="pv" style="color:#bc8cff">${serverFormatLabel(dev)}</span></div>`:''}
     ${dev.type==='switch'?`<div class="prop-row"><span class="pl">Formato</span><span class="pv" style="color:#56d364">${switchFormatLabel(dev)}</span></div>`:''}
     ${(dev.type==='switch'||dev.type==='patchPanel')?`<div class="prop-row"><span class="pl">Portas Ethernet</span><span class="pv">${dev.portCount||dev.interfaces?.length||24}</span></div>`:''}
@@ -3678,6 +3773,7 @@ function build3DScene(){
       routerType:d.routerType||null,
       serverType:d.type==='server'?serverTypeOf(d):null,
       switchForm:d.type==='switch'?switchFormOf(d):null,
+      pcStyle:d.type==='pc'?pcStyleOf(d):null,
       portCount:d.portCount||null,
       px:0,py:0,pz:0 // projected
     };
@@ -3782,7 +3878,7 @@ function project3D(x,y,z){
   return {sx:cx+rx*scale, sy:cy-ry*scale, scale, z:rz2};
 }
 
-function drawShape3D(ctx, shape, x, y, r, color, alpha) {
+function drawShape3D(ctx, shape, x, y, r, color, alpha, node) {
   ctx.save();
   ctx.globalAlpha = alpha || 1;
   const s = r * 2.6;
@@ -3873,6 +3969,22 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha) {
     bg2.addColorStop(0,'#1a2530');bg2.addColorStop(.5,'#2a3845');bg2.addColorStop(1,'#1a2530');
     ctx.fillStyle=bg2;rr(x-mw*.28,y+mh/2+s*.19,mw*.56,s*.06,3);ctx.fill();ctx.strokeStyle='#30404f';ctx.stroke();
     led(x+mw/2-7,y+mh/2-8,2.5,'#3fb950',10);
+    // Teclado com perspectiva.
+    const kw=mw*.74,kh=s*.12,kx=x-kw/2,ky=y+mh/2+s*.29;
+    const kg=ctx.createLinearGradient(kx,ky,kx,ky+kh);kg.addColorStop(0,'#344550');kg.addColorStop(1,'#111a20');
+    iso3D(kx,ky,kw,kh,3,'#465b68','#142029',kg);
+    ctx.strokeStyle='rgba(190,215,230,.25)';ctx.lineWidth=.5;
+    for(let i=1;i<6;i++){ctx.beginPath();ctx.moveTo(kx+i*kw/6,ky+2);ctx.lineTo(kx+i*kw/6,ky+kh-1);ctx.stroke();}
+    if(node?.pcStyle==='complete'){
+      // Gabinete torre tridimensional e mouse para o modelo completo.
+      const tw=s*.31,th=s*.88,tx=x+mw/2+s*.12,ty=y-mh/2+s*.02;
+      const tg=ctx.createLinearGradient(tx,ty,tx+tw,ty+th);tg.addColorStop(0,'#354955');tg.addColorStop(.35,'#18252d');tg.addColorStop(1,'#070c10');
+      iso3D(tx,ty,tw,th,5,'#4c626f','#101b22',tg);
+      ctx.fillStyle='#05090c';rr(tx+3,ty+5,tw-6,s*.12,2);ctx.fill();
+      ctx.strokeStyle='rgba(120,180,210,.28)';ctx.lineWidth=.7;for(let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(tx+4,ty+s*.3+i*s*.07);ctx.lineTo(tx+tw-4,ty+s*.3+i*s*.07);ctx.stroke();}
+      led(tx+tw/2,ty+th-s*.13,s*.045,'#4dabf7',9);
+      const mouseX=x+kw*.48,mouseY=ky+s*.02;ctx.fillStyle='#263640';rr(mouseX,mouseY,s*.13,s*.2,s*.06);ctx.fill();ctx.strokeStyle='#526673';ctx.stroke();
+    }
 
   } else if (shape === 'phone') {
     const pw=s*.76,ph=s*1.28,left=x-pw/2,top=y-ph/2;
@@ -4249,7 +4361,7 @@ function render3DLoop(){
     const shape=n.type==='server'?(n.serverType==='tower'?'serverTower':'serverRack'):(DEV_SHAPES[n.type]||'sphere');
     // Glow
     ctx.save();ctx.shadowBlur=20*n.pscale;ctx.shadowColor=n.color;
-    drawShape3D(ctx,shape,n.px,n.py,r,n.color,0.92);
+    drawShape3D(ctx,shape,n.px,n.py,r,n.color,0.92,n);
     ctx.restore();
     // Inner highlight
     ctx.save();ctx.fillStyle='rgba(255,255,255,0.18)';ctx.beginPath();ctx.arc(n.px-r*.2,n.py-r*.25,r*.35,0,Math.PI*2);ctx.fill();ctx.restore();
