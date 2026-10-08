@@ -1550,21 +1550,39 @@ function drawDev(d){
     if(!isDown){ctx.fillStyle='#4dabf7';ctx.beginPath();ctx.arc(d.x,d.y-mh/2+2.5,.7,0,Math.PI*2);ctx.fill();}
 
   } else if(d.type==='phone'){
-    const pw=25,ph=43;
-    const pg=ctx.createLinearGradient(d.x-pw/2,d.y-ph/2,d.x+pw/2,d.y+ph/2);
-    pg.addColorStop(0,isDown?'#202020':'#213847');pg.addColorStop(1,isDown?'#090909':'#07151d');
-    rr2(d.x-pw/2,d.y-ph/2,pw,ph,6);ctx.fillStyle=pg;ctx.fill();
-    ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':col);ctx.lineWidth=isSel||isConn?2.5:1.5;ctx.stroke();
-    rr2(d.x-pw/2+3,d.y-ph/2+5,pw-6,ph-11,3);ctx.fillStyle=isDown?'#070707':'#08283a';ctx.fill();
+    const pw=30,ph=50,left=d.x-pw/2,top=d.y-ph/2;
+    // Moldura metálica, botões laterais e profundidade do aparelho.
+    ctx.shadowBlur=isDown?4:12;ctx.shadowColor=isDown?'#00000088':'#70e1ff55';
+    const pg=ctx.createLinearGradient(left,top,left+pw,top+ph);
+    pg.addColorStop(0,isDown?'#242424':'#596975');pg.addColorStop(.22,isDown?'#151515':'#1c2a34');pg.addColorStop(1,isDown?'#050505':'#05090d');
+    rr2(left,top,pw,ph,7);ctx.fillStyle=pg;ctx.fill();ctx.shadowBlur=0;
+    ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':col);ctx.lineWidth=isSel||isConn?2.5:1.4;ctx.stroke();
+    ctx.strokeStyle='#74838d';ctx.lineWidth=1.1;
+    ctx.beginPath();ctx.moveTo(left-1,top+13);ctx.lineTo(left-1,top+21);ctx.moveTo(left+pw+1,top+15);ctx.lineTo(left+pw+1,top+25);ctx.stroke();
+    // Tela de ponta a ponta.
+    const sx=left+2.5,sy=top+2.5,sw=pw-5,sh=ph-5;
+    rr2(sx,sy,sw,sh,5);ctx.fillStyle=isDown?'#050607':'#071827';ctx.fill();
     if(!isDown){
-      const screen=ctx.createLinearGradient(d.x-pw/2+3,d.y-ph/2+5,d.x+pw/2-3,d.y+ph/2-6);
-      screen.addColorStop(0,'rgba(112,225,255,.35)');screen.addColorStop(1,'rgba(10,65,85,.2)');ctx.fillStyle=screen;ctx.fill();
-      ctx.strokeStyle='#70e1ff';ctx.lineWidth=1.2;
-      [4,7,10].forEach((rad,i)=>{ctx.beginPath();ctx.arc(d.x,d.y-3,rad,Math.PI+0.55,-0.55);ctx.strokeStyle=`rgba(112,225,255,${.8-i*.2})`;ctx.stroke();});
-      ctx.fillStyle='#70e1ff';ctx.beginPath();ctx.arc(d.x,d.y+2,2,0,Math.PI*2);ctx.fill();
+      const screen=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);
+      screen.addColorStop(0,'#123f68');screen.addColorStop(.5,'#10647a');screen.addColorStop(1,'#43206b');ctx.fillStyle=screen;ctx.fill();
+      // Papel de parede com luz e reflexo de vidro.
+      const glow=ctx.createRadialGradient(d.x+7,d.y+8,1,d.x+7,d.y+8,25);
+      glow.addColorStop(0,'rgba(112,225,255,.6)');glow.addColorStop(1,'rgba(112,225,255,0)');ctx.fillStyle=glow;ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.moveTo(sx+2,sy+2);ctx.lineTo(sx+11,sy+2);ctx.lineTo(sx+4,sy+sh-2);ctx.lineTo(sx+2,sy+sh-2);ctx.closePath();ctx.fill();
+      // Barra superior, câmera frontal e indicador Wi-Fi.
+      ctx.fillStyle='rgba(0,0,0,.82)';rr2(d.x-5.5,sy+1.3,11,3.5,2);ctx.fill();
+      ctx.fillStyle='#234e68';ctx.beginPath();ctx.arc(d.x+2.7,sy+3,1,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#fff';ctx.font='bold 3.2px Arial';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText('10:24',sx+2,sy+3.5);
+      ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=.55;
+      [1.4,2.4,3.4].forEach((rad,i)=>{ctx.beginPath();ctx.arc(sx+sw-4,sy+4.5,rad,Math.PI+0.65,-0.65);ctx.stroke();});
+      // Ícones de aplicativos e dock inferior.
+      const apps=['#4dabf7','#56d364','#ff7b72','#d2a8ff','#f2cc60','#79c0ff'];
+      apps.forEach((ac,i)=>{const ax=sx+4+(i%3)*7.8,ay=sy+14+Math.floor(i/3)*8;ctx.fillStyle=ac;rr2(ax,ay,4.8,4.8,1.35);ctx.fill();ctx.fillStyle='rgba(255,255,255,.42)';ctx.beginPath();ctx.arc(ax+2.4,ay+2.3,.85,0,Math.PI*2);ctx.fill();});
+      ctx.fillStyle='rgba(6,14,24,.58)';rr2(sx+3,sy+sh-8,sw-6,6,2.2);ctx.fill();
+      ['#70e1ff','#56d364','#ff8c00'].forEach((dc,i)=>{ctx.fillStyle=dc;rr2(sx+5+i*6.7,sy+sh-6.8,3.8,3.8,1.1);ctx.fill();});
     }
-    ctx.fillStyle='#52616d';ctx.beginPath();ctx.arc(d.x,d.y+ph/2-3,1.7,0,Math.PI*2);ctx.fill();
-    ctx.fillRect(d.x-3,d.y-ph/2+2,6,1.2);
+    // Alto-falante e barra de navegação.
+    ctx.fillStyle=isDown?'#1b1b1b':'rgba(255,255,255,.82)';rr2(d.x-4,d.y+ph/2-4.2,8,1.1,.55);ctx.fill();
 
   } else if(d.type==='router'){
     const rw=46,rh=22;
@@ -3857,18 +3875,35 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha) {
     led(x+mw/2-7,y+mh/2-8,2.5,'#3fb950',10);
 
   } else if (shape === 'phone') {
-    const pw=s*.66,ph=s*1.18;
-    ctx.shadowBlur=22;ctx.shadowColor='#70e1ff66';
-    const pf=ctx.createLinearGradient(x-pw/2,y-ph/2,x+pw/2,y+ph/2);
-    pf.addColorStop(0,'#263b48');pf.addColorStop(1,'#08151d');
-    iso3D(x-pw/2,y-ph/2,pw,ph,7,'#345466','#0c202a',pf);
-    ctx.strokeStyle='#70e1ff';ctx.lineWidth=1.4;rr(x-pw/2,y-ph/2,pw,ph,6);ctx.stroke();ctx.shadowBlur=0;
-    const scr=ctx.createLinearGradient(x-pw/2+4,y-ph/2+7,x+pw/2-4,y+ph/2-8);
-    scr.addColorStop(0,'#0e526b');scr.addColorStop(1,'#04151e');ctx.fillStyle=scr;rr(x-pw/2+4,y-ph/2+7,pw-8,ph-15,3);ctx.fill();
-    ctx.strokeStyle='#70e1ff';ctx.lineWidth=1.2;
-    [s*.14,s*.23,s*.32].forEach((rad,i)=>{ctx.globalAlpha=.9-i*.22;ctx.beginPath();ctx.arc(x,y,rad,Math.PI+.55,-.55);ctx.stroke();});ctx.globalAlpha=1;
-    led(x,y+s*.13,2.5,'#70e1ff',10);
-    ctx.fillStyle='#61727c';ctx.fillRect(x-4,y-ph/2+3,8,1.5);ctx.beginPath();ctx.arc(x,y+ph/2-4,2,0,Math.PI*2);ctx.fill();
+    const pw=s*.76,ph=s*1.28,left=x-pw/2,top=y-ph/2;
+    ctx.shadowBlur=24;ctx.shadowColor='#70e1ff66';
+    const pf=ctx.createLinearGradient(left,top,left+pw,top+ph);
+    pf.addColorStop(0,'#70818c');pf.addColorStop(.2,'#23333d');pf.addColorStop(1,'#05090d');
+    iso3D(left,top,pw,ph,7,'#536b78','#101b21',pf);
+    ctx.strokeStyle='#70e1ffcc';ctx.lineWidth=1.5;rr(left,top,pw,ph,7);ctx.stroke();ctx.shadowBlur=0;
+    // Botões físicos na lateral do aparelho.
+    ctx.strokeStyle='#8a9aa4';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(left-1,top+s*.28);ctx.lineTo(left-1,top+s*.48);ctx.moveTo(left+pw+1,top+s*.34);ctx.lineTo(left+pw+1,top+s*.58);ctx.stroke();
+    // Tela, papel de parede e brilho no vidro.
+    const sx=left+4,sy=top+4,sw=pw-8,sh=ph-8;
+    const scr=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);
+    scr.addColorStop(0,'#164b79');scr.addColorStop(.5,'#12687a');scr.addColorStop(1,'#4a236f');ctx.fillStyle=scr;rr(sx,sy,sw,sh,4);ctx.fill();
+    const halo=ctx.createRadialGradient(x+s*.12,y+s*.2,1,x+s*.12,y+s*.2,s*.62);
+    halo.addColorStop(0,'rgba(112,225,255,.62)');halo.addColorStop(1,'rgba(112,225,255,0)');ctx.fillStyle=halo;ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.09)';ctx.beginPath();ctx.moveTo(sx+2,sy+2);ctx.lineTo(sx+sw*.42,sy+2);ctx.lineTo(sx+sw*.15,sy+sh-2);ctx.lineTo(sx+2,sy+sh-2);ctx.closePath();ctx.fill();
+    // Ilha dinâmica, câmera e informações de status.
+    ctx.fillStyle='#020406';rr(x-s*.14,sy+2,s*.28,s*.09,s*.05);ctx.fill();
+    ctx.fillStyle='#245879';ctx.beginPath();ctx.arc(x+s*.07,sy+s*.065,s*.018,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.font=`bold ${Math.max(4,s*.075)}px Arial`;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText('10:24',sx+3,sy+s*.09);
+    ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=.7;
+    [s*.03,s*.05,s*.07].forEach(rad=>{ctx.beginPath();ctx.arc(sx+sw-6,sy+s*.11,rad,Math.PI+.65,-.65);ctx.stroke();});
+    // Grade de aplicativos com pequenos glifos.
+    const apps=['#4dabf7','#56d364','#ff7b72','#d2a8ff','#f2cc60','#79c0ff'];
+    const aw=s*.105,gap=s*.09,startX=x-s*.21,startY=y-s*.18;
+    apps.forEach((ac,i)=>{const ax=startX+(i%3)*(aw+gap),ay=startY+Math.floor(i/3)*(aw+s*.11);ctx.fillStyle=ac;rr(ax,ay,aw,aw,aw*.26);ctx.fill();ctx.fillStyle='rgba(255,255,255,.5)';ctx.beginPath();ctx.arc(ax+aw/2,ay+aw/2,aw*.17,0,Math.PI*2);ctx.fill();});
+    // Dock translúcido e barra de navegação.
+    ctx.fillStyle='rgba(4,12,20,.58)';rr(sx+4,sy+sh-s*.22,sw-8,s*.15,s*.055);ctx.fill();
+    ['#70e1ff','#56d364','#ff8c00'].forEach((dc,i)=>{ctx.fillStyle=dc;rr(x-s*.21+i*s*.17,sy+sh-s*.19,s*.095,s*.095,s*.025);ctx.fill();});
+    ctx.fillStyle='rgba(255,255,255,.86)';rr(x-s*.12,sy+sh-3,s*.24,1.6,.8);ctx.fill();
 
   } else if (shape === 'router') {
     const rw=s*1.38,rh=s*0.4;
