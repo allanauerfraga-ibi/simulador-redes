@@ -321,7 +321,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
       <div class="menu-panel wide">
         <div class="menu-title">Equipamentos e infraestrutura</div>
         <div class="menu-grid">
-          <button class="menu-action" id="btn-pc" onclick="preparePCPlacement('standard')" title="Computador pessoal com monitor e teclado">💻 PC realista</button>
+          <button class="menu-action" id="btn-pc" onclick="preparePCPlacement('notebook')" title="Notebook realista com tela, teclado e touchpad">💻 Notebook</button>
           <button class="menu-action" id="btn-pc-complete" onclick="preparePCPlacement('complete')" title="Computador completo com monitor, gabinete, teclado e mouse">🖥️ Computador completo</button>
           <button class="menu-action" id="btn-phone" onclick="setMode('add','phone')" title="Celular conectado por Wi-Fi">📱 Celular</button>
           <div style="position:relative;display:flex;">
@@ -497,7 +497,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
     <div class="panel-sec">
       <div class="panel-title">Legenda rápida</div>
       <div style="font-size:10px;display:flex;flex-direction:column;gap:3px;">
-        <div>💻 <b>PC</b> — Computador cliente</div>
+        <div>💻 <b>Notebook / PC</b> — Computador cliente</div>
         <div>📱 <b>Celular</b> — Cliente Wi-Fi</div>
         <div>🔀 <b>Router</b> — Roteia entre redes</div>
         <div>🔌 <b>Switch</b> — Liga dispositivos LAN</div>
@@ -598,7 +598,7 @@ let pendingSwitchPorts=24;
 let pendingSwitchForm='rack';
 let pendingPatchPorts=24;
 let pendingServerType='rack';
-let pendingPCStyle='standard';
+let pendingPCStyle='notebook';
 let dragging=null,draggingRack=null,dragOffX=0,dragOffY=0;
 let nextId=1,sTx=0,sRx=0,sDrop=0;
 let nextRackId=1,pendingRackSize=24;
@@ -687,7 +687,7 @@ document.addEventListener('click',event=>{
 document.addEventListener('keydown',event=>{if(event.key==='Escape')closeMainMenus();});
 
 const EXPLAIN={
-  pc:'💻 PC (Personal Computer): Dispositivo cliente. Envia e recebe dados. Tem IP único na rede. Conecta-se a um Switch ou diretamente a outro PC.',
+  pc:'💻 Notebook / PC: computador cliente que envia e recebe dados. Possui endereço IP único e conecta-se a switches, roteadores ou redes Wi-Fi quando equipado com placa sem fio.',
   phone:'📱 Celular: dispositivo móvel que acessa a rede por Wi-Fi. Deve ser associado a um roteador sem fio ou nó Mesh antes de realizar testes de conectividade.',
   router:'🔀 Router (Roteador): Conecta redes diferentes. Decide o melhor caminho para os pacotes usando tabelas de roteamento. Opera na Camada 3 (IP).',
   switch:'🔌 Switch (Comutador): Liga múltiplos dispositivos na mesma rede local (LAN). Aprende endereços MAC e entrega quadros apenas à porta correta. Camada 2.',
@@ -822,12 +822,13 @@ function prepareServerPlacement(){
   rackNotice('Formato selecionado',`Clique no espaço de trabalho para adicionar o ${label}.`,'ok');
 }
 function preparePCPlacement(style){
-  pendingPCStyle=style==='complete'?'complete':'standard';
+  pendingPCStyle=style==='complete'?'complete':'notebook';
   setMode('add','pc');
-  rackNotice(pendingPCStyle==='complete'?'Computador completo selecionado':'PC realista selecionado',pendingPCStyle==='complete'?'Clique no espaço de trabalho para adicionar monitor, gabinete, teclado e mouse.':'Clique no espaço de trabalho para adicionar o computador.','ok');
+  document.getElementById('s-mode').textContent=pendingPCStyle==='complete'?'Adicionar: Computador completo':'Adicionar: Notebook';
+  rackNotice(pendingPCStyle==='complete'?'Computador completo selecionado':'Notebook selecionado',pendingPCStyle==='complete'?'Clique no espaço de trabalho para adicionar monitor, gabinete, teclado e mouse.':'Clique no espaço de trabalho para adicionar o notebook realista.','ok');
 }
-function pcStyleOf(dev){return dev?.pcStyle==='complete'?'complete':'standard';}
-function pcFormatLabel(dev){return pcStyleOf(dev)==='complete'?'Computador completo':'PC com monitor e teclado';}
+function pcStyleOf(dev){return dev?.pcStyle==='complete'?'complete':'notebook';}
+function pcFormatLabel(dev){return pcStyleOf(dev)==='complete'?'Computador completo':'Notebook';}
 function serverTypeOf(dev){return dev?.serverType==='tower'?'tower':'rack';}
 function serverFormatLabel(dev){return serverTypeOf(dev)==='tower'?'Servidor torre':'Servidor rack 2U';}
 function switchFormOf(dev){return dev?.switchForm==='desktop'?'desktop':'rack';}
@@ -835,7 +836,7 @@ function switchFormatLabel(dev){return switchFormOf(dev)==='rack'?'Switch rack 1
 function addDevice(x,y,type){
   saveHistory();
   const n=devices.filter(d=>d.type===type).length+1;
-  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:type==='switch'?`Switch ${pendingSwitchForm==='rack'?'Rack':'Mesa'} ${n}`:type==='patchPanel'?`Patch Panel ${n}`:type==='pc'&&pendingPCStyle==='complete'?`Computador Completo ${n}`:LABELS[type]+n;
+  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:type==='switch'?`Switch ${pendingSwitchForm==='rack'?'Rack':'Mesa'} ${n}`:type==='patchPanel'?`Patch Panel ${n}`:type==='pc'?(pendingPCStyle==='complete'?`Computador Completo ${n}`:`Notebook ${n}`):LABELS[type]+n;
   const ip=type==='patchPanel'?'Sem IP':genIP(type,n);
   const mac=type==='patchPanel'?'—':genMAC();
   const firstKind=type==='phone'?'wireless':'wired';
@@ -846,7 +847,7 @@ function addDevice(x,y,type){
   if(type==='switch'){d.portCount=pendingSwitchPorts;d.switchForm=pendingSwitchForm==='desktop'?'desktop':'rack';}
   if(type==='patchPanel')d.portCount=pendingPatchPorts;
   if(type==='server')d.serverType=pendingServerType==='tower'?'tower':'rack';
-  if(type==='pc')d.pcStyle=pendingPCStyle==='complete'?'complete':'standard';
+  if(type==='pc')d.pcStyle=pendingPCStyle==='complete'?'complete':'notebook';
   const ifc={router:4,switch:d.portCount||24,patchPanel:d.portCount||24,server:2,firewall:4,cloud:2};
   for(let i=1;i<(ifc[type]||1);i++) d.interfaces.push({name:type==='patchPanel'?'porta'+(i+1):'eth'+i,ip:'',mask:'255.255.255.0',status:'up',kind:'wired',speed:BW[type]||1000,mac:type==='patchPanel'?'—':genMAC()});
   devices.push(d);
@@ -1532,49 +1533,52 @@ function drawDev(d){
   const R=24; // device body radius
 
   if(d.type==='pc'){
-    const complete=pcStyleOf(d)==='complete',cx=d.x+(complete?-5:0),mw=complete?39:46,mh=31;
-    // Monitor com moldura, profundidade e tela semelhante a um computador real.
-    ctx.shadowBlur=isDown?3:12;ctx.shadowColor=isDown?'#000':'#4dabf766';
-    const mg=ctx.createLinearGradient(cx-mw/2,d.y-mh/2,cx+mw/2,d.y+mh/2);
-    mg.addColorStop(0,isDown?'#1a1a1a':'#415363');mg.addColorStop(.18,isDown?'#111':'#22313d');mg.addColorStop(1,isDown?'#070707':'#09131b');
-    rr2(cx-mw/2,d.y-mh/2,mw,mh,4);ctx.fillStyle=mg;ctx.fill();ctx.shadowBlur=0;
-    ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':col);ctx.lineWidth=isSel||isConn?2.5:1.5;ctx.stroke();
-    const sx=cx-mw/2+3,sy=d.y-mh/2+3,sw=mw-6,sh=mh-9;
-    const sg2=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);
-    sg2.addColorStop(0,isDown?'#111':'#164b75');sg2.addColorStop(.55,isDown?'#090909':'#0b284d');sg2.addColorStop(1,isDown?'#050505':'#351b59');
-    rr2(sx,sy,sw,sh,2);ctx.fillStyle=sg2;ctx.fill();
-    if(!isDown){
-      // Área de trabalho, janela aberta, barra de tarefas e brilho do vidro.
-      ctx.fillStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.moveTo(sx+1,sy+1);ctx.lineTo(sx+sw*.42,sy+1);ctx.lineTo(sx+sw*.18,sy+sh-1);ctx.lineTo(sx+1,sy+sh-1);ctx.closePath();ctx.fill();
-      ctx.fillStyle='rgba(5,12,22,.78)';rr2(sx+4,sy+4,sw-9,sh-9,1.5);ctx.fill();
-      ctx.fillStyle='#205887';ctx.fillRect(sx+4,sy+4,sw-9,3.5);
-      ['#ff7b72','#f2cc60','#56d364'].forEach((c,i)=>{ctx.fillStyle=c;ctx.beginPath();ctx.arc(sx+6+i*3,sy+5.8,.8,0,Math.PI*2);ctx.fill();});
-      ctx.fillStyle='rgba(88,166,255,.45)';for(let i=0;i<3;i++)ctx.fillRect(sx+6,sy+10+i*3.2,(sw-14)*(1-i*.16),1.1);
-      ctx.fillStyle='rgba(3,10,18,.82)';ctx.fillRect(sx,sy+sh-3,sw,3);
-      ['#4dabf7','#56d364','#d2a8ff'].forEach((c,i)=>{ctx.fillStyle=c;rr2(cx-5+i*4,sy+sh-2.5,2.3,2.1,.5);ctx.fill();});
-    }
-    // Webcam, botão de energia e pedestal.
-    ctx.fillStyle='#02070b';ctx.beginPath();ctx.arc(cx,d.y-mh/2+1.9,1.25,0,Math.PI*2);ctx.fill();
-    if(!isDown){ctx.fillStyle='#4dabf7';ctx.beginPath();ctx.arc(cx,d.y-mh/2+1.9,.42,0,Math.PI*2);ctx.fill();}
-    ctx.fillStyle=isDown?'#111':'#1e2d3a';ctx.strokeStyle='#31424f';ctx.lineWidth=.7;
-    ctx.fillRect(cx-2.5,d.y+mh/2,5,5);ctx.strokeRect(cx-2.5,d.y+mh/2,5,5);
-    rr2(cx-9,d.y+mh/2+5,18,3,1.5);ctx.fill();ctx.stroke();
-    ctx.fillStyle=isDown?'#222':'#3fb950';ctx.beginPath();ctx.arc(cx+mw/2-3,d.y+mh/2-2,1,0,Math.PI*2);ctx.fill();
-    // Teclado inclinado com fileiras de teclas.
-    ctx.fillStyle=isDown?'#111':'#202c35';ctx.strokeStyle='#3a4b58';rr2(cx-14,d.y+mh/2+9,28,6,2);ctx.fill();ctx.stroke();
-    ctx.strokeStyle='rgba(180,205,220,.28)';ctx.lineWidth=.45;
-    for(let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(cx-11+i*5,d.y+mh/2+10.5);ctx.lineTo(cx-11+i*5,d.y+mh/2+13.5);ctx.stroke();}
-    if(complete){
-      // Gabinete torre com baias, ventilação, botão e iluminação frontal.
-      const tx=d.x+16,ty=d.y-16,tw=14,th=33,tg=ctx.createLinearGradient(tx,ty,tx+tw,ty+th);
-      tg.addColorStop(0,isDown?'#191919':'#344754');tg.addColorStop(.3,isDown?'#101010':'#18242d');tg.addColorStop(1,isDown?'#050505':'#080d12');
-      ctx.fillStyle=tg;rr2(tx,ty,tw,th,3);ctx.fill();ctx.strokeStyle=isSel?'#f78166':'#4d6270';ctx.stroke();
-      ctx.fillStyle='#05090c';rr2(tx+2,ty+3,tw-4,5,1);ctx.fill();
-      ctx.strokeStyle='rgba(120,180,210,.32)';ctx.lineWidth=.55;for(let i=0;i<4;i++){ctx.beginPath();ctx.moveTo(tx+3,ty+12+i*3);ctx.lineTo(tx+tw-3,ty+12+i*3);ctx.stroke();}
-      ctx.fillStyle=isDown?'#333':'#4dabf7';ctx.shadowColor='#4dabf7';ctx.shadowBlur=isDown?0:6;ctx.beginPath();ctx.arc(tx+tw/2,ty+th-5,2,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
-      // Mouse ao lado do teclado.
-      ctx.fillStyle=isDown?'#111':'#263640';ctx.strokeStyle='#435663';rr2(d.x+12,d.y+mh/2+9,7,8,3.5);ctx.fill();ctx.stroke();
-      ctx.strokeStyle='#71838f';ctx.beginPath();ctx.moveTo(d.x+15.5,d.y+mh/2+10);ctx.lineTo(d.x+15.5,d.y+mh/2+13);ctx.stroke();
+    const complete=pcStyleOf(d)==='complete';
+    if(!complete){
+      // Notebook aberto: tela fina, webcam, dobradiça, teclado e touchpad.
+      const sw=48,sh=29,sx=d.x-sw/2,sy=d.y-21;
+      ctx.shadowBlur=isDown?3:14;ctx.shadowColor=isDown?'#000':'#4dabf766';
+      const frame=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);frame.addColorStop(0,isDown?'#1c1c1c':'#536572');frame.addColorStop(.18,isDown?'#111':'#1d2a33');frame.addColorStop(1,isDown?'#060606':'#060b0f');
+      ctx.fillStyle=frame;rr2(sx,sy,sw,sh,3.5);ctx.fill();ctx.shadowBlur=0;
+      ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':col);ctx.lineWidth=isSel||isConn?2.5:1.3;ctx.stroke();
+      const ix=sx+2.7,iy=sy+2.7,iw=sw-5.4,ih=sh-6;
+      const screen=ctx.createLinearGradient(ix,iy,ix+iw,iy+ih);screen.addColorStop(0,isDown?'#101010':'#17628a');screen.addColorStop(.48,isDown?'#080808':'#12365d');screen.addColorStop(1,isDown?'#030303':'#4a246d');
+      ctx.fillStyle=screen;rr2(ix,iy,iw,ih,1.7);ctx.fill();
+      if(!isDown){
+        ctx.fillStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.moveTo(ix+1,iy+1);ctx.lineTo(ix+iw*.36,iy+1);ctx.lineTo(ix+iw*.13,iy+ih-1);ctx.lineTo(ix+1,iy+ih-1);ctx.closePath();ctx.fill();
+        ctx.fillStyle='rgba(4,11,20,.75)';rr2(ix+5,iy+5,iw-11,ih-10,1.3);ctx.fill();
+        ctx.fillStyle='#256b9c';ctx.fillRect(ix+5,iy+5,iw-11,3.2);
+        ['#ff7b72','#f2cc60','#56d364'].forEach((c,i)=>{ctx.fillStyle=c;ctx.beginPath();ctx.arc(ix+7+i*3,iy+6.6,.75,0,Math.PI*2);ctx.fill();});
+        ctx.fillStyle='rgba(88,166,255,.42)';for(let i=0;i<3;i++)ctx.fillRect(ix+7,iy+11+i*2.8,(iw-16)*(1-i*.17),1);
+        ctx.fillStyle='rgba(2,8,14,.8)';ctx.fillRect(ix,iy+ih-2.6,iw,2.6);
+      }
+      ctx.fillStyle='#020609';ctx.beginPath();ctx.arc(d.x,sy+1.7,1.1,0,Math.PI*2);ctx.fill();
+      if(!isDown){ctx.fillStyle='#4dabf7';ctx.beginPath();ctx.arc(d.x,sy+1.7,.38,0,Math.PI*2);ctx.fill();}
+      // Dobradiça e base em perspectiva.
+      ctx.fillStyle=isDown?'#141414':'#25343d';rr2(d.x-15,sy+sh-1,30,3,1.4);ctx.fill();
+      const base=ctx.createLinearGradient(d.x,d.y+9,d.x,d.y+25);base.addColorStop(0,isDown?'#1a1a1a':'#526570');base.addColorStop(.35,isDown?'#111':'#2a3942');base.addColorStop(1,isDown?'#070707':'#111a20');
+      ctx.fillStyle=base;ctx.beginPath();ctx.moveTo(d.x-24,d.y+8);ctx.lineTo(d.x+24,d.y+8);ctx.lineTo(d.x+29,d.y+23);ctx.quadraticCurveTo(d.x,d.y+27,d.x-29,d.y+23);ctx.closePath();ctx.fill();
+      ctx.strokeStyle=isSel?'#f78166':'#516674';ctx.lineWidth=1;ctx.stroke();
+      // Teclado com fileiras de teclas individuais.
+      for(let row=0;row<3;row++)for(let key=0;key<8;key++){
+        const kw=4.3,kh=2.1,kx=d.x-19+key*5.3+(row===2?2.6:0),ky=d.y+11+row*3.2;
+        ctx.fillStyle=isDown?'#171717':'#101820';rr2(kx,ky,kw,kh,.45);ctx.fill();ctx.strokeStyle='rgba(170,205,225,.24)';ctx.lineWidth=.35;ctx.stroke();
+      }
+      ctx.fillStyle=isDown?'#111':'#1b2830';ctx.strokeStyle='#556873';rr2(d.x-7,d.y+20,14,4.4,1);ctx.fill();ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,.28)';rr2(d.x-11,d.y+24,22,1.1,.5);ctx.fill();
+    }else{
+      // Computador completo: monitor, gabinete, teclado e mouse.
+      const cx=d.x-5,mw=39,mh=31;
+      const mg=ctx.createLinearGradient(cx-mw/2,d.y-mh/2,cx+mw/2,d.y+mh/2);mg.addColorStop(0,isDown?'#1a1a1a':'#415363');mg.addColorStop(.18,isDown?'#111':'#22313d');mg.addColorStop(1,isDown?'#070707':'#09131b');
+      ctx.fillStyle=mg;rr2(cx-mw/2,d.y-mh/2,mw,mh,4);ctx.fill();ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':col);ctx.lineWidth=isSel||isConn?2.5:1.5;ctx.stroke();
+      const sx=cx-mw/2+3,sy=d.y-mh/2+3,sw=mw-6,sh=mh-9,sg=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);sg.addColorStop(0,isDown?'#111':'#164b75');sg.addColorStop(1,isDown?'#050505':'#351b59');ctx.fillStyle=sg;rr2(sx,sy,sw,sh,2);ctx.fill();
+      if(!isDown){ctx.fillStyle='rgba(4,11,20,.75)';rr2(sx+4,sy+4,sw-9,sh-9,1.3);ctx.fill();ctx.fillStyle='#205887';ctx.fillRect(sx+4,sy+4,sw-9,3.2);ctx.fillStyle='rgba(88,166,255,.45)';for(let i=0;i<3;i++)ctx.fillRect(sx+6,sy+10+i*3,(sw-14)*(1-i*.16),1);}
+      ctx.fillStyle='#02070b';ctx.beginPath();ctx.arc(cx,d.y-mh/2+1.9,1.1,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=isDown?'#111':'#1e2d3a';ctx.fillRect(cx-2.5,d.y+mh/2,5,5);rr2(cx-9,d.y+mh/2+5,18,3,1.5);ctx.fill();
+      ctx.fillStyle=isDown?'#111':'#202c35';ctx.strokeStyle='#3a4b58';rr2(cx-14,d.y+mh/2+9,28,6,2);ctx.fill();ctx.stroke();
+      const tx=d.x+16,ty=d.y-16,tw=14,th=33,tg=ctx.createLinearGradient(tx,ty,tx+tw,ty+th);tg.addColorStop(0,isDown?'#191919':'#344754');tg.addColorStop(1,isDown?'#050505':'#080d12');ctx.fillStyle=tg;rr2(tx,ty,tw,th,3);ctx.fill();ctx.strokeStyle=isSel?'#f78166':'#4d6270';ctx.stroke();
+      ctx.fillStyle='#05090c';rr2(tx+2,ty+3,tw-4,5,1);ctx.fill();ctx.strokeStyle='rgba(120,180,210,.32)';ctx.lineWidth=.55;for(let i=0;i<4;i++){ctx.beginPath();ctx.moveTo(tx+3,ty+12+i*3);ctx.lineTo(tx+tw-3,ty+12+i*3);ctx.stroke();}
+      ctx.fillStyle=isDown?'#333':'#4dabf7';ctx.beginPath();ctx.arc(tx+tw/2,ty+th-5,2,0,Math.PI*2);ctx.fill();ctx.fillStyle=isDown?'#111':'#263640';ctx.strokeStyle='#435663';rr2(d.x+12,d.y+mh/2+9,7,8,3.5);ctx.fill();ctx.stroke();
     }
 
   } else if(d.type==='phone'){
@@ -1789,7 +1793,7 @@ function drawDev(d){
 
   // ── TYPE BADGE ───────────────────────────────
   const badgeCol=isDown?'#30363d':col;
-  const bLabel=LABELS[d.type];
+  const bLabel=d.type==='pc'?(pcStyleOf(d)==='complete'?'PC':'Notebook'):LABELS[d.type];
   ctx.font='bold 8px "Segoe UI",sans-serif';ctx.textAlign='center';
   const bw=ctx.measureText(bLabel).width+10;
   ctx.fillStyle=badgeCol+'cc';
@@ -2786,7 +2790,7 @@ function sysLog(msg,cls='lsys'){
 // =========================================================
 const TUTORIAL_STEPS=[
   {title:'🎓 Bem-vindo ao Simulador de Rede!',desc:'Este simulador foi criado para ensinar redes de computadores de forma visual e interativa. Você aprenderá como dispositivos se comunicam, como os pacotes viajam e como a internet funciona na prática.',pos:{x:50,y:50},target:null},
-  {title:'💻 O que é um PC?',desc:'Um PC (Personal Computer) é um dispositivo cliente. Ele envia e recebe dados. Na rede, cada PC tem um endereço IP único (ex: 192.168.1.1) e um endereço MAC (físico). Clique em "💻 PC" para adicionar um.',pos:{x:50,y:50},target:'btn-pc'},
+  {title:'💻 O que é um notebook?',desc:'O notebook é um computador cliente portátil com tela, teclado e touchpad integrados. Ele envia e recebe dados e possui endereço IP e MAC. Clique em "💻 Notebook" para adicioná-lo; nas atividades, ele conta como um PC.',pos:{x:50,y:50},target:'btn-pc'},
   {title:'📱 Celular e conexão Wi-Fi',desc:'O celular é um cliente móvel. Adicione um celular e um roteador SOHO/Doméstico ou Nó Mesh. Depois clique em "Wi-Fi", selecione os dois equipamentos e execute Ping nos dois sentidos para testar a comunicação.',pos:{x:50,y:50},target:'btn-phone'},
   {title:'🔌 O que é um Switch?',desc:'O Switch (Comutador) conecta vários dispositivos na mesma rede local (LAN). Ele opera na Camada 2 do modelo OSI, usando endereços MAC para entregar os dados apenas ao destinatário correto — diferente do Hub que envia para todos.',pos:{x:50,y:50},target:'btn-switch'},
   {title:'🔀 O que é um Roteador?',desc:'O Router (Roteador) interliga redes diferentes. Quando um pacote precisa sair da sua rede local para a internet, ele passa pelo roteador. Ele usa endereços IP e tabelas de roteamento (Camada 3 do OSI).',pos:{x:50,y:50},target:'btn-router'},
@@ -4011,70 +4015,36 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha, node) {
   }
 
   if (shape === 'pc') {
-    const mw=s*1.1, mh=s*0.78;
-    ctx.shadowBlur=22;ctx.shadowColor='#4dabf766';
-    // --- Monitor frame iso
-    const fg=ctx.createLinearGradient(x-mw/2,y-mh/2,x+mw/2,y+mh/2);
-    fg.addColorStop(0,'#263645');fg.addColorStop(1,'#0d1b26');
-    iso3D(x-mw/2,y-mh/2,mw,mh,6,'#344a5a','#1a2f3f',fg);
-    // border glow
-    ctx.strokeStyle='#4dabf7';ctx.lineWidth=1.2;rr(x-mw/2,y-mh/2,mw,mh,4);ctx.stroke();
-    ctx.shadowBlur=0;
-    // Screen bezel inner shadow
-    ctx.fillStyle='#000a14';rr(x-mw/2+4,y-mh/2+4,mw-8,mh-16,3);ctx.fill();
-    // Screen gradient
-    const sg=ctx.createLinearGradient(x-mw/2+5,y-mh/2+5,x+mw/2-5,y+mh/2-17);
-    sg.addColorStop(0,'#0f3060');sg.addColorStop(0.3,'#0a2040');sg.addColorStop(1,'#040f1e');
-    ctx.fillStyle=sg;rr(x-mw/2+5,y-mh/2+5,mw-10,mh-18,2);ctx.fill();
-    // Screen shine streak
-    const shine=ctx.createLinearGradient(x-mw/2+5,y-mh/2+5,x-mw/2+5+(mw-10)*0.6,y-mh/2+5+(mh-18)*0.4);
-    shine.addColorStop(0,'rgba(180,220,255,0.10)');shine.addColorStop(1,'rgba(180,220,255,0)');
-    ctx.fillStyle=shine;rr(x-mw/2+5,y-mh/2+5,mw-10,mh-18,2);ctx.fill();
-    // Simulated UI on screen
-    // taskbar
-    ctx.fillStyle='rgba(13,40,80,0.8)';ctx.fillRect(x-mw/2+5,y+mh/2-28,mw-10,10);
-    // windows
-    const wins=[['#1f4a7a','#1a3a6a'],['#1a3a4a','#0f2a3a'],['#2a1a4a','#1a0f3a']];
-    wins.forEach(([c1,c2],i)=>{
-      const wx=x-mw/2+8+i*(mw*0.3),wy=y-mh/2+8,ww=mw*0.27,wh=(mh-26)*0.55;
-      const wg=ctx.createLinearGradient(wx,wy,wx,wy+wh);wg.addColorStop(0,c1);wg.addColorStop(1,c2);
-      ctx.fillStyle=wg;rr(wx,wy,ww,wh,2);ctx.fill();
-      ctx.fillStyle='rgba(255,255,255,0.06)';ctx.fillRect(wx+1,wy+1,ww-2,5);
-      // window dots
-      ['#f85149','#ff8c00','#3fb950'].forEach((dc,j)=>{ctx.fillStyle=dc;ctx.beginPath();ctx.arc(wx+4+j*6,wy+3.5,1.8,0,Math.PI*2);ctx.fill();});
-    });
-    // text lines
-    ctx.fillStyle='rgba(100,200,255,0.18)';
-    for(let i=0;i<3;i++)ctx.fillRect(x-mw/2+8,y+mh/2-42+i*6,(mw-16)*(0.3+i*0.2),2);
-    // chin area
-    ctx.fillStyle='#1a2a38';ctx.fillRect(x-mw/2+1,y+mh/2-14,mw-2,13);
-    ctx.fillStyle='rgba(255,255,255,0.06)';ctx.fillRect(x-mw/2+1,y+mh/2-15,mw-2,1);
-    // camera dot
-    ctx.fillStyle='#223344';ctx.beginPath();ctx.arc(x,y-mh/2+2.5,2,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#4dabf7';ctx.beginPath();ctx.arc(x,y-mh/2+2.5,.8,0,Math.PI*2);ctx.fill();
-    // neck + base
-    const ng=ctx.createLinearGradient(x-4,y+mh/2,x+4,y+mh/2+s*0.2);ng.addColorStop(0,'#2a3a4a');ng.addColorStop(1,'#1a2530');
-    ctx.fillStyle=ng;ctx.strokeStyle='#30404f';ctx.lineWidth=0.8;
-    ctx.fillRect(x-4,y+mh/2-1,8,s*0.2);ctx.strokeRect(x-4,y+mh/2-1,8,s*0.2);
-    const bg2=ctx.createLinearGradient(x-mw*.28,y+mh/2+s*.19,x+mw*.28,y+mh/2+s*.24);
-    bg2.addColorStop(0,'#1a2530');bg2.addColorStop(.5,'#2a3845');bg2.addColorStop(1,'#1a2530');
-    ctx.fillStyle=bg2;rr(x-mw*.28,y+mh/2+s*.19,mw*.56,s*.06,3);ctx.fill();ctx.strokeStyle='#30404f';ctx.stroke();
-    led(x+mw/2-7,y+mh/2-8,2.5,'#3fb950',10);
-    // Teclado com perspectiva.
-    const kw=mw*.74,kh=s*.12,kx=x-kw/2,ky=y+mh/2+s*.29;
-    const kg=ctx.createLinearGradient(kx,ky,kx,ky+kh);kg.addColorStop(0,'#344550');kg.addColorStop(1,'#111a20');
-    iso3D(kx,ky,kw,kh,3,'#465b68','#142029',kg);
-    ctx.strokeStyle='rgba(190,215,230,.25)';ctx.lineWidth=.5;
-    for(let i=1;i<6;i++){ctx.beginPath();ctx.moveTo(kx+i*kw/6,ky+2);ctx.lineTo(kx+i*kw/6,ky+kh-1);ctx.stroke();}
-    if(node?.pcStyle==='complete'){
-      // Gabinete torre tridimensional e mouse para o modelo completo.
-      const tw=s*.31,th=s*.88,tx=x+mw/2+s*.12,ty=y-mh/2+s*.02;
-      const tg=ctx.createLinearGradient(tx,ty,tx+tw,ty+th);tg.addColorStop(0,'#354955');tg.addColorStop(.35,'#18252d');tg.addColorStop(1,'#070c10');
-      iso3D(tx,ty,tw,th,5,'#4c626f','#101b22',tg);
-      ctx.fillStyle='#05090c';rr(tx+3,ty+5,tw-6,s*.12,2);ctx.fill();
-      ctx.strokeStyle='rgba(120,180,210,.28)';ctx.lineWidth=.7;for(let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(tx+4,ty+s*.3+i*s*.07);ctx.lineTo(tx+tw-4,ty+s*.3+i*s*.07);ctx.stroke();}
-      led(tx+tw/2,ty+th-s*.13,s*.045,'#4dabf7',9);
-      const mouseX=x+kw*.48,mouseY=ky+s*.02;ctx.fillStyle='#263640';rr(mouseX,mouseY,s*.13,s*.2,s*.06);ctx.fill();ctx.strokeStyle='#526673';ctx.stroke();
+    const notebook=node?.pcStyle!=='complete';
+    if(notebook){
+      // Notebook 3D aberto, com tela fina e base em perspectiva.
+      const lw=s*1.22,lh=s*.76,lx=x-lw/2,ly=y-lh*.7;
+      ctx.shadowBlur=24;ctx.shadowColor='#4dabf766';
+      const lf=ctx.createLinearGradient(lx,ly,lx+lw,ly+lh);lf.addColorStop(0,'#536a78');lf.addColorStop(.18,'#263742');lf.addColorStop(1,'#070d12');
+      iso3D(lx,ly,lw,lh,6,'#617986','#16242c',lf);ctx.shadowBlur=0;
+      ctx.strokeStyle='#4dabf7cc';ctx.lineWidth=1.2;rr(lx,ly,lw,lh,4);ctx.stroke();
+      const sx=lx+5,sy=ly+5,sw=lw-10,sh=lh-10,sg=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);sg.addColorStop(0,'#17628a');sg.addColorStop(.5,'#12365d');sg.addColorStop(1,'#4a246d');ctx.fillStyle=sg;rr(sx,sy,sw,sh,2);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.moveTo(sx+2,sy+2);ctx.lineTo(sx+sw*.35,sy+2);ctx.lineTo(sx+sw*.12,sy+sh-2);ctx.lineTo(sx+2,sy+sh-2);ctx.closePath();ctx.fill();
+      ctx.fillStyle='rgba(4,11,20,.74)';rr(sx+8,sy+8,sw-17,sh-18,2);ctx.fill();ctx.fillStyle='#256b9c';ctx.fillRect(sx+8,sy+8,sw-17,5);
+      ['#ff7b72','#f2cc60','#56d364'].forEach((c,i)=>led(sx+12+i*7,sy+10.5,1.6,c,0));
+      ctx.fillStyle='rgba(88,166,255,.36)';for(let i=0;i<3;i++)ctx.fillRect(sx+12,sy+19+i*6,(sw-27)*(1-i*.16),2);
+      led(x,ly+3,1.8,'#4dabf7',5);
+      const bw=lw*1.08,bh=s*.32,bx=x-bw/2,by=ly+lh+s*.08,bg=ctx.createLinearGradient(bx,by,bx,by+bh);bg.addColorStop(0,'#607581');bg.addColorStop(.3,'#344650');bg.addColorStop(1,'#111a20');
+      iso3D(bx,by,bw,bh,8,'#718792','#17232a',bg);
+      // Teclas individuais e touchpad.
+      const keyW=bw*.075,keyH=bh*.16,startX=bx+bw*.12,startY=by+bh*.12;
+      for(let row=0;row<3;row++)for(let key=0;key<9;key++){ctx.fillStyle='#101820';rr(startX+key*(keyW+2)+(row===2?keyW/2:0),startY+row*(keyH+2),keyW,keyH,1);ctx.fill();ctx.strokeStyle='rgba(180,210,225,.23)';ctx.lineWidth=.4;ctx.stroke();}
+      ctx.fillStyle='#1b2830';ctx.strokeStyle='#607681';rr(x-bw*.13,by+bh*.67,bw*.26,bh*.22,2);ctx.fill();ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,.28)';rr(x-bw*.22,by+bh-2,bw*.44,1.5,.7);ctx.fill();
+    }else{
+      // Computador completo 3D: monitor, teclado, gabinete e mouse.
+      const mw=s*1.02,mh=s*.72,mx=x-s*.12;
+      const fg=ctx.createLinearGradient(mx-mw/2,y-mh/2,mx+mw/2,y+mh/2);fg.addColorStop(0,'#405564');fg.addColorStop(1,'#0c1820');iso3D(mx-mw/2,y-mh/2,mw,mh,6,'#526a78','#172832',fg);
+      ctx.fillStyle='#07101a';rr(mx-mw/2+5,y-mh/2+5,mw-10,mh-16,2);ctx.fill();const sg=ctx.createLinearGradient(mx-mw/2+6,y-mh/2+6,mx+mw/2-6,y+mh/2-17);sg.addColorStop(0,'#17628a');sg.addColorStop(1,'#351b59');ctx.fillStyle=sg;rr(mx-mw/2+6,y-mh/2+6,mw-12,mh-18,2);ctx.fill();led(mx,y-mh/2+3,1.5,'#4dabf7',4);
+      ctx.fillStyle='#253640';ctx.fillRect(mx-4,y+mh/2-1,8,s*.18);rr(mx-mw*.25,y+mh/2+s*.16,mw*.5,s*.07,3);ctx.fill();
+      const kw=mw*.78,kh=s*.13,kx=mx-kw/2,ky=y+mh/2+s*.29,kg=ctx.createLinearGradient(kx,ky,kx,ky+kh);kg.addColorStop(0,'#465b68');kg.addColorStop(1,'#111a20');iso3D(kx,ky,kw,kh,3,'#566c78','#142029',kg);
+      const tw=s*.31,th=s*.88,tx=x+mw/2+s*.08,ty=y-mh/2+s*.02,tg=ctx.createLinearGradient(tx,ty,tx+tw,ty+th);tg.addColorStop(0,'#354955');tg.addColorStop(1,'#070c10');iso3D(tx,ty,tw,th,5,'#4c626f','#101b22',tg);ctx.fillStyle='#05090c';rr(tx+3,ty+5,tw-6,s*.12,2);ctx.fill();led(tx+tw/2,ty+th-s*.13,s*.045,'#4dabf7',9);
+      ctx.fillStyle='#263640';rr(mx+kw*.5,ky,s*.13,s*.2,s*.06);ctx.fill();ctx.strokeStyle='#526673';ctx.stroke();
     }
 
   } else if (shape === 'phone') {
