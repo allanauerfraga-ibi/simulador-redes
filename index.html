@@ -2283,18 +2283,104 @@ function showReportModal(){
   const activitySummary=act
     ? `<div class="edu-note"><b>Atividade identificada automaticamente</b><br>${escapeReport(room?.title||'Sala de atividades')} · NÍVEL ${escapeReport(act.level)}<br><span style="color:#58a6ff;font-weight:700">${escapeReport(act.title)}</span><br>${escapeReport(act.desc)}</div>`
     : `<div class="edu-note"><b>Nenhuma atividade selecionada</b><br>O relatório será identificado automaticamente como Projeto livre.</div>`;
-  showModal(`<h3>📄 Relatório do projeto</h3>${activitySummary}<div class="edu-note">O relatório inclui identificação, atividade, pontuação, equipamentos, VLANs, endereços, portas, conexões e uma imagem da topologia.</div><label>Aluno ou grupo</label><input id="report-student" value="${escapeReport(classroom.studentName||'')}" placeholder="Nome do aluno ou grupo"><label>Turma</label><input id="report-class" placeholder="Ex.: 3º ano"><div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="downloadClassReport()">⬇️ Gerar relatório HTML</button></div>`);
+  showModal(`<h3>📄 Relatório do projeto</h3>${activitySummary}<div class="edu-note">O relatório será baixado diretamente em PDF e incluirá identificação, atividade, pontuação, equipamentos, endereços, portas, conexões e uma imagem da topologia.</div><label>Aluno ou grupo</label><input id="report-student" value="${escapeReport(classroom.studentName||'')}" placeholder="Nome do aluno ou grupo"><label>Turma</label><input id="report-class" placeholder="Ex.: 3º ano"><div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button id="report-generate-btn" class="green" onclick="downloadClassReport()">⬇️ Gerar relatório PDF</button></div>`);
 }
 function escapeReport(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function downloadClassReport(){
-  classroom.studentName=document.getElementById('report-student').value.trim()||classroom.studentName;const turma=document.getElementById('report-class').value.trim();const image=canvas.toDataURL('image/png');
-  const devRows=devices.map(d=>`<tr><td>${escapeReport(d.name)}</td><td>${escapeReport(LABELS[d.type])}</td><td>${escapeReport(d.ip)}</td><td>${escapeReport(d.mask)}</td><td>${d.vlan||1}</td><td>${escapeReport(d.dhcpFrom||'Estático')}</td><td>${escapeReport(d.status)}</td></tr>`).join('');
-  const linkRows=connections.map(c=>{const a=devices.find(d=>d.id===c.from),b=devices.find(d=>d.id===c.to);return `<tr><td>${escapeReport(a?.name)}</td><td>${escapeReport(c.fromIface||'-')}</td><td>${escapeReport(b?.name)}</td><td>${escapeReport(c.toIface||'-')}</td><td>${escapeReport(c.kind||'cable')}</td><td>${escapeReport(c.medium||'copper')}</td><td>${escapeReport(formatBandwidth(c.bw||100))}</td><td>${c.active===false?'Falha':'Ativo'}</td></tr>`;}).join('');
-  const act=classroom.activity?CLASS_ACTIVITIES[classroom.activity]:null,room=act?ACTIVITY_ROOMS[act.room]:null;
-  const result=classroom.lastScore?.activity===classroom.activity?classroom.lastScore:null,score=result?.score;
-  const html=`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório NetSim EDU — ${escapeReport(act?.title||'Projeto livre')}</title><style>body{font-family:Arial,sans-serif;color:#203040;margin:32px}h1{color:#075da8}h2{margin-top:26px;color:#294e70}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #b9c7d5;padding:7px;text-align:left}th{background:#e8f2ff}.meta{background:#f4f7fa;padding:12px;border-left:4px solid #1976c9;line-height:1.55}.activity-desc{display:inline-block;margin-top:3px}.topology{max-width:100%;border:1px solid #ccd7e1;margin-top:10px}@media print{button{display:none}}</style></head><body><h1>Relatório do Projeto de Rede</h1><div class="meta"><b>Aluno/Grupo:</b> ${escapeReport(classroom.studentName||'Não informado')}<br><b>Turma:</b> ${escapeReport(turma||'Não informada')}<br><b>Data:</b> ${new Date().toLocaleString('pt-BR')}<br><b>Sala:</b> ${escapeReport(room?.title||'Projeto livre')}<br><b>Nível:</b> ${act?escapeReport(act.level):'—'}<br><b>Atividade:</b> ${escapeReport(act?.title||'Projeto livre')}<br><b>Enunciado:</b> <span class="activity-desc">${escapeReport(act?.desc||'Atividade livre, sem enunciado selecionado.')}</span><br><b>Pontuação:</b> ${score??'Não corrigida'}${score!=null?'%':''}<br><b>Critérios atendidos:</b> ${result?`${result.passed} de ${result.total}`:'Não corrigida'}</div><h2>Topologia</h2><img class="topology" src="${image}"><h2>Equipamentos</h2><table><tr><th>Nome</th><th>Tipo</th><th>IP</th><th>Máscara</th><th>VLAN</th><th>Endereçamento</th><th>Status</th></tr>${devRows||'<tr><td colspan="7">Nenhum equipamento.</td></tr>'}</table><h2>Conexões e portas</h2><table><tr><th>Origem</th><th>Porta</th><th>Destino</th><th>Porta</th><th>Tipo</th><th>Meio</th><th>Velocidade</th><th>Status</th></tr>${linkRows||'<tr><td colspan="8">Nenhuma conexão.</td></tr>'}</table><p style="margin-top:28px;font-size:11px;color:#667">Gerado pelo Allan Fraga — Simulador Educacional de Redes.</p><button onclick="window.print()">Imprimir</button></body></html>`;
-  const activitySlug=(classroom.activity||'projeto_livre').replace(/[^a-z0-9]+/gi,'_'),studentSlug=(classroom.studentName||'projeto').replace(/[^a-z0-9]+/gi,'_');
-  const blob=new Blob([html],{type:'text/html;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='relatorio_'+activitySlug+'_'+studentSlug+'.html';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);closeModal();sysLog('Relatório didático gerado.','lsys');
+function reportWrapText(ctx,text,maxWidth){
+  const words=String(text??'').split(/\s+/).filter(Boolean),lines=[];let line='';
+  words.forEach(word=>{const test=line?line+' '+word:word;if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word;}else line=test;});
+  if(line)lines.push(line);return lines.length?lines:['—'];
+}
+function createReportCanvases(turma,act,room,result){
+  const W=1240,H=1754,M=60,pages=[];let page=null,pctx=null,y=0,pageNumber=0;
+  const startPage=()=>{
+    page=document.createElement('canvas');page.width=W;page.height=H;pctx=page.getContext('2d');pageNumber++;
+    pctx.fillStyle='#fff';pctx.fillRect(0,0,W,H);
+    pctx.fillStyle='#075da8';pctx.fillRect(0,0,W,18);
+    pctx.fillStyle='#17324a';pctx.font='bold 22px Arial';pctx.textAlign='left';pctx.fillText('Allan Fraga — Simulador Educacional de Redes',M,58);
+    pctx.strokeStyle='#d7e1ea';pctx.lineWidth=2;pctx.beginPath();pctx.moveTo(M,76);pctx.lineTo(W-M,76);pctx.stroke();y=105;
+  };
+  const finishPage=()=>{
+    pctx.strokeStyle='#d7e1ea';pctx.lineWidth=1;pctx.beginPath();pctx.moveTo(M,H-58);pctx.lineTo(W-M,H-58);pctx.stroke();
+    pctx.fillStyle='#657789';pctx.font='16px Arial';pctx.fillText('Gerado pelo NetSim EDU',M,H-31);pctx.textAlign='right';pctx.fillText(`Página ${pageNumber}`,W-M,H-31);pctx.textAlign='left';pages.push(page);
+  };
+  const ensure=height=>{if(y+height>H-82){finishPage();startPage();}};
+  const section=title=>{ensure(58);y+=14;pctx.fillStyle='#075da8';pctx.font='bold 27px Arial';pctx.fillText(title,M,y+25);pctx.strokeStyle='#9ec7e9';pctx.lineWidth=2;pctx.beginPath();pctx.moveTo(M,y+36);pctx.lineTo(W-M,y+36);pctx.stroke();y+=54;};
+  const keyValue=(label,value)=>{
+    pctx.font='22px Arial';const lines=reportWrapText(pctx,value,W-2*M-205),height=Math.max(30,lines.length*28+5);ensure(height);
+    pctx.fillStyle='#f4f7fa';pctx.fillRect(M,y-4,W-2*M,height);
+    pctx.fillStyle='#203b54';pctx.font='bold 21px Arial';pctx.fillText(label+':',M+12,y+21);
+    pctx.font='21px Arial';lines.forEach((line,i)=>pctx.fillText(line,M+195,y+21+i*28));y+=height+3;
+  };
+  const drawTable=(headers,rows,widths)=>{
+    const drawHeader=()=>{ensure(42);let x=M;pctx.fillStyle='#dceeff';pctx.fillRect(M,y,W-2*M,40);pctx.strokeStyle='#aebfce';pctx.font='bold 17px Arial';pctx.fillStyle='#17324a';headers.forEach((h,i)=>{pctx.strokeRect(x,y,widths[i],40);pctx.fillText(h,x+7,y+25);x+=widths[i];});y+=40;};
+    drawHeader();
+    if(!rows.length)rows=[['Nenhum registro.']];
+    rows.forEach(row=>{
+      pctx.font='16px Arial';const cellLines=headers.map((_,i)=>reportWrapText(pctx,row[i]??'',widths[i]-14));const rh=Math.max(37,...cellLines.map(lines=>lines.length*20+14));
+      if(y+rh>H-82){finishPage();startPage();drawHeader();}
+      let x=M;pctx.fillStyle='#fff';pctx.fillRect(M,y,W-2*M,rh);pctx.strokeStyle='#b9c7d5';cellLines.forEach((lines,i)=>{pctx.strokeRect(x,y,widths[i],rh);pctx.fillStyle='#263f55';lines.forEach((line,j)=>pctx.fillText(line,x+7,y+22+j*20));x+=widths[i];});y+=rh;
+    });
+    y+=12;
+  };
+  startPage();
+  pctx.fillStyle='#075da8';pctx.font='bold 40px Arial';pctx.fillText('Relatório do Projeto de Rede',M,y+36);y+=62;
+  keyValue('Aluno/Grupo',classroom.studentName||'Não informado');
+  keyValue('Turma',turma||'Não informada');
+  keyValue('Data',new Date().toLocaleString('pt-BR'));
+  keyValue('Sala',room?.title||'Projeto livre');
+  keyValue('Nível',act?String(act.level):'—');
+  keyValue('Atividade',act?.title||'Projeto livre');
+  keyValue('Enunciado',act?.desc||'Atividade livre, sem enunciado selecionado.');
+  keyValue('Pontuação',result?`${result.score}%`:'Não corrigida');
+  keyValue('Critérios atendidos',result?`${result.passed} de ${result.total}`:'Não corrigida');
+  section('Topologia');
+  const maxTW=W-2*M,maxTH=490,ratio=Math.min(maxTW/canvas.width,maxTH/canvas.height),tw=canvas.width*ratio,th=canvas.height*ratio;
+  ensure(th+24);pctx.fillStyle='#f8fafc';pctx.fillRect(M,y,maxTW,th+18);pctx.strokeStyle='#aebfce';pctx.strokeRect(M,y,maxTW,th+18);pctx.drawImage(canvas,M+(maxTW-tw)/2,y+9,tw,th);y+=th+30;
+  section('Equipamentos');
+  const devRows=devices.map(d=>[d.name,LABELS[d.type]||d.type,d.ip,d.mask,String(d.vlan||1),d.dhcpFrom?'DHCP · '+d.dhcpFrom:'Estático',d.status==='up'?'Ativo':'Desligado']);
+  drawTable(['Nome','Tipo','IP','Máscara','VLAN','Endereçamento','Status'],devRows,[220,130,180,180,70,210,130]);
+  section('Conexões e portas');
+  const linkRows=connections.map(c=>{const a=devices.find(d=>d.id===c.from),b=devices.find(d=>d.id===c.to);return [`${a?.name||'?'} · ${c.fromIface||'-'}`,`${b?.name||'?'} · ${c.toIface||'-'}`,`${c.kind||'cable'} · ${c.medium||'copper'}`,formatBandwidth(c.bw||100),c.active===false?'Falha':'Ativo'];});
+  drawTable(['Origem / porta','Destino / porta','Tipo / meio','Velocidade','Status'],linkRows,[280,280,220,170,170]);
+  finishPage();return pages;
+}
+function dataUrlToBytes(dataUrl){
+  const raw=atob(dataUrl.split(',')[1]),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);return bytes;
+}
+function reportCanvasesToPDF(canvases){
+  const encoder=new TextEncoder(),chunks=[];let length=0;const offsets=[];
+  const push=value=>{const bytes=typeof value==='string'?encoder.encode(value):value;chunks.push(bytes);length+=bytes.length;};
+  push(new Uint8Array([37,80,68,70,45,49,46,52,10,37,255,255,255,255,10]));
+  const objectCount=2+canvases.length*3;
+  const beginObject=n=>{offsets[n]=length;push(`${n} 0 obj\n`);};
+  beginObject(1);push('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  const kids=canvases.map((_,i)=>`${3+i*3} 0 R`).join(' ');beginObject(2);push(`<< /Type /Pages /Kids [${kids}] /Count ${canvases.length} >>\nendobj\n`);
+  canvases.forEach((page,i)=>{
+    const pageObj=3+i*3,contentObj=pageObj+1,imageObj=pageObj+2,jpeg=dataUrlToBytes(page.toDataURL('image/jpeg',.9));
+    beginObject(pageObj);push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Im${i} ${imageObj} 0 R >> >> /Contents ${contentObj} 0 R >>\nendobj\n`);
+    const stream=`q\n595.28 0 0 841.89 0 0 cm\n/Im${i} Do\nQ\n`,streamBytes=encoder.encode(stream);
+    beginObject(contentObj);push(`<< /Length ${streamBytes.length} >>\nstream\n`);push(streamBytes);push('endstream\nendobj\n');
+    beginObject(imageObj);push(`<< /Type /XObject /Subtype /Image /Width ${page.width} /Height ${page.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`);push(jpeg);push('\nendstream\nendobj\n');
+  });
+  const xref=length;push(`xref\n0 ${objectCount+1}\n0000000000 65535 f \n`);for(let i=1;i<=objectCount;i++)push(String(offsets[i]).padStart(10,'0')+' 00000 n \n');
+  push(`trailer\n<< /Size ${objectCount+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(chunks,{type:'application/pdf'});
+}
+async function downloadClassReport(){
+  const button=document.getElementById('report-generate-btn');if(button){button.disabled=true;button.textContent='Gerando PDF...';}
+  await new Promise(resolve=>requestAnimationFrame(()=>resolve()));
+  try{
+    classroom.studentName=document.getElementById('report-student').value.trim()||classroom.studentName;const turma=document.getElementById('report-class').value.trim();
+    const act=classroom.activity?CLASS_ACTIVITIES[classroom.activity]:null,room=act?ACTIVITY_ROOMS[act.room]:null;
+    const result=classroom.lastScore?.activity===classroom.activity?classroom.lastScore:null,pages=createReportCanvases(turma,act,room,result),blob=reportCanvasesToPDF(pages);
+    const activitySlug=(classroom.activity||'projeto_livre').replace(/[^a-z0-9]+/gi,'_'),studentSlug=(classroom.studentName||'projeto').replace(/[^a-z0-9]+/gi,'_');
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='relatorio_'+activitySlug+'_'+studentSlug+'.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);closeModal();
+    rackNotice('Relatório PDF gerado',`${pages.length} página(s) baixada(s) com sucesso.`,'ok');sysLog(`Relatório PDF gerado: ${pages.length} página(s).`,'lsys');
+  }catch(err){
+    if(button){button.disabled=false;button.textContent='⬇️ Gerar relatório PDF';}
+    rackNotice('Não foi possível gerar o PDF',err?.message||'Tente novamente.');sysLog('Erro ao gerar relatório PDF: '+(err?.message||err),'lerr');
+  }
 }
 
 function showSendModal(){
