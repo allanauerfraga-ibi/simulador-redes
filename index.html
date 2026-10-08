@@ -609,7 +609,7 @@ let classroom={role:'student',studentName:'',activity:null,subnetColors:false,la
 const TEACHER_PASSWORD_HASH='ee710ab733f3255effb57c70900e7365d4af5eeb727610672ead4a953ad5ab2d';
 
 const ACTIVITY_ROOMS={
-  lan:{title:'🔌 Sala LAN básica'},wifi:{title:'📶 Sala Rede sem fio'},
+  lan:{title:'🔌 Sala LAN — básico ao avançado'},wifi:{title:'📶 Sala Rede sem fio'},
   backbone:{title:'🟣 Sala Backbone'},vlan:{title:'🏷️ Sala Segmentação'}
 };
 const CLASS_ACTIVITIES={
@@ -618,6 +618,8 @@ const CLASS_ACTIVITIES={
   lan3:{room:'lan',level:3,title:'LAN com servidor',desc:'Crie uma LAN com 4 PCs, 2 switches e 1 servidor. Todos devem estar na mesma rede e alcançar o servidor.'},
   lan4:{room:'lan',level:4,title:'LAN entre duas redes',desc:'Distribua 6 PCs em duas redes /24, usando pelo menos 2 switches e 1 roteador para interligá-las.'},
   lan5:{room:'lan',level:5,title:'LAN corporativa completa',desc:'Monte uma rede com 8 PCs, 3 switches, roteador, firewall e 2 servidores em rack, usando pelo menos duas sub-redes com comunicação fim a fim.'},
+  lan6:{room:'lan',level:6,title:'LAN híbrida avançada',desc:'Monte uma LAN com 4 computadores, incluindo Notebook e Computador, 3 celulares, 2 switches, roteador sem fio, firewall e servidor. Use cabos nos computadores, Wi-Fi nos celulares e faça todos alcançarem o servidor por um caminho protegido.'},
+  lan7:{room:'lan',level:7,title:'LAN corporativa convergente',desc:'Projete uma LAN com 6 computadores, incluindo Notebook e Computador, 4 celulares, 3 switches, roteador sem fio, firewall, patch panel e 2 servidores: um rack e um torre. Organize o núcleo no rack, use enlace de 1 Gb/s e garanta acesso de todos os clientes aos servidores.'},
   wifi1:{room:'wifi',level:1,title:'Wi-Fi inicial',desc:'Adicione um roteador sem fio e 2 celulares. Associe os celulares por Wi-Fi e confirme a comunicação.'},
   wifi2:{room:'wifi',level:2,title:'Wi-Fi para uma turma',desc:'Associe 4 celulares ao mesmo roteador e SSID. Todos devem receber IP e alcançar o roteador.'},
   wifi3:{room:'wifi',level:3,title:'Duas áreas Wi-Fi',desc:'Use 2 roteadores sem fio interligados e 4 celulares, distribuídos entre pelo menos duas redes Wi-Fi.'},
@@ -2098,11 +2100,12 @@ function syncActivityBar(){
 }
 function showActivityModal(){
   const rooms=Object.entries(ACTIVITY_ROOMS).map(([room,meta])=>{
-    const cards=Object.entries(CLASS_ACTIVITIES).filter(([,a])=>a.room===room).map(([key,a])=>`<div class="activity-card ${classroom.activity===key?'current':''}"><div class="activity-head"><span class="activity-level">NÍVEL ${a.level}</span><b>${a.title}</b></div>${a.desc}<br><button class="green" onclick="startClassActivity('${key}')">${classroom.activity===key?'▶ Atividade atual':'Iniciar atividade'}</button></div>`).join('');
+    const roomActivities=Object.entries(CLASS_ACTIVITIES).filter(([,a])=>a.room===room);
+    const cards=roomActivities.map(([key,a])=>`<div class="activity-card ${classroom.activity===key?'current':''}"><div class="activity-head"><span class="activity-level">NÍVEL ${a.level}</span><b>${a.title}</b></div>${a.desc}<br><button class="green" onclick="startClassActivity('${key}')">${classroom.activity===key?'▶ Atividade atual':'Iniciar atividade'}</button></div>`).join('');
     const hasCurrent=CLASS_ACTIVITIES[classroom.activity]?.room===room;
-    return `<details class="activity-room" ${hasCurrent||room==='lan'?'open':''}><summary><span>${meta.title}</span><small>5 níveis</small></summary><div class="activity-list">${cards}</div></details>`;
+    return `<details class="activity-room" ${hasCurrent||room==='lan'?'open':''}><summary><span>${meta.title}</span><small>${roomActivities.length} níveis</small></summary><div class="activity-list">${cards}</div></details>`;
   }).join('');
-  showModal(`<h3>✅ Atividades com correção automática</h3><div class="edu-note">Escolha uma sala e avance do nível 1 ao 5. Durante a montagem, o enunciado e o botão Corrigir permanecerão na barra exclusiva da atividade. Cada nível possui critérios próprios de equipamentos, conexões, endereçamento e comunicação.</div><label>Nome do aluno ou grupo</label><input id="activity-student" value="${classroom.studentName||''}" placeholder="Ex.: Grupo 1">${rooms}${classroom.activity?`<div class="modal-btns"><button onclick="closeModal()">Fechar</button><button class="green" onclick="evaluateClassActivity()">✅ Corrigir atividade atual</button></div>`:'<div class="modal-btns"><button onclick="closeModal()">Fechar</button></div>'}`);
+  showModal(`<h3>✅ Atividades com correção automática</h3><div class="edu-note">Escolha uma sala e avance pelos níveis disponíveis. Durante a montagem, o enunciado e o botão Corrigir permanecerão na barra exclusiva da atividade. Cada nível possui critérios próprios de equipamentos, conexões, endereçamento e comunicação.</div><label>Nome do aluno ou grupo</label><input id="activity-student" value="${classroom.studentName||''}" placeholder="Ex.: Grupo 1">${rooms}${classroom.activity?`<div class="modal-btns"><button onclick="closeModal()">Fechar</button><button class="green" onclick="evaluateClassActivity()">✅ Corrigir atividade atual</button></div>`:'<div class="modal-btns"><button onclick="closeModal()">Fechar</button></div>'}`);
 }
 function applyClassActivityAddressPlan(key){
   if(!['lan1','lan2','lan3','lan4','lan5'].includes(key))return false;
@@ -2141,13 +2144,18 @@ function activityChecks(key){
   const activity=CLASS_ACTIVITIES[key];if(!activity)return [['Atividade válida',false]];
   const level=activity.level,room=activity.room;
   const pcs=devices.filter(d=>d.type==='pc'),phones=devices.filter(d=>d.type==='phone'),switches=devices.filter(d=>d.type==='switch'),routers=devices.filter(d=>d.type==='router');
-  const servers=devices.filter(d=>d.type==='server'),firewalls=devices.filter(d=>d.type==='firewall'),clouds=devices.filter(d=>d.type==='cloud');
+  const servers=devices.filter(d=>d.type==='server'),firewalls=devices.filter(d=>d.type==='firewall'),clouds=devices.filter(d=>d.type==='cloud'),patchPanels=devices.filter(d=>d.type==='patchPanel');
   const wirelessRouters=routers.filter(isWirelessRouter),backbones=connections.filter(c=>c.kind==='backbone');
   const directLink=(aList,bList,kind)=>aList.some(a=>bList.some(b=>connections.some(c=>(!kind||c.kind===kind)&&((c.from===a.id&&c.to===b.id)||(c.to===a.id&&c.from===b.id)))));
   const directlyConnectedTo=(items,targets,kind)=>items.length>0&&items.every(a=>targets.some(b=>connections.some(c=>(!kind||c.kind===kind)&&((c.from===a.id&&c.to===b.id)||(c.to===a.id&&c.from===b.id)))));
   const pairReachable=list=>list.length>1&&list.every((d,i)=>i===0||!!findPath(list[0].id,d.id));
   const validIPs=list=>list.length>0&&list.every(d=>/^\d+\.\d+\.\d+\.\d+$/.test(d.ip));
   const subnetCount=list=>new Set(list.map(d=>String(d.ip||'').split('.').slice(0,3).join('.'))).size;
+  const pathUses=(from,to,targets)=>{const path=findPath(from.id,to.id)||[];return path.some(id=>targets.some(t=>t.id===id));};
+  const allReachServers=list=>list.length>0&&servers.length>0&&list.every(client=>servers.every(server=>!!findPath(client.id,server.id)));
+  const mixedComputers=pcs.some(p=>pcStyleOf(p)==='notebook')&&pcs.some(p=>pcStyleOf(p)==='complete');
+  const gigabitCore=connections.some(c=>c.active!==false&&c.kind!=='wifi'&&(c.bw||0)>=1000&&[c.from,c.to].every(id=>devices.some(d=>d.id===id&&['switch','router','firewall','server','patchPanel'].includes(d.type))));
+  const rackPatchLinked=patchPanels.some(panel=>panel.rackId&&switches.some(sw=>sw.rackId===panel.rackId&&switchFormOf(sw)==='rack'&&connections.some(c=>c.rackCable&&((c.from===panel.id&&c.to===sw.id)||(c.to===panel.id&&c.from===sw.id)))));
   if(room==='lan'&&level===1)return [
     ['Pelo menos 3 computadores',pcs.length>=3],['Pelo menos 1 switch',switches.length>=1],
     ['Cada PC conectado diretamente a um switch',pcs.length>=3&&directlyConnectedTo(pcs,switches)],
@@ -2165,11 +2173,30 @@ function activityChecks(key){
     ['Pelo menos 6 PCs, 2 switches e 1 roteador',pcs.length>=6&&switches.length>=2&&routers.length>=1],['PCs ligados aos switches',directlyConnectedTo(pcs,switches)],
     ['Pelo menos duas redes /24',pcs.length>=6&&validIPs(pcs)&&subnetCount(pcs)>=2],['Roteador conectado à infraestrutura',directLink(routers,switches)],['Comunicação entre todos os PCs',pairReachable(pcs)]
   ];
-  if(room==='lan')return [
+  if(room==='lan'&&level===5)return [
     ['8 PCs, 3 switches, roteador e firewall',pcs.length>=8&&switches.length>=3&&routers.length>=1&&firewalls.length>=1],['Pelo menos 2 servidores',servers.length>=2],['Servidor instalado em rack',servers.some(s=>s.rackId)],
     ['Pelo menos duas sub-redes /24',pcs.length>=8&&validIPs(pcs)&&subnetCount(pcs)>=2],['Firewall conectado à rede',connections.some(c=>firewalls.some(f=>c.from===f.id||c.to===f.id))],['Comunicação entre os clientes',pairReachable(pcs)]
   ];
   const wifiLinked=phones.filter(p=>connections.some(c=>c.kind==='wifi'&&(c.from===p.id||c.to===p.id)));
+  if(room==='lan'&&level===6){
+    const clients=[...pcs,...phones];
+    return [
+      ['4 computadores, com Notebook e Computador',pcs.length>=4&&mixedComputers],['3 celulares conectados por Wi-Fi',phones.length>=3&&wifiLinked.length===phones.length],
+      ['2 switches e roteador sem fio',switches.length>=2&&wirelessRouters.length>=1],['Firewall e servidor presentes',firewalls.length>=1&&servers.length>=1],
+      ['Computadores ligados diretamente aos switches',pcs.length>=4&&directlyConnectedTo(pcs,switches)],['Todos os clientes alcançam o servidor',clients.length>=7&&allReachServers(clients)],
+      ['O caminho até o servidor passa pelo firewall',clients.length>=7&&clients.every(client=>servers.some(server=>pathUses(client,server,firewalls)))]
+    ];
+  }
+  if(room==='lan'){
+    const clients=[...pcs,...phones];
+    return [
+      ['6 computadores, com Notebook e Computador',pcs.length>=6&&mixedComputers],['4 celulares conectados por Wi-Fi',phones.length>=4&&wifiLinked.length===phones.length],
+      ['3 switches, incluindo um switch de rack',switches.length>=3&&switches.some(sw=>switchFormOf(sw)==='rack'&&sw.rackId)],['Roteador sem fio e firewall presentes',wirelessRouters.length>=1&&firewalls.length>=1],
+      ['Servidor rack e servidor torre',servers.some(s=>serverTypeOf(s)==='rack'&&s.rackId)&&servers.some(s=>serverTypeOf(s)==='tower')],['Patch panel ligado ao switch dentro do rack',rackPatchLinked],
+      ['Núcleo com enlace de pelo menos 1 Gb/s',gigabitCore],['Computadores ligados aos switches',pcs.length>=6&&directlyConnectedTo(pcs,switches)],
+      ['Todos os clientes alcançam os dois servidores',clients.length>=10&&servers.length>=2&&allReachServers(clients)]
+    ];
+  }
   if(room==='wifi'&&level===1)return [
     ['Pelo menos 1 roteador sem fio',wirelessRouters.length>=1],['Pelo menos 2 celulares',phones.length>=2],['Celulares associados por Wi-Fi',phones.length>=2&&wifiLinked.length===phones.length],
     ['Comunicação dos celulares com o roteador',phones.length>=2&&phones.every(p=>wirelessRouters.some(r=>!!findPath(p.id,r.id)))]
