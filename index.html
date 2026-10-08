@@ -1193,17 +1193,21 @@ function selectWiFiDevice(dev){
   }
   if(!wifiFirst){wifiFirst=dev;selected=dev;document.getElementById('s-mode').textContent='Wi-Fi: selecione o segundo equipamento';rackNotice('Primeiro equipamento selecionado',`${dev.name}. Agora selecione ${dev.type==='router'?'um celular ou PC com placa Wi-Fi':'o roteador sem fio'}.`,'ok');updateDevList();draw();return;}
   if(wifiFirst.id===dev.id){rackNotice('Seleção inválida','Escolha outro equipamento.');return;}
-  connectWiFiDevices(wifiFirst,dev);wifiFirst=null;setMode('select');
+  connectWiFiDevices(wifiFirst,dev);wifiFirst=null;selected=null;
+  document.getElementById('s-mode').textContent='Wi-Fi ativo: selecione outro cliente e roteador';
+  document.getElementById('explain-icon').textContent='📶';
+  document.getElementById('explain-text').textContent='Conexão concluída. O modo Wi-Fi continua ativo: clique em outro celular ou PC com placa Wi-Fi e depois no roteador sem fio.';
+  document.getElementById('explain-bar').classList.add('show');updateDevList();draw();
 }
 function connectWiFiDevices(a,b){
   const client=(a.type==='phone'||a.type==='pc')?a:((b.type==='phone'||b.type==='pc')?b:null);
   const router=a.type==='router'?a:(b.type==='router'?b:null);
-  if(!client||!router){rackNotice('Conexão Wi-Fi recusada','É necessário selecionar um celular ou PC com placa Wi-Fi e um roteador sem fio.');sysLog('Wi-Fi recusado: selecione cliente sem fio + roteador.','lwarn');return;}
-  if(!isWirelessRouter(router)){rackNotice('Roteador incompatível',`${router.name} não possui rádio Wi-Fi. Use SOHO/Doméstico ou Nó Mesh.`);sysLog(`Wi-Fi recusado: ${router.name} não possui função sem fio.`,'lwarn');return;}
+  if(!client||!router){rackNotice('Conexão Wi-Fi recusada','É necessário selecionar um celular ou PC com placa Wi-Fi e um roteador sem fio.');sysLog('Wi-Fi recusado: selecione cliente sem fio + roteador.','lwarn');return false;}
+  if(!isWirelessRouter(router)){rackNotice('Roteador incompatível',`${router.name} não possui rádio Wi-Fi. Use SOHO/Doméstico ou Nó Mesh.`);sysLog(`Wi-Fi recusado: ${router.name} não possui função sem fio.`,'lwarn');return false;}
   ensureInterfaceMetadata(client);
   const clientIface=nextFreeInterface(client,'wireless');
-  if(!clientIface){rackNotice('Sem placa Wi-Fi disponível',client.type==='pc'?`${client.name} não possui uma placa Wi-Fi livre. Adicione outra em Configurar PC.`:`${client.name} já está associado ou não possui interface Wi-Fi livre.`);return;}
-  if(connections.some(c=>((c.from===client.id&&c.to===router.id)||(c.from===router.id&&c.to===client.id))&&c.kind==='wifi')){rackNotice('Cliente já conectado',`${client.name} já está associado a ${router.name}.`);return;}
+  if(!clientIface){rackNotice('Sem placa Wi-Fi disponível',client.type==='pc'?`${client.name} não possui uma placa Wi-Fi livre. Adicione outra em Configurar PC.`:`${client.name} já está associado ou não possui interface Wi-Fi livre.`);return false;}
+  if(connections.some(c=>((c.from===client.id&&c.to===router.id)||(c.from===router.id&&c.to===client.id))&&c.kind==='wifi')){rackNotice('Cliente já conectado',`${client.name} já está associado a ${router.name}.`);return false;}
   saveHistory();
   const prefix=router.ip.split('.').slice(0,3).join('.');
   let wifiHost=100;while(devices.some(d=>d.id!==client.id&&d.ip===`${prefix}.${wifiHost}`)&&wifiHost<250)wifiHost++;
@@ -1216,6 +1220,7 @@ function connectWiFiDevices(a,b){
   updateAll();updateProp(client);
   rackNotice('Wi-Fi conectado',`${client.name} (${clientIface}) associado a ${router.name} — SSID: ${client.ssid} — IP: ${wifiIP}.`,'ok');
   sysLog(`📶 Wi-Fi: ${client.name} ${clientIface} ↔ ${router.name} | SSID ${client.ssid} | ${wifiIP}`,'lsys');
+  return true;
 }
 
 // =========================================================
