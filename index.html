@@ -484,7 +484,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
 
 <div id="workspace">
   <!-- LEFT -->
-  <div id="left">
+  <div id="left" class="sidebar-collapsed">
     <div class="panel-sec">
       <div class="panel-title">Dispositivos na rede</div>
       <div id="dev-list"><div style="color:#6e7681;font-size:10px;">Nenhum dispositivo ainda.<br>Clique em um botão acima para adicionar.</div></div>
@@ -510,8 +510,8 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
     </div>
   </div>
 
-  <button id="left-panel-toggle" class="left-panel-toggle" onclick="toggleLeftPanel()" aria-expanded="true" title="Recolher painel lateral">
-    <span id="left-panel-arrow" class="side-tab-arrow">◀</span>
+  <button id="left-panel-toggle" class="left-panel-toggle" onclick="toggleLeftPanel()" aria-expanded="false" title="Abrir painel lateral">
+    <span id="left-panel-arrow" class="side-tab-arrow">▶</span>
     <span class="side-tab-label">Painel</span>
   </button>
 
