@@ -349,6 +349,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
           <button class="menu-action" id="btn-firewall" onclick="setMode('add','firewall')">🛡️ Firewall</button>
           <button class="menu-action" id="btn-rack" onclick="showRackModal()">🗄️ Rack de rede</button>
           <button class="menu-action" id="btn-cloud" onclick="setMode('add','cloud')">☁️ Nuvem / Internet</button>
+          <button class="menu-action" id="btn-satellite-kit" onclick="showSatelliteEquipmentModal()" title="Adicionar antena/terminal ou satélite orbital">🛰️ Internet via satélite</button>
           <div class="isp-picker">
             <button class="menu-action" data-keep-menu id="btn-isp" onclick="toggleISPMenu(event)" style="color:#4dabf7;border-color:#1f6feb;" aria-expanded="false" aria-controls="isp-menu"><span>🌐</span><span id="isp-button-label">Provedor de Internet</span><span id="isp-badge">ISP</span><span aria-hidden="true">▾</span></button>
             <div id="isp-menu">
@@ -380,6 +381,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         <div class="menu-grid one">
           <button class="menu-action" id="btn-connect" onclick="setMode('connect')">🔗 Conectar com cabo</button>
           <button class="menu-action" id="btn-wifi" onclick="startWiFiMode()">📶 Conectar por Wi-Fi</button>
+          <button class="menu-action" id="btn-satellite-link" onclick="startSatelliteLinkMode()">🛰️ Criar enlace satelital</button>
           <button class="menu-action" id="btn-isp-fiber" onclick="startISPFiberMode()">🔷 Fibra óptica entre provedores</button>
           <button class="menu-action" id="btn-backbone" onclick="startBackboneMode()">🟣 Criar backbone</button>
           <button class="menu-action danger" id="btn-delete-link" onclick="setMode('deleteLink')">✂️ Apagar cabo ou enlace</button>
@@ -506,6 +508,8 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         <div>🗄️ <b>Rack</b> — Organiza ativos de rede</div>
         <div>🛡️ <b>Firewall</b> — Filtra tráfego</div>
         <div>☁️ <b>Cloud</b> — Internet/WAN</div>
+        <div>📡 <b>Antena satelital</b> — Terminal do assinante</div>
+        <div>🛰️ <b>Satélite</b> — Provedor orbital LEO/GEO</div>
         <div>🟣 <b>Backbone</b> — Enlace principal</div>
       </div>
     </div>
@@ -594,6 +598,9 @@ let mode='select',addType='',connectFirst=null,selected=null;
 let backboneFirst=null,backboneSecond=null;
 let wifiFirst=null;
 let ispFiberFirst=null;
+let satelliteLinkFirst=null;
+let pendingSatelliteProvider='starlink';
+let pendingSatelliteEquipment='satDish';
 let pendingSwitchPorts=24;
 let pendingSwitchForm='rack';
 let pendingPatchPorts=24;
@@ -637,11 +644,16 @@ const CLASS_ACTIVITIES={
   vlan5:{room:'vlan',level:5,title:'Segmentação corporativa',desc:'Configure 4 VLANs para pelo menos 8 dispositivos, com 2 switches, roteador, firewall e servidor em rack.'}
 };
 
-const COLORS={pc:'#1f6feb',phone:'#00b8d9',router:'#e05c2a',switch:'#1a7f37',patchPanel:'#d29922',server:'#8250df',firewall:'#cf222e',cloud:'#0969da'};
-const GLOW={pc:'#58a6ff',phone:'#70e1ff',router:'#ff8a50',switch:'#56d364',patchPanel:'#f2cc60',server:'#bc8cff',firewall:'#ff6166',cloud:'#4dabf7'};
-const ICONS={pc:'💻',phone:'📱',router:'🔀',switch:'🔌',patchPanel:'🧩',server:'🖥️',firewall:'🛡️',cloud:'☁️'};
-const LABELS={pc:'PC',phone:'Celular',router:'Router',switch:'Switch',patchPanel:'Patch panel',server:'Server',firewall:'Firewall',cloud:'Cloud'};
-const BW={router:1000,switch:1000,patchPanel:1000,firewall:1000,pc:1000,phone:300,server:1000,cloud:1000};
+const COLORS={pc:'#1f6feb',phone:'#00b8d9',router:'#e05c2a',switch:'#1a7f37',patchPanel:'#d29922',server:'#8250df',firewall:'#cf222e',cloud:'#0969da',satDish:'#00a6c7',satellite:'#f0a91f'};
+const GLOW={pc:'#58a6ff',phone:'#70e1ff',router:'#ff8a50',switch:'#56d364',patchPanel:'#f2cc60',server:'#bc8cff',firewall:'#ff6166',cloud:'#4dabf7',satDish:'#70e1ff',satellite:'#ffd166'};
+const ICONS={pc:'💻',phone:'📱',router:'🔀',switch:'🔌',patchPanel:'🧩',server:'🖥️',firewall:'🛡️',cloud:'☁️',satDish:'📡',satellite:'🛰️'};
+const LABELS={pc:'PC',phone:'Celular',router:'Router',switch:'Switch',patchPanel:'Patch panel',server:'Server',firewall:'Firewall',cloud:'Cloud',satDish:'Antena satelital',satellite:'Satélite'};
+const BW={router:1000,switch:1000,patchPanel:1000,firewall:1000,pc:1000,phone:300,server:1000,cloud:1000,satDish:1000,satellite:300};
+const SATELLITE_PROVIDERS={
+  starlink:{name:'Starlink',orbit:'LEO',color:'#4dabf7',bw:300,latency:40,terminal:'Terminal Starlink',detail:'Constelação em órbita baixa · baixa latência'},
+  hughesnet:{name:'HughesNet',orbit:'GEO',color:'#f28c28',bw:100,latency:600,terminal:'Antena HughesNet',detail:'Satélite geoestacionário · cobertura rural'},
+  viasat:{name:'Viasat',orbit:'GEO',color:'#7a5cff',bw:100,latency:600,terminal:'Antena Viasat',detail:'Satélite geoestacionário · modem/gateway'}
+};
 
 function isLightTheme(){return document.body.classList.contains('light-theme');}
 function themeColor(darkColor,lightColor){return isLightTheme()?lightColor:darkColor;}
@@ -697,6 +709,8 @@ const EXPLAIN={
   server:'🖥️ Server (Servidor): Fornece serviços como web (HTTP), e-mail, DNS, arquivos. Sempre ligado e aguarda conexões de clientes.',
   firewall:'🛡️ Firewall: Filtra o tráfego de rede com base em regras (ACL). Permite ou bloqueia pacotes por IP, porta ou protocolo. Primeira linha de defesa.',
   cloud:'☁️ Cloud (Nuvem/Internet): Representa a Internet ou uma WAN externa. Pacotes que passam por aqui simulam tráfego externo com maior latência.',
+  satDish:'📡 Antena/terminal satelital: equipamento instalado no local do assinante. Liga-se ao roteador por cabo Ethernet e troca dados com o satélite por radiofrequência.',
+  satellite:'🛰️ Satélite de Internet: retransmite o sinal entre o terminal do assinante e a infraestrutura do provedor. Satélites LEO possuem menor latência que satélites GEO.',
 };
 const RACK_SIZES={
   12:{label:'Rack compacto 12U',height:126},
@@ -829,6 +843,29 @@ function preparePCPlacement(style){
   document.getElementById('s-mode').textContent=pendingPCStyle==='complete'?'Adicionar: Computador':'Adicionar: Notebook';
   rackNotice(pendingPCStyle==='complete'?'Computador selecionado':'Notebook selecionado',pendingPCStyle==='complete'?'Clique no espaço de trabalho para adicionar monitor, gabinete, teclado e mouse.':'Clique no espaço de trabalho para adicionar o notebook realista.','ok');
 }
+function showSatelliteEquipmentModal(){
+  const providerOptions=Object.entries(SATELLITE_PROVIDERS).map(([key,p])=>`<option value="${key}" ${key===pendingSatelliteProvider?'selected':''}>${p.name} — ${p.orbit} · ${formatBandwidth(p.bw)} · ~${p.latency} ms</option>`).join('');
+  showModal(`<h3>🛰️ Internet via satélite</h3>
+    <div class="edu-note">Escolha o provedor e o equipamento. Para montar o acesso completo, adicione uma antena/terminal e um satélite da mesma empresa. Depois use <b>Conexões → Criar enlace satelital</b>. Valores de banda e latência são aproximações didáticas.</div>
+    <label>Provedor satelital</label><select id="sat-provider">${providerOptions}</select>
+    <label>Equipamento</label><select id="sat-equipment">
+      <option value="satDish">📡 Antena/terminal do assinante — liga ao roteador por cabo</option>
+      <option value="satellite">🛰️ Satélite orbital — liga à antena e à Nuvem/Internet</option>
+    </select>
+    <div class="cfg-sec"><h5>Provedores disponíveis</h5>
+      ${Object.values(SATELLITE_PROVIDERS).map(p=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid #30363d"><b style="color:${p.color}">${p.name}</b><span style="font-size:9px;color:#8b949e">${p.orbit} · ${formatBandwidth(p.bw)} · ~${p.latency} ms</span></div>`).join('')}
+    </div>
+    <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="prepareSatellitePlacement()">✅ Escolher local</button></div>`);
+}
+function prepareSatellitePlacement(){
+  const provider=document.getElementById('sat-provider')?.value,equipment=document.getElementById('sat-equipment')?.value;
+  pendingSatelliteProvider=SATELLITE_PROVIDERS[provider]?provider:'starlink';
+  pendingSatelliteEquipment=equipment==='satellite'?'satellite':'satDish';
+  const p=SATELLITE_PROVIDERS[pendingSatelliteProvider];
+  closeModal();setMode('add',pendingSatelliteEquipment);
+  document.getElementById('s-mode').textContent=`Adicionar: ${pendingSatelliteEquipment==='satellite'?'Satélite':'Antena'} ${p.name}`;
+  rackNotice(`${pendingSatelliteEquipment==='satellite'?'Satélite orbital':'Terminal/antena'} selecionado`,`${p.name} · ${p.orbit}. Clique no espaço de trabalho para posicionar o equipamento.`,'ok');
+}
 function pcStyleOf(dev){return dev?.pcStyle==='complete'?'complete':'notebook';}
 function pcFormatLabel(dev){return pcStyleOf(dev)==='complete'?'Computador':'Notebook';}
 function serverTypeOf(dev){return dev?.serverType==='tower'?'tower':'rack';}
@@ -838,7 +875,8 @@ function switchFormatLabel(dev){return switchFormOf(dev)==='rack'?'Switch rack 1
 function addDevice(x,y,type){
   saveHistory();
   const n=devices.filter(d=>d.type===type).length+1;
-  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:type==='switch'?`Switch ${pendingSwitchForm==='rack'?'Rack':'Mesa'} ${n}`:type==='patchPanel'?`Patch Panel ${n}`:type==='pc'?(pendingPCStyle==='complete'?`Computador ${n}`:`Notebook ${n}`):LABELS[type]+n;
+  const satProvider=SATELLITE_PROVIDERS[pendingSatelliteProvider]||SATELLITE_PROVIDERS.starlink;
+  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:type==='switch'?`Switch ${pendingSwitchForm==='rack'?'Rack':'Mesa'} ${n}`:type==='patchPanel'?`Patch Panel ${n}`:type==='pc'?(pendingPCStyle==='complete'?`Computador ${n}`:`Notebook ${n}`):type==='satDish'?`${satProvider.terminal} ${n}`:type==='satellite'?`${satProvider.name} Satélite ${n}`:LABELS[type]+n;
   const ip=type==='patchPanel'?'Sem IP':genIP(type,n);
   const mac=type==='patchPanel'?'—':genMAC();
   const firstKind=type==='phone'?'wireless':'wired';
@@ -850,13 +888,24 @@ function addDevice(x,y,type){
   if(type==='patchPanel')d.portCount=pendingPatchPorts;
   if(type==='server')d.serverType=pendingServerType==='tower'?'tower':'rack';
   if(type==='pc')d.pcStyle=pendingPCStyle==='complete'?'complete':'notebook';
+  if(type==='satDish'){
+    d.satelliteProvider=pendingSatelliteProvider;d.orbit=satProvider.orbit;d.providerName=satProvider.name;d.satelliteBW=satProvider.bw;d.satelliteLatency=satProvider.latency;
+    d.interfaces=[
+      {name:'eth0',ip,mask:'255.255.255.0',status:'up',kind:'wired',speed:1000,mac:genMAC()},
+      {name:'sat0',ip:'',mask:'',status:'up',kind:'satellite',speed:satProvider.bw,mac:genMAC()}
+    ];
+  }
+  if(type==='satellite'){
+    d.satelliteProvider=pendingSatelliteProvider;d.orbit=satProvider.orbit;d.providerName=satProvider.name;d.satelliteBW=satProvider.bw;d.satelliteLatency=satProvider.latency;d.isInternetGateway=true;
+    d.interfaces=Array.from({length:16},(_,i)=>({name:`beam${i+1}`,ip:i? '':ip,mask:'255.255.255.0',status:'up',kind:'satellite',speed:satProvider.bw,mac:genMAC()}));
+  }
   const ifc={router:4,switch:d.portCount||24,patchPanel:d.portCount||24,server:2,firewall:4,cloud:2};
   for(let i=1;i<(ifc[type]||1);i++) d.interfaces.push({name:type==='patchPanel'?'porta'+(i+1):'eth'+i,ip:'',mask:'255.255.255.0',status:'up',kind:'wired',speed:BW[type]||1000,mac:type==='patchPanel'?'—':genMAC()});
   devices.push(d);
   if(getRackAt(x,y))assignRack(d);
   if(type!=='patchPanel'){arpTable[ip]=mac;macTable[mac]=d.id;}
   updateAll();
-  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+switchFormatLabel(d)+' · '+d.portCount+' portas':type==='patchPanel'?' · passivo · '+d.portCount+' portas':type==='server'?' · '+serverFormatLabel(d):type==='pc'?' · '+pcFormatLabel(d):''}${type==='patchPanel'?'':' IP:'+ip}`,'lsys');
+  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+switchFormatLabel(d)+' · '+d.portCount+' portas':type==='patchPanel'?' · passivo · '+d.portCount+' portas':type==='server'?' · '+serverFormatLabel(d):type==='pc'?' · '+pcFormatLabel(d):['satDish','satellite'].includes(type)?` · ${satProvider.orbit} · ${formatBandwidth(satProvider.bw)} · ~${satProvider.latency} ms`:''}${type==='patchPanel'?'':' IP:'+ip}`,'lsys');
   showExplain(type);
   return d;
 }
@@ -866,7 +915,7 @@ function genIP(type,n){
   if(type==='router'&&['lan4','lan5'].includes(classroom.activity))return '192.168.1.'+(255-n);
   if(type==='server'&&classroom.activity==='lan5')return `192.168.${n%2?1:2}.${100+Math.ceil(n/2)}`;
   if(type==='server')return '192.168.1.'+(100+n);
-  const b={pc:'192.168.1',phone:'192.168.10',router:'10.0.0',switch:'172.16.0',server:'192.168.0',firewall:'10.10.0',cloud:'203.0.113'};
+  const b={pc:'192.168.1',phone:'192.168.10',router:'10.0.0',switch:'172.16.0',server:'192.168.0',firewall:'10.10.0',cloud:'203.0.113',satDish:'100.64.10',satellite:'100.64.250'};
   return (b[type]||'10.0.0')+'.'+n;
 }
 function genMAC(){return 'XX:XX:XX:XX:XX:XX'.replace(/X/g,()=>'0123456789ABCDEF'[Math.floor(Math.random()*16)]);}
@@ -1227,6 +1276,53 @@ function connectWiFiDevices(a,b){
 }
 
 // =========================================================
+// INTERNET VIA SATÉLITE
+// =========================================================
+function startSatelliteLinkMode(){
+  const dishes=devices.filter(d=>d.type==='satDish'),satellites=devices.filter(d=>d.type==='satellite');
+  if(!dishes.length||!satellites.length){rackNotice('Equipamentos insuficientes','Adicione pelo menos uma antena/terminal e um satélite orbital em Adicionar → Internet via satélite.');return;}
+  mode='satelliteLink';addType='';connectFirst=null;satelliteLinkFirst=null;selected=null;
+  document.querySelectorAll('#topbar button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-satellite-link')?.classList.add('active');
+  document.getElementById('s-mode').textContent='Enlace satelital: selecione antena, satélite ou Nuvem';
+  document.getElementById('explain-icon').textContent='🛰️';
+  document.getElementById('explain-text').textContent='Clique na antena e depois no satélite da mesma empresa. Para completar o caminho até a Internet, conecte o satélite a uma Nuvem/Internet usando este mesmo modo.';
+  document.getElementById('explain-bar').classList.remove('activity-active');document.getElementById('explain-bar').classList.add('show');draw();
+}
+function selectSatelliteLinkDevice(dev){
+  if(!dev||!['satDish','satellite','cloud'].includes(dev.type)){rackNotice('Equipamento incompatível','O enlace satelital aceita Antena/terminal, Satélite orbital ou Nuvem/Internet.');return;}
+  if(!satelliteLinkFirst){
+    satelliteLinkFirst=dev;selected=dev;updateDevList();draw();
+    document.getElementById('s-mode').textContent='Enlace satelital: selecione o segundo equipamento';
+    rackNotice('Primeiro equipamento selecionado',`${dev.name}. Agora selecione o equipamento correspondente.`,'ok');return;
+  }
+  if(satelliteLinkFirst.id===dev.id){rackNotice('Seleção inválida','Escolha outro equipamento.');return;}
+  const a=satelliteLinkFirst,b=dev;
+  const dish=a.type==='satDish'?a:(b.type==='satDish'?b:null);
+  const satellite=a.type==='satellite'?a:(b.type==='satellite'?b:null);
+  const cloud=a.type==='cloud'?a:(b.type==='cloud'?b:null);
+  if(!satellite||(!dish&&!cloud)||(dish&&cloud)){rackNotice('Ligação inválida','Conecte Antena ↔ Satélite ou Satélite ↔ Nuvem/Internet.');return;}
+  if(dish&&dish.satelliteProvider!==satellite.satelliteProvider){
+    const dp=SATELLITE_PROVIDERS[dish.satelliteProvider]?.name||dish.providerName,sp=SATELLITE_PROVIDERS[satellite.satelliteProvider]?.name||satellite.providerName;
+    rackNotice('Provedores diferentes',`${dp} não pode ser associado ao satélite ${sp}. Escolha equipamentos da mesma empresa.`);return;
+  }
+  if(connections.some(c=>c.kind==='satellite'&&((c.from===a.id&&c.to===b.id)||(c.from===b.id&&c.to===a.id)))){rackNotice('Enlace já existente',`${a.name} e ${b.name} já estão conectados.`);return;}
+  const providerKey=satellite.satelliteProvider||dish?.satelliteProvider||'starlink',provider=SATELLITE_PROVIDERS[providerKey]||SATELLITE_PROVIDERS.starlink;
+  const satIface=nextFreeInterface(satellite,'satellite');
+  const dishIface=dish?nextFreeInterface(dish,'satellite'):null;
+  if(!satIface||(dish&&!dishIface)){rackNotice('Canal indisponível',`${!satIface?satellite.name:dish.name} não possui canal satelital livre.`);return;}
+  const fromIface=a.type==='satellite'?satIface:(a.type==='satDish'?dishIface:`gateway-${satellite.id}`);
+  const toIface=b.type==='satellite'?satIface:(b.type==='satDish'?dishIface:`gateway-${satellite.id}`);
+  saveHistory();
+  connections.push({id:nextId++,from:a.id,to:b.id,bw:provider.bw,lat:provider.latency/4,kind:'satellite',medium:'radio-satellite',provider:providerKey,providerName:provider.name,orbit:provider.orbit,fromIface,toIface});
+  if(dish){dish.satelliteId=satellite.id;dish.satelliteStatus='conectado';dish.gw=satellite.ip;}
+  satelliteLinkFirst=null;selected=null;updateAll();
+  document.getElementById('s-mode').textContent='Enlace satelital ativo: selecione outro par';
+  rackNotice('Enlace satelital criado',`${a.name} ↔ ${b.name} · ${provider.name} ${provider.orbit} · ${formatBandwidth(provider.bw)} · ~${provider.latency} ms fim a fim.`,'ok');
+  sysLog(`🛰️ SATÉLITE: ${a.name} ↔ ${b.name} | ${provider.name} ${provider.orbit} | ${formatBandwidth(provider.bw)} | ~${provider.latency} ms`,'lsys');
+}
+
+// =========================================================
 // BACKBONE
 // =========================================================
 const BACKBONE_TYPES=['switch','router','firewall','server','cloud'];
@@ -1423,9 +1519,10 @@ function drawConn(c){
   const isBackbone=c.kind==='backbone';
   const isWifi=c.kind==='wifi';
   const isISPFiber=c.kind==='ispFiber';
+  const isSatellite=c.kind==='satellite';
   const isRackCable=!!c.rackCable;
-  if(active){ctx.shadowColor=isBackbone?'#a371f7':((isWifi||isISPFiber)?'#70e1ff':'#58a6ff');ctx.shadowBlur=14;}
-  ctx.setLineDash(isWifi?[3,6]:(up?[]:[5,4]));
+  if(active){ctx.shadowColor=isBackbone?'#a371f7':((isWifi||isISPFiber||isSatellite)?'#70e1ff':'#58a6ff');ctx.shadowBlur=14;}
+  ctx.setLineDash(isSatellite?[8,5]:(isWifi?[3,6]:(up?[]:[5,4])));
   if(isBackbone){
     ctx.beginPath();ctx.strokeStyle=up?'rgba(163,113,247,.38)':'#3d1c1c';ctx.lineWidth=9;
     ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
@@ -1436,6 +1533,15 @@ function drawConn(c){
     ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
     ctx.beginPath();ctx.strokeStyle=active?'#ffffff':(up?'#38bdf8':'#6b3030');ctx.lineWidth=3;
     ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  }else if(isSatellite){
+    const p=SATELLITE_PROVIDERS[c.provider]||SATELLITE_PROVIDERS.starlink,beamColor=p.color||'#70e1ff';
+    ctx.beginPath();ctx.strokeStyle=up?beamColor+'3d':'#3d1c1c';ctx.lineWidth=9;ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    ctx.beginPath();ctx.strokeStyle=active?'#ffffff':(up?beamColor:'#6b3030');ctx.lineWidth=2.8;ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    if(up){
+      const phase=(performance.now()/900)%1;
+      for(let i=0;i<3;i++){const t=(phase+i/3)%1,px=a.x+(b.x-a.x)*t,py=a.y+(b.y-a.y)*t;ctx.fillStyle='#ffffff';ctx.shadowColor=beamColor;ctx.shadowBlur=8;ctx.beginPath();ctx.arc(px,py,2.2,0,Math.PI*2);ctx.fill();}
+      ctx.shadowBlur=0;
+    }
   }else if(isWifi){
     ctx.beginPath();ctx.strokeStyle=up?(active?'#d7f8ff':'#38bcd8'):'#6b3030';ctx.lineWidth=active?4:2.5;
     ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
@@ -1454,14 +1560,14 @@ function drawConn(c){
   const rackForCable=isRackCable?racks.find(r=>r.id===a.rackId&&r.id===b.rackId):null;
   const mx=isRackCable?(rackForCable?rackForCable.x+rackForCable.w/2+52:Math.max(a.x,b.x)+70):(a.x+b.x)/2;
   const my=(a.y+b.y)/2+(isRackCable?17:0);
-  const mediumLabel={fiber:'Fibra',copper:'Cat6A',radio:'Rádio'}[c.medium]||'';
-  const linkLabel=isRackCable?`PATCH • ${formatBandwidth(c.bw)}`:(isISPFiber?`FIBRA ISP • ${formatBandwidth(c.bw)}`:(isBackbone?`BACKBONE • ${formatBandwidth(c.bw)}${mediumLabel?' • '+mediumLabel:''}`:(isWifi?`WI-FI • ${c.ssid||'SSID'} • ${c.bw}M`:c.bw+'M')));
-  ctx.font=(isBackbone||isWifi||isISPFiber)?'bold 8px monospace':'8px monospace';
+  const mediumLabel={fiber:'Fibra',copper:'Cat6A',radio:'Rádio','radio-satellite':'RF'}[c.medium]||'';
+  const linkLabel=isRackCable?`PATCH • ${formatBandwidth(c.bw)}`:(isISPFiber?`FIBRA ISP • ${formatBandwidth(c.bw)}`:(isSatellite?`SAT • ${c.providerName||'ORBITAL'} • ${formatBandwidth(c.bw)} • ${Math.round((c.lat||0)*2)}ms`:(isBackbone?`BACKBONE • ${formatBandwidth(c.bw)}${mediumLabel?' • '+mediumLabel:''}`:(isWifi?`WI-FI • ${c.ssid||'SSID'} • ${c.bw}M`:c.bw+'M'))));
+  ctx.font=(isBackbone||isWifi||isISPFiber||isSatellite)?'bold 8px monospace':'8px monospace';
   const labelW=Math.max(36,ctx.measureText(linkLabel).width+12);
-  ctx.fillStyle=isRackCable?'#3b2f0a':(isISPFiber?'#082f49':(isBackbone?'#24183a':(isWifi?'#0b2933':themeColor('#1c2128','#ffffff'))));ctx.beginPath();
+  ctx.fillStyle=isRackCable?'#3b2f0a':(isISPFiber?'#082f49':(isSatellite?'#11243a':(isBackbone?'#24183a':(isWifi?'#0b2933':themeColor('#1c2128','#ffffff')))));ctx.beginPath();
   if(ctx.roundRect)ctx.roundRect(mx-labelW/2,my-8,labelW,15,4);else{ctx.rect(mx-labelW/2,my-8,labelW,15);}
   ctx.fill();
-  ctx.fillStyle=isRackCable?'#fff3b0':(isISPFiber?'#bae6fd':(isBackbone?'#d8c3ff':(isWifi?'#70e1ff':themeColor('#6e7681','#40566c'))));ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle=isRackCable?'#fff3b0':(isISPFiber?'#bae6fd':(isSatellite?'#d7f8ff':(isBackbone?'#d8c3ff':(isWifi?'#70e1ff':themeColor('#6e7681','#40566c')))));ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.fillText(linkLabel,mx,my);
   ctx.restore();
 }
@@ -1476,7 +1582,7 @@ function getConnectionAt(x,y){
   return connections.slice().reverse().find(c=>{
     const a=devices.find(d=>d.id===c.from),b=devices.find(d=>d.id===c.to);if(!a||!b)return false;
     if(c.rackCable){const rack=racks.find(r=>r.id===a.rackId&&r.id===b.rackId),loopX=rack?rack.x+rack.w/2+18:Math.max(a.x,b.x)+55,startX=rack?rack.x+rack.w/2-30:a.x+28,my=(a.y+b.y)/2;return Math.min(pointToSegmentDistance(x,y,startX,a.y,loopX,my),pointToSegmentDistance(x,y,loopX,my,startX,b.y))<12;}
-    return pointToSegmentDistance(x,y,a.x,a.y,b.x,b.y)<((c.kind==='backbone'||c.kind==='ispFiber')?12:(c.kind==='wifi'?11:9));
+    return pointToSegmentDistance(x,y,a.x,a.y,b.x,b.y)<((c.kind==='backbone'||c.kind==='ispFiber'||c.kind==='satellite')?12:(c.kind==='wifi'?11:9));
   });
 }
 function deleteConnectionAt(x,y){
@@ -1492,8 +1598,12 @@ function removeConnection(conn){
     const phone=a?.type==='phone'?a:(b?.type==='phone'?b:null);
     if(phone){phone.wifiRouterId=null;phone.ssid='';phone.gw='';}
   }
+  if(conn.kind==='satellite'){
+    const dish=a?.type==='satDish'?a:(b?.type==='satDish'?b:null);
+    if(dish){dish.satelliteId=null;dish.satelliteStatus='desconectado';dish.gw='';}
+  }
   connections=connections.filter(c=>c.id!==conn.id);updateAll();
-  const kind=conn.kind==='backbone'?'Backbone':(conn.kind==='ispFiber'?'Fibra entre provedores':(conn.kind==='wifi'?'Conexão Wi-Fi':'Cabo de rede'));
+  const kind=conn.kind==='backbone'?'Backbone':(conn.kind==='ispFiber'?'Fibra entre provedores':(conn.kind==='satellite'?'Enlace satelital':(conn.kind==='wifi'?'Conexão Wi-Fi':'Cabo de rede')));
   rackNotice(`${kind} removido`,`${a?.name||'Dispositivo'} ↔ ${b?.name||'Dispositivo'}.`,'ok');
   sysLog(`${kind} removido: ${a?.name||'?'} ↔ ${b?.name||'?'}`,'lwarn');
   if(selected&&!selected._rack&&devices.some(d=>d.id===selected.id))updateProp(selected);
@@ -1501,7 +1611,7 @@ function removeConnection(conn){
 
 function drawDev(d){
   const isSel=selected&&selected.id===d.id;
-  const isConn=(connectFirst&&connectFirst.id===d.id)||(backboneFirst&&backboneFirst.id===d.id)||(wifiFirst&&wifiFirst.id===d.id)||(ispFiberFirst&&ispFiberFirst.id===d.id);
+  const isConn=(connectFirst&&connectFirst.id===d.id)||(backboneFirst&&backboneFirst.id===d.id)||(wifiFirst&&wifiFirst.id===d.id)||(ispFiberFirst&&ispFiberFirst.id===d.id)||(satelliteLinkFirst&&satelliteLinkFirst.id===d.id);
   const isDown=d.status==='down';
   const col=isDown?'#555':COLORS[d.type];
   ctx.save();
@@ -1737,6 +1847,40 @@ function drawDev(d){
       ctx.beginPath();ctx.arc(d.x-fw2*.35+i*fw2*.22+fw2*.09,d.y+fh3*.1,1.5,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
     }
 
+  } else if(d.type==='satDish'){
+    const provider=SATELLITE_PROVIDERS[d.satelliteProvider]||SATELLITE_PROVIDERS.starlink,pcol=isDown?'#555':provider.color;
+    // Base e mastro do terminal.
+    ctx.strokeStyle=isDown?'#333':'#71869a';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(d.x,d.y+21);ctx.lineTo(d.x,d.y+4);ctx.stroke();
+    ctx.fillStyle=isDown?'#1a1a1a':'#2b3d49';ctx.strokeStyle=pcol;ctx.lineWidth=1.2;rr2(d.x-15,d.y+18,30,7,3);ctx.fill();ctx.stroke();
+    // Antena parabólica/terminal inclinado.
+    ctx.save();ctx.translate(d.x-2,d.y-5);ctx.rotate(-.48);
+    const dg=ctx.createLinearGradient(-20,-10,18,12);dg.addColorStop(0,isDown?'#292929':'#f2f6f8');dg.addColorStop(.55,isDown?'#181818':'#aebfca');dg.addColorStop(1,isDown?'#0d0d0d':'#50636f');
+    ctx.fillStyle=dg;ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':pcol);ctx.lineWidth=isSel||isConn?2.5:1.5;ctx.beginPath();ctx.ellipse(0,0,22,11,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle=isDown?'#222':'#324854';rr2(-8,-4,16,8,2);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.25)';ctx.stroke();
+    ctx.strokeStyle=isDown?'#333':'#647986';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(5,2);ctx.lineTo(20,-8);ctx.stroke();ctx.fillStyle=pcol;ctx.beginPath();ctx.arc(20,-8,2.6,0,Math.PI*2);ctx.fill();ctx.restore();
+    // Modem compacto e indicadores.
+    ctx.fillStyle=isDown?'#121212':'#10232d';ctx.strokeStyle=pcol;rr2(d.x+15,d.y+8,13,17,3);ctx.fill();ctx.stroke();
+    ['#3fb950','#4dabf7','#f2cc60'].forEach((c,i)=>{ctx.fillStyle=isDown?'#222':c;ctx.beginPath();ctx.arc(d.x+21.5,d.y+12+i*4,1.3,0,Math.PI*2);ctx.fill();});
+    if(!isDown){ctx.strokeStyle=pcol+'88';ctx.lineWidth=1.2;[10,16,22].forEach(rad=>{ctx.beginPath();ctx.arc(d.x+7,d.y-20,rad,Math.PI+0.15,-0.55);ctx.stroke();});}
+    ctx.fillStyle=pcol;ctx.font='bold 6px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(provider.name.toUpperCase(),d.x,d.y+7);
+
+  } else if(d.type==='satellite'){
+    const provider=SATELLITE_PROVIDERS[d.satelliteProvider]||SATELLITE_PROVIDERS.starlink,pcol=isDown?'#555':provider.color;
+    // Painéis solares segmentados.
+    const panelG=ctx.createLinearGradient(d.x-39,d.y,d.x+39,d.y);panelG.addColorStop(0,'#112b5c');panelG.addColorStop(.5,'#1f6feb');panelG.addColorStop(1,'#112b5c');
+    ctx.fillStyle=isDown?'#171717':panelG;ctx.strokeStyle=isDown?'#333':'#4dabf7';ctx.lineWidth=1;
+    [-1,1].forEach(side=>{const px=side<0?d.x-43:d.x+17;rr2(px,d.y-10,26,20,2);ctx.fill();ctx.stroke();for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(px+i*6.5,d.y-10);ctx.lineTo(px+i*6.5,d.y+10);ctx.stroke();}ctx.beginPath();ctx.moveTo(px,d.y);ctx.lineTo(px+26,d.y);ctx.stroke();});
+    // Corpo central metálico.
+    const sg=ctx.createLinearGradient(d.x-16,d.y-15,d.x+16,d.y+15);sg.addColorStop(0,isDown?'#292929':'#eef3f6');sg.addColorStop(.38,isDown?'#191919':'#81939e');sg.addColorStop(1,isDown?'#0b0b0b':'#2b3942');
+    ctx.fillStyle=sg;ctx.strokeStyle=isSel?'#f78166':(isConn?'#d2a679':pcol);ctx.lineWidth=isSel||isConn?2.5:1.5;rr2(d.x-16,d.y-15,32,30,5);ctx.fill();ctx.stroke();
+    ctx.fillStyle=isDown?'#181818':'#182935';rr2(d.x-10,d.y-8,20,16,3);ctx.fill();ctx.strokeStyle=pcol+'aa';ctx.stroke();
+    // Antena de comunicação e sensores.
+    ctx.strokeStyle=isDown?'#333':'#607784';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(d.x,d.y+10);ctx.lineTo(d.x,d.y+23);ctx.stroke();
+    ctx.fillStyle=isDown?'#222':'#d7e3e8';ctx.strokeStyle=pcol;ctx.beginPath();ctx.ellipse(d.x,d.y+22,10,4,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle=pcol;ctx.beginPath();ctx.arc(d.x,d.y-5,3,0,Math.PI*2);ctx.fill();
+    if(!isDown){ctx.strokeStyle=pcol+'66';ctx.lineWidth=1;ctx.setLineDash([3,4]);ctx.beginPath();ctx.ellipse(d.x,d.y,48,25,-.18,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);}
+    ctx.fillStyle=pcol;ctx.font='bold 6px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(provider.orbit,d.x,d.y+2);
+
   } else if(d.type==='cloud'){
     // Globe
     ctx.shadowBlur=isDown?0:16;ctx.shadowColor=col+'66';
@@ -1916,6 +2060,7 @@ canvas.addEventListener('mousedown',e=>{
   if(mode==='add'){addDevice(x,y,addType);return;}
   if(mode==='deleteLink'){deleteConnectionAt(x,y);return;}
   if(mode==='wifi'){selectWiFiDevice(dev);return;}
+  if(mode==='satelliteLink'){selectSatelliteLinkDevice(dev);return;}
   if(mode==='ispFiber'){selectISPFiberProvider(dev);return;}
   if(mode==='backbone'){selectBackboneDevice(dev);return;}
   if(mode==='connect'){
@@ -1940,7 +2085,7 @@ canvas.addEventListener('mousemove',e=>{
   const tip=document.getElementById('tip');
   if(dev){
     tip.style.display='block';tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-40)+'px';
-    tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b>${dev.type==='server'?`<br>Formato: <b style="color:#bc8cff">${serverFormatLabel(dev)}</b>`:dev.type==='switch'?`<br>Formato: <b style="color:#56d364">${switchFormatLabel(dev)}</b>`:dev.type==='patchPanel'?`<br>Tipo: <b style="color:#f2cc60">Passivo · 1U · ${dev.portCount||24} portas</b>`:''}${dev.rackId?`<br>Posição no rack: <b style="color:#58a6ff">U${(dev.rackSlotU||0)+1}</b>`:''}${dev.type==='patchPanel'?'':`<br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code>`}<br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b>`;
+    tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b>${dev.type==='server'?`<br>Formato: <b style="color:#bc8cff">${serverFormatLabel(dev)}</b>`:dev.type==='switch'?`<br>Formato: <b style="color:#56d364">${switchFormatLabel(dev)}</b>`:dev.type==='patchPanel'?`<br>Tipo: <b style="color:#f2cc60">Passivo · 1U · ${dev.portCount||24} portas</b>`:['satDish','satellite'].includes(dev.type)?`<br>Provedor: <b style="color:${SATELLITE_PROVIDERS[dev.satelliteProvider]?.color||'#70e1ff'}">${dev.providerName||'Satelital'} · ${dev.orbit||'-'}</b><br>Banda: ${formatBandwidth(dev.satelliteBW||100)} · Latência: ~${dev.satelliteLatency||'-'} ms`:''}${dev.rackId?`<br>Posição no rack: <b style="color:#58a6ff">U${(dev.rackSlotU||0)+1}</b>`:''}${dev.type==='patchPanel'?'':`<br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code>`}<br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b>`;
   }else{tip.style.display='none';}
 });
 canvas.addEventListener('mouseup',()=>{const moved=dragging;if(moved)assignRack(moved);dragging=null;draggingRack=null;updateAll();if(moved)updateProp(moved);});
@@ -1963,14 +2108,15 @@ function setMode(m,type){
   mode=m;addType=type||'';connectFirst=null;
   if(m!=='wifi')wifiFirst=null;
   if(m!=='ispFiber')ispFiberFirst=null;
+  if(m!=='satelliteLink')satelliteLinkFirst=null;
   canvas.style.cursor=m==='deleteLink'?'crosshair':'default';
   if(m!=='backbone'){backboneFirst=null;backboneSecond=null;}
   document.querySelectorAll('#topbar button').forEach(b=>b.classList.remove('active'));
-  const id=type?'btn-'+type:(m==='connect'?'btn-connect':(m==='wifi'?'btn-wifi':(m==='ispFiber'?'btn-isp-fiber':(m==='deleteLink'?'btn-delete-link':(m==='select'?'btn-select':null)))));
+  const id=type?'btn-'+type:(m==='connect'?'btn-connect':(m==='wifi'?'btn-wifi':(m==='satelliteLink'?'btn-satellite-link':(m==='ispFiber'?'btn-isp-fiber':(m==='deleteLink'?'btn-delete-link':(m==='select'?'btn-select':null))))));
   if(id){const btn=document.getElementById(id);if(btn)btn.classList.add('active');}
   if(m==='select')document.getElementById('btn-select-quick')?.classList.add('active');
   if(!document.getElementById('right')?.classList.contains('terminal-hidden'))document.getElementById('btn-terminal-quick')?.classList.add('active');
-  const lbl={select:'Selecionar (arrastar)',connect:'Conectar — clique no 1º dispositivo',wifi:'Wi-Fi — selecione celular e roteador sem fio',ispFiber:'Fibra ISP — selecione dois provedores',deleteLink:'Apagar cabo — clique diretamente na conexão',add:'Adicionar: '+LABELS[type||'']};
+  const lbl={select:'Selecionar (arrastar)',connect:'Conectar — clique no 1º dispositivo',wifi:'Wi-Fi — selecione celular e roteador sem fio',satelliteLink:'Enlace satelital — selecione dois equipamentos',ispFiber:'Fibra ISP — selecione dois provedores',deleteLink:'Apagar cabo — clique diretamente na conexão',add:'Adicionar: '+LABELS[type||'']};
   document.getElementById('s-mode').textContent=lbl[m]||m;
   if(m==='deleteLink'){
     document.getElementById('explain-icon').textContent='✂️';
@@ -2006,6 +2152,7 @@ function deleteSelected(){
     selected=null;updateAll();updateProp(null);return;
   }
   const oldRack=racks.find(r=>r.id===selected.rackId);
+  if(selected.type==='satellite')devices.filter(d=>d.type==='satDish'&&d.satelliteId===selected.id).forEach(d=>{d.satelliteId=null;d.satelliteStatus='desconectado';d.gw='';});
   connections=connections.filter(c=>c.from!==selected.id&&c.to!==selected.id);
   delete arpTable[selected.ip];delete macTable[selected.mac];
   devices=devices.filter(d=>d.id!==selected.id);
@@ -2018,7 +2165,7 @@ function clearAll(){
   if(!confirm('Limpar toda a topologia?'))return;
   saveHistory();
   devices=[];connections=[];packets=[];racks=[];arpTable={};macTable={};selected=null;
-  connectFirst=null;backboneFirst=null;backboneSecond=null;wifiFirst=null;ispFiberFirst=null;
+  connectFirst=null;backboneFirst=null;backboneSecond=null;wifiFirst=null;ispFiberFirst=null;satelliteLinkFirst=null;
   dragging=null;draggingRack=null;sTx=0;sRx=0;sDrop=0;classroom.lastScore=null;classroom.faults=[];classroom.faultSnapshot=null;
   closeModal();setMode('select');updateProp(null);updateAll();
   rackNotice('Rede limpa','Todos os dispositivos, racks e conexões foram removidos. Use Desfazer para restaurar a topologia.','ok');
@@ -2472,9 +2619,9 @@ function doPing(){
   cliPrint(`PING ${dst?.ip}: 56 bytes`,'c-info');
   let s=0,rc=0;
   const go=()=>{
-    if(s>=4){setTimeout(()=>{cliPrint(`--- stats --- 4 tx, ${rc} rx, ${4-rc} loss, rtt avg ${calcLat(src?.type,dst?.type)}ms`,'c-ok');},500);return;}
+    if(s>=4){setTimeout(()=>{cliPrint(`--- stats --- 4 tx, ${rc} rx, ${4-rc} loss, rtt avg ${calcNetworkRTT(src?.id,dst?.id)}ms`,'c-ok');},500);return;}
     const path=findPath(fid,tid);
-    if(path){rc++;launchPacket(fid,tid,'ICMP','ping');cliPrint(`64 bytes from ${dst?.ip}: seq=${s} ttl=64 time=${calcLat(src?.type,dst?.type)}ms`,'c-ok');}
+    if(path){rc++;launchPacket(fid,tid,'ICMP','ping');cliPrint(`64 bytes from ${dst?.ip}: seq=${s} ttl=64 time=${calcNetworkRTT(src?.id,dst?.id)}ms`,'c-ok');}
     else cliPrint(`Request timeout seq=${s}`,'c-err');
     s++;setTimeout(go,450);
   };go();
@@ -2493,14 +2640,14 @@ function doMultiPing(){
     if(seq>=4){
       setTimeout(()=>{
         cliPrint('--- resultado do ping múltiplo ---','c-info');
-        targets.forEach(dst=>{const rc=received[dst.id];cliPrint(`${dst.name} (${dst.ip}): 4 tx, ${rc} rx, ${4-rc} perda${rc?`, média ${calcLat(src.type,dst.type)}ms`:''}`,rc?'c-ok':'c-err');});
+        targets.forEach(dst=>{const rc=received[dst.id];cliPrint(`${dst.name} (${dst.ip}): 4 tx, ${rc} rx, ${4-rc} perda${rc?`, média ${calcNetworkRTT(src.id,dst.id)}ms`:''}`,rc?'c-ok':'c-err');});
         rackNotice('Ping múltiplo concluído',`${targets.length} computadores testados. Consulte o Terminal CLI para os resultados.`,'ok');
       },450);return;
     }
     const currentSeq=seq;
     targets.forEach((dst,i)=>setTimeout(()=>{
       const path=findPath(src.id,dst.id);
-      if(path){received[dst.id]++;launchPacket(src.id,dst.id,'ICMP',`multi-ping seq=${currentSeq}`);cliPrint(`Resposta de ${dst.name} (${dst.ip}): seq=${currentSeq} time=${calcLat(src.type,dst.type)}ms`,'c-ok');}
+      if(path){received[dst.id]++;launchPacket(src.id,dst.id,'ICMP',`multi-ping seq=${currentSeq}`);cliPrint(`Resposta de ${dst.name} (${dst.ip}): seq=${currentSeq} time=${calcNetworkRTT(src.id,dst.id)}ms`,'c-ok');}
       else cliPrint(`${dst.name} (${dst.ip}): destino inalcançável seq=${currentSeq}`,'c-err');
     },i*90));
     seq++;setTimeout(round,Math.max(500,targets.length*90+120));
@@ -2508,10 +2655,15 @@ function doMultiPing(){
   round();
 }
 function calcLat(t1,t2){if(t1==='cloud'||t2==='cloud')return 20;if(t1==='phone'||t2==='phone')return 3;if(t1==='router'||t2==='router')return 2;return 1;}
+function calcNetworkRTT(srcId,dstId){
+  const path=findPath(srcId,dstId);if(!path||path.length<2)return 0;
+  let oneWay=0;for(let i=0;i<path.length-1;i++){const link=connections.find(c=>(c.from===path[i]&&c.to===path[i+1])||(c.to===path[i]&&c.from===path[i+1]));oneWay+=Number(link?.lat)||1;}
+  return Math.max(1,Math.round(oneWay*2));
+}
 
 function showTracerouteModal(){
   showModal(`<h3>🔍 Traceroute</h3>
-    <div class="edu-note">O teste enviará uma sonda animada para cada salto. Roteadores, firewall, nuvem e o destino serão destacados na topologia enquanto o resultado aparece no Terminal CLI.</div>
+    <div class="edu-note">O teste enviará uma sonda animada para cada salto. Roteadores, firewall, antenas, satélites, nuvem e o destino serão destacados na topologia enquanto o resultado aparece no Terminal CLI.</div>
     <label>De</label><select id="tr-from">${devOpts()}</select>
     <label>Para</label><select id="tr-to">${devOpts(true)}</select>
     <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="doTraceroute()">▶ Animar rastreamento</button></div>`);
@@ -2530,7 +2682,7 @@ function getTracerouteHops(path,destinationId){
   return path.filter((id,index)=>{
     if(index===0)return false;
     const d=devices.find(x=>x.id===id);
-    return id===destinationId||['router','firewall','cloud'].includes(d?.type);
+    return id===destinationId||['router','firewall','satDish','satellite','cloud'].includes(d?.type);
   });
 }
 function tracerouteLatency(path,endId){
@@ -2692,9 +2844,9 @@ function processCLI(cmd,dev){
     const src=dev||devices[0];
     cliPrint(`PING ${p[1]}: 56 data bytes`,'c-info');
     let s=0,rc=0;
-    const go=()=>{if(s>=4){setTimeout(()=>cliPrint(`4 tx, ${rc} rx, rtt avg ${calcLat(src?.type,dst.type)}ms`,'c-ok'),400);return;}
+    const go=()=>{if(s>=4){setTimeout(()=>cliPrint(`4 tx, ${rc} rx, rtt avg ${calcNetworkRTT(src?.id,dst.id)}ms`,'c-ok'),400);return;}
       const path=findPath(src.id,dst.id);
-      if(path){rc++;launchPacket(src.id,dst.id,'ICMP','ping');cliPrint(`64 bytes from ${p[1]}: seq=${s} time=${calcLat(src?.type,dst.type)}ms`,'c-ok');}
+      if(path){rc++;launchPacket(src.id,dst.id,'ICMP','ping');cliPrint(`64 bytes from ${p[1]}: seq=${s} time=${calcNetworkRTT(src?.id,dst.id)}ms`,'c-ok');}
       else cliPrint(`timeout seq=${s}`,'c-err');
       s++;setTimeout(go,450);
     };go();return;
@@ -2751,6 +2903,7 @@ function updateProp(dev){
     ${dev.type==='pc'?`<div class="prop-row"><span class="pl">Modelo</span><span class="pv" style="color:#4dabf7">${pcFormatLabel(dev)}</span></div>`:''}
     ${dev.type==='server'?`<div class="prop-row"><span class="pl">Formato</span><span class="pv" style="color:#bc8cff">${serverFormatLabel(dev)}</span></div>`:''}
     ${dev.type==='switch'?`<div class="prop-row"><span class="pl">Formato</span><span class="pv" style="color:#56d364">${switchFormatLabel(dev)}</span></div>`:''}
+    ${['satDish','satellite'].includes(dev.type)?`<div class="prop-row"><span class="pl">Provedor</span><span class="pv" style="color:${SATELLITE_PROVIDERS[dev.satelliteProvider]?.color||'#70e1ff'}">${dev.providerName||'Satelital'}</span></div><div class="prop-row"><span class="pl">Órbita</span><span class="pv">${dev.orbit||'-'}</span></div><div class="prop-row"><span class="pl">Banda simulada</span><span class="pv">${formatBandwidth(dev.satelliteBW||100)}</span></div><div class="prop-row"><span class="pl">Latência fim a fim</span><span class="pv">~${dev.satelliteLatency||'-'} ms</span></div>`:''}
     ${(dev.type==='switch'||dev.type==='patchPanel')?`<div class="prop-row"><span class="pl">Portas Ethernet</span><span class="pv">${dev.portCount||dev.interfaces?.length||24}</span></div>`:''}
     ${dev.type==='patchPanel'?`<div class="prop-row"><span class="pl">Funcionamento</span><span class="pv" style="color:#f2cc60">Passivo · sem IP</span></div>`:`<div class="prop-row"><span class="pl">IP</span><span class="pv">${dev.ip}</span></div><div class="prop-row"><span class="pl">Máscara</span><span class="pv">${dev.mask}</span></div>`}
     <div class="prop-row"><span class="pl">VLAN</span><span class="pv" style="color:${networkGroupColor(dev)}">${dev.vlan||1}</span></div>
@@ -2773,7 +2926,7 @@ function updateProp(dev){
       const other=devices.find(d=>d.id===(c.from===dev.id?c.to:c.from));
       const localPort=c.from===dev.id?c.fromIface:c.toIface,remotePort=c.from===dev.id?c.toIface:c.fromIface;
       const speedControl=c.kind==='cable'?`<button onclick="openCableSpeedConfig(${c.id})" title="Alterar velocidade do cabo" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">⚙️ ${formatBandwidth(c.bw||100)}</button>`:formatBandwidth(c.bw||100);
-      return `${c.kind==='backbone'?'🟣':c.kind==='ispFiber'?'🔷':c.kind==='wifi'?'📶':c.rackCable?'🟡':'🔗'} ${localPort||'-'} ↔ ${other?.name||'Dispositivo'} ${remotePort||''} · ${c.rackCable?'Patch cord no rack':c.kind==='ispFiber'?'Fibra ISP':c.medium==='fiber'?'Fibra':c.kind==='wifi'?'Wi-Fi':'Ethernet'} · ${speedControl} <button class="danger" onclick="deleteConnectionById(${c.id})" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">Apagar</button>`;
+      return `${c.kind==='backbone'?'🟣':c.kind==='ispFiber'?'🔷':c.kind==='satellite'?'🛰️':c.kind==='wifi'?'📶':c.rackCable?'🟡':'🔗'} ${localPort||'-'} ↔ ${other?.name||'Dispositivo'} ${remotePort||''} · ${c.rackCable?'Patch cord no rack':c.kind==='ispFiber'?'Fibra ISP':c.kind==='satellite'?`Enlace ${c.providerName||'satelital'} ${c.orbit||''}`:c.medium==='fiber'?'Fibra':c.kind==='wifi'?'Wi-Fi':'Ethernet'} · ${speedControl} <button class="danger" onclick="deleteConnectionById(${c.id})" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">Apagar</button>`;
     }).join('<br>'):'Nenhuma conexão.'}</div>`;
 }
 function dev_shutdown(id){
@@ -2796,7 +2949,7 @@ function updateDevList(){
         <span><span class="dot ${d.status==='up'?'dot-up':'dot-down'}"></span><span class="dev-name">${d.name}</span></span>
         <span style="font-size:9px;color:#6e7681">${LABELS[d.type]}</span>
       </div>
-      <div class="dev-sub">${d.type==='patchPanel'?'Sem IP · Passivo':d.ip+' · VLAN '+(d.vlan||1)}${d.type==='switch'?' · '+(switchFormOf(d)==='rack'?'Rack 1U':'Mesa')+' · '+(d.portCount||d.interfaces?.length||24)+' portas':''}${d.type==='patchPanel'?' · Rack 1U · '+(d.portCount||24)+' portas':''}${d.type==='server'?' · '+(serverTypeOf(d)==='tower'?'Torre':'Rack 2U'):''}${d.dhcpFrom?' · DHCP':''}</div>
+      <div class="dev-sub">${d.type==='patchPanel'?'Sem IP · Passivo':d.ip+' · VLAN '+(d.vlan||1)}${d.type==='switch'?' · '+(switchFormOf(d)==='rack'?'Rack 1U':'Mesa')+' · '+(d.portCount||d.interfaces?.length||24)+' portas':''}${d.type==='patchPanel'?' · Rack 1U · '+(d.portCount||24)+' portas':''}${d.type==='server'?' · '+(serverTypeOf(d)==='tower'?'Torre':'Rack 2U'):''}${['satDish','satellite'].includes(d.type)?` · ${d.providerName||'Satelital'} ${d.orbit||''} · ${formatBandwidth(d.satelliteBW||100)}`:''}${d.dhcpFrom?' · DHCP':''}</div>
     </div>`).join('');
 }
 function selectDev(id){selected=devices.find(d=>d.id===id);updateDevList();updateProp(selected);draw();}
@@ -3843,6 +3996,8 @@ canvas.addEventListener('dblclick',function(e){
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f85149;"></span> Servidor rack / torre</div>
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff6b9d;"></span> Firewall</div>
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#c4b5fd;"></span> Cloud/ISP</div>
+    <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#00a6c7;"></span> Antena satelital</div>
+    <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f0a91f;"></span> Satélite orbital</div>
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#70e1ff;"></span> Requisição de ping</div>
     <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3fb950;"></span> Resposta do ping</div>
     <div style="margin-top:6px;color:#6e7681;font-size:9px;">🖱 Arrastar: rotacionar · Scroll: zoom<br>Clique no nó: detalhes</div>
@@ -3852,8 +4007,8 @@ canvas.addEventListener('dblclick',function(e){
 
 <script>
 // ── 3D RENDERER ───────────────────────────────────────────
-const DEV_COLORS_3D = {pc:'#4dabf7',phone:'#70e1ff',router:'#ff8c00',switch:'#3fb950',patchPanel:'#d29922',server:'#f85149',firewall:'#ff6b9d',cloud:'#c4b5fd'};
-const DEV_SHAPES = {pc:'pc',phone:'phone',router:'router',switch:'switch',patchPanel:'patchPanel',server:'serverRack',firewall:'firewall',cloud:'cloud'};
+const DEV_COLORS_3D = {pc:'#4dabf7',phone:'#70e1ff',router:'#ff8c00',switch:'#3fb950',patchPanel:'#d29922',server:'#f85149',firewall:'#ff6b9d',cloud:'#c4b5fd',satDish:'#00a6c7',satellite:'#f0a91f'};
+const DEV_SHAPES = {pc:'pc',phone:'phone',router:'router',switch:'switch',patchPanel:'patchPanel',server:'serverRack',firewall:'firewall',cloud:'cloud',satDish:'satDish',satellite:'satellite'};
 
 let _3d = {
   running:false, animating:true, showLabels:true,
@@ -3891,7 +4046,7 @@ function close3D(){
 function build3DScene(){
   _3d.frame=0;
   // Map 2D positions to 3D (spread Z by type)
-  const typeZ={pc:0,phone:20,switch:60,router:120,server:-60,firewall:90,cloud:180};
+  const typeZ={pc:0,phone:20,switch:60,router:120,server:-60,firewall:90,cloud:180,satDish:150,satellite:260};
   _3d.nodes = devices.map(d=>{
     const spread=(Math.random()-0.5)*80;
     const saved=d.view3d;
@@ -3906,6 +4061,8 @@ function build3DScene(){
       serverType:d.type==='server'?serverTypeOf(d):null,
       switchForm:d.type==='switch'?switchFormOf(d):null,
       pcStyle:d.type==='pc'?pcStyleOf(d):null,
+      satelliteProvider:d.satelliteProvider||null,
+      orbit:d.orbit||null,
       portCount:d.portCount||null,
       px:0,py:0,pz:0 // projected
     };
@@ -3913,7 +4070,7 @@ function build3DScene(){
   _3d.edges = connections.map(c=>{
     const a=_3d.nodes.find(n=>n.id===c.from);
     const b=_3d.nodes.find(n=>n.id===c.to);
-    return a&&b?{a,b,active:c.active!==false,kind:c.kind||'cable',ssid:c.ssid||''}:null;
+    return a&&b?{a,b,active:c.active!==false,kind:c.kind||'cable',ssid:c.ssid||'',provider:c.provider||''}:null;
   }).filter(Boolean);
   // Particles (data packets)
   _3d.particles=[];
@@ -4317,6 +4474,25 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha, node) {
     led(x+fw*.35+fw*.06,y+fh*.05,2,'#f85149',8);
     led(x+fw*.35+fw*.06,y+fh*.22,2,'#ff8c00',6);
 
+  } else if (shape === 'satDish') {
+    const p=SATELLITE_PROVIDERS[node?.satelliteProvider]||SATELLITE_PROVIDERS.starlink,pc=p.color;
+    ctx.shadowBlur=22;ctx.shadowColor=pc+'66';
+    ctx.strokeStyle='#78909c';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,y+r*.2);ctx.lineTo(x,y+r*1.05);ctx.stroke();
+    const dg=ctx.createLinearGradient(x-r,y-r,x+r,y+r);dg.addColorStop(0,'#f4f8fa');dg.addColorStop(.55,'#9fb1bc');dg.addColorStop(1,'#42545f');
+    ctx.save();ctx.translate(x,y-r*.15);ctx.rotate(-.45);ctx.fillStyle=dg;ctx.strokeStyle=pc;ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(0,0,r*1.1,r*.48,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.strokeStyle='#5f7380';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(r*.2,0);ctx.lineTo(r*.95,-r*.42);ctx.stroke();led(r*.95,-r*.42,r*.12,pc,8);ctx.restore();
+    ctx.shadowBlur=0;ctx.fillStyle='#21323b';ctx.strokeStyle=pc;rr(x-r*.65,y+r*.92,r*1.3,r*.3,4);ctx.fill();ctx.stroke();
+    ctx.fillStyle=pc;ctx.font=`bold ${Math.max(5,r*.28)}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.name.toUpperCase(),x,y+r*1.08);
+
+  } else if (shape === 'satellite') {
+    const p=SATELLITE_PROVIDERS[node?.satelliteProvider]||SATELLITE_PROVIDERS.starlink,pc=p.color;
+    ctx.shadowBlur=24;ctx.shadowColor=pc+'66';
+    const pw=r*1.25,ph=r*.65;[-1,1].forEach(side=>{const px=side<0?x-r*2.1:x+r*.85;ctx.fillStyle='#12346a';ctx.strokeStyle='#4dabf7';rr(px,y-ph/2,pw,ph,3);ctx.fill();ctx.stroke();for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(px+i*pw/4,y-ph/2);ctx.lineTo(px+i*pw/4,y+ph/2);ctx.stroke();}});
+    const body=ctx.createLinearGradient(x-r,y-r,x+r,y+r);body.addColorStop(0,'#f4f5f6');body.addColorStop(.45,'#8999a3');body.addColorStop(1,'#2f3b42');ctx.fillStyle=body;ctx.strokeStyle=pc;rr(x-r*.85,y-r*.7,r*1.7,r*1.4,6);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#152832';rr(x-r*.5,y-r*.36,r,r*.72,3);ctx.fill();led(x,y-r*.08,r*.15,pc,10);
+    ctx.strokeStyle='#708690';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y+r*.55);ctx.lineTo(x,y+r*1.15);ctx.stroke();ctx.fillStyle='#dbe4e8';ctx.strokeStyle=pc;ctx.beginPath();ctx.ellipse(x,y+r*1.15,r*.55,r*.2,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.shadowBlur=0;ctx.strokeStyle=pc+'66';ctx.setLineDash([4,5]);ctx.beginPath();ctx.ellipse(x,y,r*2.6,r*1.1,-.18,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=pc;ctx.font=`bold ${Math.max(6,r*.32)}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.orbit,x,y+r*.2);
+
   } else if (shape === 'cloud') {
     // ── GLOBO ISP/CLOUD REALISTA HD ───────────
     ctx.shadowBlur=28;ctx.shadowColor=color+'66';
@@ -4431,10 +4607,10 @@ function render3DLoop(){
   // Draw edges
   _3d.edges.forEach(e=>{
     const gradient=ctx.createLinearGradient(e.a.px,e.a.py,e.b.px,e.b.py);
-    gradient.addColorStop(0,e.kind==='wifi'?'#70e1ffcc':e.a.color+'66');
-    gradient.addColorStop(1,e.kind==='wifi'?'#38bcd8cc':e.b.color+'66');
-    ctx.save();ctx.strokeStyle=gradient;ctx.lineWidth=e.kind==='backbone'?4:(e.kind==='wifi'?2.5:1.5);
-    ctx.setLineDash(e.kind==='wifi'?[2,7]:[4,8]);ctx.beginPath();
+    gradient.addColorStop(0,e.kind==='wifi'?'#70e1ffcc':e.kind==='satellite'?'#ffd166dd':e.a.color+'66');
+    gradient.addColorStop(1,e.kind==='wifi'?'#38bcd8cc':e.kind==='satellite'?'#70e1ffdd':e.b.color+'66');
+    ctx.save();ctx.strokeStyle=gradient;ctx.lineWidth=e.kind==='backbone'?4:((e.kind==='wifi'||e.kind==='satellite')?2.5:1.5);
+    ctx.setLineDash(e.kind==='wifi'?[2,7]:(e.kind==='satellite'?[9,6]:[4,8]));ctx.beginPath();
     ctx.moveTo(e.a.px,e.a.py);ctx.lineTo(e.b.px,e.b.py);ctx.stroke();
     ctx.restore();
   });
