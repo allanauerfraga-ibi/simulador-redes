@@ -604,7 +604,7 @@ let pendingSatelliteEquipment='satDish';
 let pendingSwitchPorts=24;
 let pendingSwitchForm='desktop';
 let pendingPatchPorts=24;
-let pendingServerType='rack';
+let pendingServerType='tower';
 let pendingPCStyle='notebook';
 let dragging=null,draggingRack=null,dragOffX=0,dragOffY=0;
 let nextId=1,sTx=0,sRx=0,sDrop=0;
@@ -826,13 +826,13 @@ function showServerTypeModal(){
     <div class="edu-note">Escolha o formato físico. O modelo rack 2U pode ser encaixado em rack de 19 polegadas; o modelo torre deve permanecer fora do rack.</div>
     <label>Formato do servidor</label>
     <select id="server-type">
-      <option value="rack" selected>Servidor rack 2U — instalável em rack</option>
-      <option value="tower">Servidor torre — uso fora do rack</option>
+      <option value="tower" selected>Servidor torre — uso fora do rack</option>
+      <option value="rack">Servidor rack 2U — instalável em rack</option>
     </select>
     <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="prepareServerPlacement()">✅ Escolher local</button></div>`);
 }
 function prepareServerPlacement(){
-  pendingServerType=document.getElementById('server-type')?.value==='tower'?'tower':'rack';
+  pendingServerType=document.getElementById('server-type')?.value==='rack'?'rack':'tower';
   closeModal();setMode('add','server');
   const label=pendingServerType==='rack'?'servidor rack 2U':'servidor torre';
   rackNotice('Formato selecionado',`Clique no espaço de trabalho para adicionar o ${label}.`,'ok');
