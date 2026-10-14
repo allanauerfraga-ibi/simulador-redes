@@ -602,7 +602,7 @@ let satelliteLinkFirst=null;
 let pendingSatelliteProvider='starlink';
 let pendingSatelliteEquipment='satDish';
 let pendingSwitchPorts=24;
-let pendingSwitchForm='rack';
+let pendingSwitchForm='desktop';
 let pendingPatchPorts=24;
 let pendingServerType='rack';
 let pendingPCStyle='notebook';
@@ -785,8 +785,8 @@ function showSwitchPortModal(){
     <div class="edu-note">Escolha o formato e a quantidade de portas. O switch rack 1U encaixa no rack de 19 polegadas; o switch de mesa deve permanecer fora do rack.</div>
     <label>Formato físico</label>
     <select id="switch-form">
-      <option value="rack" selected>Switch rack 1U — instalável no rack</option>
-      <option value="desktop">Switch de mesa — uso fora do rack</option>
+      <option value="desktop" selected>Switch de mesa — uso fora do rack</option>
+      <option value="rack">Switch rack 1U — instalável no rack</option>
     </select>
     <label>Quantidade de portas</label>
     <select id="switch-port-count">
@@ -800,7 +800,7 @@ function showSwitchPortModal(){
 function prepareSwitchPlacement(){
   const ports=+document.getElementById('switch-port-count')?.value;
   pendingSwitchPorts=[4,8,16,24].includes(ports)?ports:24;
-  pendingSwitchForm=document.getElementById('switch-form')?.value==='desktop'?'desktop':'rack';
+  pendingSwitchForm=document.getElementById('switch-form')?.value==='rack'?'rack':'desktop';
   closeModal();setMode('add','switch');
   rackNotice('Switch selecionado',`Clique no espaço de trabalho para adicionar um switch ${pendingSwitchForm==='rack'?'rack 1U':'de mesa'} de ${pendingSwitchPorts} portas.`,'ok');
 }
