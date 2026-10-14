@@ -632,16 +632,22 @@ const CLASS_ACTIVITIES={
   wifi3:{room:'wifi',level:3,title:'Duas áreas Wi-Fi',desc:'Use 2 roteadores sem fio interligados e 4 celulares, distribuídos entre pelo menos duas redes Wi-Fi.'},
   wifi4:{room:'wifi',level:4,title:'Rede híbrida',desc:'Integre 3 celulares, 3 PCs, switch e roteador sem fio. Clientes cabeados e sem fio devem se comunicar.'},
   wifi5:{room:'wifi',level:5,title:'Wi-Fi corporativo seguro',desc:'Monte duas áreas Wi-Fi com 6 celulares, servidor e firewall. Todos os celulares devem alcançar o servidor por um caminho protegido.'},
+  wifi6:{room:'wifi',level:6,title:'Wi-Fi convergente',desc:'Monte uma rede com 4 celulares, Notebook e Computador, 2 roteadores sem fio, switch de mesa com pelo menos 8 portas, firewall e servidor torre. Use Wi-Fi nos celulares, cabos nos computadores, ajuste um enlace para 1 Gb/s e faça todos alcançarem o servidor.'},
+  wifi7:{room:'wifi',level:7,title:'Wi-Fi com Internet via satélite',desc:'Projete uma rede com 6 celulares, Notebook e Computador, 2 roteadores sem fio, firewall, rack com switch de rack, patch panel e servidor de rack, além de servidor torre. Complete o acesso Antena/Terminal → Satélite → Nuvem/Internet e garanta que todos os clientes alcancem o servidor e a Internet.'},
   backbone1:{room:'backbone',level:1,title:'Backbone inicial',desc:'Crie dois segmentos, instale um servidor em rack e interligue equipamentos centrais por backbone.'},
   backbone2:{room:'backbone',level:2,title:'Backbone de setores',desc:'Use 3 equipamentos centrais e pelo menos 2 enlaces de backbone, mantendo um servidor instalado em rack.'},
   backbone3:{room:'backbone',level:3,title:'Backbone entre racks',desc:'Interligue 4 equipamentos centrais com 3 backbones e use 2 racks, cada um com servidor.'},
   backbone4:{room:'backbone',level:4,title:'Backbone com Internet',desc:'Crie 4 enlaces de backbone entre switches, roteador, firewall e nuvem, com servidores organizados em racks.'},
   backbone5:{room:'backbone',level:5,title:'Backbone de alta disponibilidade',desc:'Monte um núcleo com 5 backbones, 2 roteadores, 2 switches, firewall, nuvem e 3 servidores em racks. Use ao menos um enlace de 10 Gbps.'},
+  backbone6:{room:'backbone',level:6,title:'Backbone óptico entre provedores',desc:'Adicione 2 provedores de Internet e conecte-os por fibra óptica de pelo menos 10 Gb/s. Monte 2 racks com switches de rack, servidores de rack e patch panel ligado por cabo interno. Use pelo menos 4 backbones e mantenha um servidor torre fora do rack.'},
+  backbone7:{room:'backbone',level:7,title:'Backbone terrestre e satelital',desc:'Crie um núcleo convergente com 2 provedores ligados por fibra, acesso completo por satélite, 2 roteadores, firewall, 3 switches e 2 servidores: um de rack e um torre. Organize switch de rack e patch panel no mesmo rack, crie 5 backbones e use pelo menos um enlace de 40 Gb/s.'},
   vlan1:{room:'vlan',level:1,title:'Duas VLANs',desc:'Crie duas VLANs, atribua dispositivos a elas e inclua um roteador para comunicação entre redes.'},
   vlan2:{room:'vlan',level:2,title:'VLANs por setor',desc:'Distribua 4 dispositivos em 2 VLANs, usando switch e roteador. Todos devem possuir endereços IP válidos.'},
   vlan3:{room:'vlan',level:3,title:'Três departamentos',desc:'Distribua 6 dispositivos em 3 VLANs e utilize 2 switches e um roteador para interligar os setores.'},
   vlan4:{room:'vlan',level:4,title:'Segmentação com servidor',desc:'Crie 3 VLANs para 6 dispositivos, incluindo servidor e firewall, e garanta comunicação roteada.'},
-  vlan5:{room:'vlan',level:5,title:'Segmentação corporativa',desc:'Configure 4 VLANs para pelo menos 8 dispositivos, com 2 switches, roteador, firewall e servidor em rack.'}
+  vlan5:{room:'vlan',level:5,title:'Segmentação corporativa',desc:'Configure 4 VLANs para pelo menos 8 dispositivos, com 2 switches, roteador, firewall e servidor em rack.'},
+  vlan6:{room:'vlan',level:6,title:'Segmentação híbrida',desc:'Distribua pelo menos 10 clientes e servidores em 4 VLANs. Inclua Notebook, Computador, celulares por Wi-Fi, switch de mesa e switch de rack, roteador, firewall, servidor de rack e servidor torre. Organize o núcleo no rack e garanta comunicação entre as VLANs.'},
+  vlan7:{room:'vlan',level:7,title:'Segmentação com Internet redundante',desc:'Monte 5 VLANs para pelo menos 12 clientes e servidores, usando 3 switches — incluindo um modelo de 24 portas no rack —, patch panel, roteador, firewall e servidores rack/torre. Acrescente dois provedores ligados por fibra e acesso via satélite, mantendo comunicação entre as VLANs e saída para a Internet.'}
 };
 
 const COLORS={pc:'#1f6feb',phone:'#00b8d9',router:'#e05c2a',switch:'#1a7f37',patchPanel:'#d29922',server:'#8250df',firewall:'#cf222e',cloud:'#0969da',satDish:'#00a6c7',satellite:'#f0a91f'};
@@ -2303,6 +2309,11 @@ function activityChecks(key){
   const mixedComputers=pcs.some(p=>pcStyleOf(p)==='notebook')&&pcs.some(p=>pcStyleOf(p)==='complete');
   const gigabitCore=connections.some(c=>c.active!==false&&c.kind!=='wifi'&&(c.bw||0)>=1000&&[c.from,c.to].every(id=>devices.some(d=>d.id===id&&['switch','router','firewall','server','patchPanel'].includes(d.type))));
   const rackPatchLinked=patchPanels.some(panel=>panel.rackId&&switches.some(sw=>sw.rackId===panel.rackId&&switchFormOf(sw)==='rack'&&connections.some(c=>c.rackCable&&((c.from===panel.id&&c.to===sw.id)||(c.to===panel.id&&c.from===sw.id)))));
+  const desktopSwitches=switches.filter(sw=>switchFormOf(sw)==='desktop'),rackSwitches=switches.filter(sw=>switchFormOf(sw)==='rack'&&sw.rackId);
+  const rackServers=servers.filter(s=>serverTypeOf(s)==='rack'&&s.rackId),towerServers=servers.filter(s=>serverTypeOf(s)==='tower');
+  const ispProviders=clouds.filter(isInternetProvider),ispFibers=connections.filter(c=>c.kind==='ispFiber');
+  const satDishes=devices.filter(d=>d.type==='satDish'),satellites=devices.filter(d=>d.type==='satellite');
+  const satelliteInternetReady=satellites.some(satellite=>satDishes.some(dish=>connections.some(c=>c.kind==='satellite'&&((c.from===dish.id&&c.to===satellite.id)||(c.to===dish.id&&c.from===satellite.id))))&&clouds.some(cloud=>connections.some(c=>c.kind==='satellite'&&((c.from===satellite.id&&c.to===cloud.id)||(c.to===satellite.id&&c.from===cloud.id)))));
   if(room==='lan'&&level===1)return [
     ['Pelo menos 3 computadores',pcs.length>=3],['Pelo menos 1 switch',switches.length>=1],
     ['Cada PC conectado diretamente a um switch',pcs.length>=3&&directlyConnectedTo(pcs,switches)],
@@ -2360,11 +2371,30 @@ function activityChecks(key){
     ['3 celulares, 3 PCs, switch e roteador sem fio',phones.length>=3&&pcs.length>=3&&switches.length>=1&&wirelessRouters.length>=1],['Celulares associados por Wi-Fi',phones.length>=3&&wifiLinked.length===phones.length],
     ['PCs ligados ao switch',directlyConnectedTo(pcs,switches)],['Switch ligado ao roteador',directLink(switches,wirelessRouters)],['Comunicação entre clientes cabeados e sem fio',[...pcs,...phones].length>=6&&pairReachable([...pcs,...phones])]
   ];
-  if(room==='wifi')return [
+  if(room==='wifi'&&level===5)return [
     ['2 roteadores sem fio e 6 celulares',wirelessRouters.length>=2&&phones.length>=6],['Todos os celulares associados',phones.length>=6&&wifiLinked.length===phones.length],['Servidor e firewall adicionados',servers.length>=1&&firewalls.length>=1],
     ['Celulares distribuídos em duas áreas Wi-Fi',new Set(phones.map(p=>p.wifiRouterId).filter(Boolean)).size>=2],['Todos os celulares alcançam o servidor',phones.every(p=>servers.some(s=>!!findPath(p.id,s.id)))],
     ['Firewall participa do caminho',phones.some(p=>servers.some(s=>(findPath(p.id,s.id)||[]).some(id=>firewalls.some(f=>f.id===id))))]
   ];
+  if(room==='wifi'&&level===6){
+    const clients=[...pcs,...phones];
+    return [
+      ['4 celulares associados por Wi-Fi',phones.length>=4&&wifiLinked.length===phones.length],['Notebook e Computador presentes',pcs.length>=2&&mixedComputers],
+      ['2 roteadores sem fio',wirelessRouters.length>=2],['Switch de mesa com pelo menos 8 portas',desktopSwitches.some(sw=>(sw.portCount||0)>=8)],
+      ['Firewall e servidor torre presentes',firewalls.length>=1&&towerServers.length>=1],['Computadores ligados por cabo ao switch',pcs.length>=2&&directlyConnectedTo(pcs,switches)],
+      ['Pelo menos um enlace cabeado de 1 Gb/s',connections.some(c=>c.kind!=='wifi'&&c.kind!=='satellite'&&(c.bw||0)>=1000)],['Todos os clientes alcançam o servidor',clients.length>=6&&allReachServers(clients)]
+    ];
+  }
+  if(room==='wifi'){
+    const clients=[...pcs,...phones];
+    return [
+      ['6 celulares associados em duas áreas Wi-Fi',phones.length>=6&&wifiLinked.length===phones.length&&new Set(phones.map(p=>p.wifiRouterId).filter(Boolean)).size>=2],
+      ['Notebook e Computador presentes',pcs.length>=2&&mixedComputers],['2 roteadores sem fio e firewall',wirelessRouters.length>=2&&firewalls.length>=1],
+      ['Switch de rack e patch panel ligados no mesmo rack',rackSwitches.length>=1&&rackPatchLinked],['Servidor de rack e servidor torre',rackServers.length>=1&&towerServers.length>=1],
+      ['Acesso completo Antena → Satélite → Internet',satelliteInternetReady],['Todos os clientes alcançam os servidores',clients.length>=8&&servers.length>=2&&allReachServers(clients)],
+      ['Todos os clientes alcançam a Internet',clouds.length>=1&&clients.length>=8&&clients.every(client=>clouds.some(cloud=>!!findPath(client.id,cloud.id)))]
+    ];
+  }
   if(room==='backbone'&&level===1)return [
     ['Pelo menos 2 equipamentos centrais',switches.length+routers.length>=2],['Backbone configurado',connections.some(c=>c.kind==='backbone')],
     ['Pelo menos 1 rack',racks.length>=1],['Servidor instalado em rack',devices.some(d=>d.type==='server'&&d.rackId)],
@@ -2373,14 +2403,40 @@ function activityChecks(key){
   if(room==='backbone'&&level===2)return [['Pelo menos 3 equipamentos centrais',switches.length+routers.length>=3],['Pelo menos 2 backbones',backbones.length>=2],['Rack com servidor',racks.length>=1&&servers.some(s=>s.rackId)],['Núcleo conectado',backbones.length>=2&&pairReachable([...switches,...routers])]];
   if(room==='backbone'&&level===3)return [['Pelo menos 4 equipamentos centrais',switches.length+routers.length>=4],['Pelo menos 3 backbones',backbones.length>=3],['Pelo menos 2 racks',racks.length>=2],['Dois servidores instalados em racks',servers.filter(s=>s.rackId).length>=2],['Equipamentos centrais interligados',pairReachable([...switches,...routers])]];
   if(room==='backbone'&&level===4)return [['Pelo menos 4 backbones',backbones.length>=4],['Switch, roteador, firewall e nuvem presentes',switches.length>=1&&routers.length>=1&&firewalls.length>=1&&clouds.length>=1],['Pelo menos 2 racks com servidores',racks.length>=2&&servers.filter(s=>s.rackId).length>=2],['Firewall conectado ao núcleo',connections.some(c=>firewalls.some(f=>c.from===f.id||c.to===f.id))],['Nuvem alcançável pelo núcleo',[...switches,...routers].some(d=>clouds.some(c=>!!findPath(d.id,c.id)))]];
-  if(room==='backbone')return [['Pelo menos 5 backbones',backbones.length>=5],['2 roteadores e 2 switches',routers.length>=2&&switches.length>=2],['Firewall e nuvem presentes',firewalls.length>=1&&clouds.length>=1],['3 racks com servidores',racks.length>=3&&servers.filter(s=>s.rackId).length>=3],['Enlace de pelo menos 10 Gbps',backbones.some(c=>c.bw>=10000)],['Núcleo totalmente interligado',pairReachable([...switches,...routers,...firewalls,...clouds])]];
+  if(room==='backbone'&&level===5)return [['Pelo menos 5 backbones',backbones.length>=5],['2 roteadores e 2 switches',routers.length>=2&&switches.length>=2],['Firewall e nuvem presentes',firewalls.length>=1&&clouds.length>=1],['3 racks com servidores',racks.length>=3&&servers.filter(s=>s.rackId).length>=3],['Enlace de pelo menos 10 Gbps',backbones.some(c=>c.bw>=10000)],['Núcleo totalmente interligado',pairReachable([...switches,...routers,...firewalls,...clouds])]];
+  if(room==='backbone'&&level===6)return [
+    ['2 provedores ligados por fibra de pelo menos 10 Gb/s',ispProviders.length>=2&&ispFibers.some(c=>(c.bw||0)>=10000)],['Pelo menos 4 backbones',backbones.length>=4],
+    ['2 racks com switches de rack',racks.length>=2&&rackSwitches.length>=2],['2 servidores de rack instalados',rackServers.length>=2],
+    ['Patch panel ligado ao switch por cabo interno',rackPatchLinked],['Servidor torre fora do rack',towerServers.length>=1],['Núcleo interligado',pairReachable([...switches,...routers,...firewalls].filter(Boolean))]
+  ];
+  if(room==='backbone')return [
+    ['2 provedores ligados por fibra óptica',ispProviders.length>=2&&ispFibers.length>=1],['Acesso completo por satélite',satelliteInternetReady],
+    ['2 roteadores, firewall e 3 switches',routers.length>=2&&firewalls.length>=1&&switches.length>=3],['Servidor de rack e servidor torre',rackServers.length>=1&&towerServers.length>=1],
+    ['Switch de rack e patch panel ligados no mesmo rack',rackSwitches.length>=1&&rackPatchLinked],['Pelo menos 5 backbones',backbones.length>=5],
+    ['Backbone de pelo menos 40 Gb/s',backbones.some(c=>(c.bw||0)>=40000)],['Núcleo terrestre totalmente interligado',pairReachable([...switches,...routers,...firewalls,...servers])]
+  ];
   const assigned=devices.filter(d=>!['switch','cloud'].includes(d.type)&&d.vlanAssigned);
   const vlanCount=new Set(assigned.map(d=>d.vlan)).size;
   if(level===1)return [['Pelo menos 1 switch',switches.length>=1],['Dispositivos atribuídos a VLANs',assigned.length>=2],['Pelo menos 2 VLANs diferentes',vlanCount>=2],['Roteador para comunicação inter-VLAN',routers.length>=1],['Todos os dispositivos possuem IP',assigned.length>=2&&validIPs(assigned)]];
   if(level===2)return [['Pelo menos 4 dispositivos em VLANs',assigned.length>=4],['Pelo menos 2 VLANs',vlanCount>=2],['Switch e roteador presentes',switches.length>=1&&routers.length>=1],['Todos possuem IP válido',validIPs(assigned)],['Comunicação roteada',pairReachable(assigned)]];
   if(level===3)return [['Pelo menos 6 dispositivos atribuídos',assigned.length>=6],['Pelo menos 3 VLANs',vlanCount>=3],['Pelo menos 2 switches e 1 roteador',switches.length>=2&&routers.length>=1],['Todos possuem IP válido',validIPs(assigned)],['Comunicação entre departamentos',pairReachable(assigned)]];
   if(level===4)return [['Pelo menos 6 dispositivos atribuídos',assigned.length>=6],['Pelo menos 3 VLANs',vlanCount>=3],['Servidor e firewall em VLANs',servers.some(s=>s.vlanAssigned)&&firewalls.some(f=>f.vlanAssigned)],['Roteador presente',routers.length>=1],['Comunicação entre as VLANs',pairReachable(assigned)]];
-  return [['Pelo menos 8 dispositivos atribuídos',assigned.length>=8],['Pelo menos 4 VLANs',vlanCount>=4],['2 switches, roteador e firewall',switches.length>=2&&routers.length>=1&&firewalls.length>=1],['Servidor instalado em rack e atribuído a VLAN',servers.some(s=>s.rackId&&s.vlanAssigned)],['Todos possuem IP válido',validIPs(assigned)],['Comunicação entre as VLANs',pairReachable(assigned)]];
+  if(level===5)return [['Pelo menos 8 dispositivos atribuídos',assigned.length>=8],['Pelo menos 4 VLANs',vlanCount>=4],['2 switches, roteador e firewall',switches.length>=2&&routers.length>=1&&firewalls.length>=1],['Servidor instalado em rack e atribuído a VLAN',servers.some(s=>s.rackId&&s.vlanAssigned)],['Todos possuem IP válido',validIPs(assigned)],['Comunicação entre as VLANs',pairReachable(assigned)]];
+  const segmentedEndpoints=devices.filter(d=>['pc','phone','server'].includes(d.type)&&d.vlanAssigned),endpointVlanCount=new Set(segmentedEndpoints.map(d=>d.vlan)).size;
+  if(level===6)return [
+    ['10 clientes e servidores atribuídos a VLANs',segmentedEndpoints.length>=10],['Pelo menos 4 VLANs entre os clientes e servidores',endpointVlanCount>=4],
+    ['Notebook, Computador e celulares presentes',mixedComputers&&phones.length>=2],['Celulares conectados por Wi-Fi',phones.length>=2&&wifiLinked.length===phones.length],
+    ['Switch de mesa e switch de rack',desktopSwitches.length>=1&&rackSwitches.length>=1],['Roteador e firewall presentes',routers.length>=1&&firewalls.length>=1],
+    ['Servidor de rack e servidor torre em VLANs',rackServers.some(s=>s.vlanAssigned)&&towerServers.some(s=>s.vlanAssigned)],['Patch panel ligado ao switch no rack',rackPatchLinked],
+    ['Comunicação entre as VLANs',validIPs(segmentedEndpoints)&&pairReachable(segmentedEndpoints)]
+  ];
+  return [
+    ['12 clientes e servidores atribuídos',segmentedEndpoints.length>=12],['Pelo menos 5 VLANs',endpointVlanCount>=5],
+    ['3 switches, incluindo modelo de rack com 24 portas',switches.length>=3&&rackSwitches.some(sw=>(sw.portCount||0)>=24)],['Patch panel ligado ao switch no rack',rackPatchLinked],
+    ['Roteador, firewall e servidores rack/torre',routers.length>=1&&firewalls.length>=1&&rackServers.length>=1&&towerServers.length>=1],
+    ['2 provedores ligados por fibra',ispProviders.length>=2&&ispFibers.length>=1],['Acesso completo por satélite',satelliteInternetReady],
+    ['Todos possuem IP e comunicação entre VLANs',validIPs(segmentedEndpoints)&&pairReachable(segmentedEndpoints)],['Clientes alcançam a Internet',clouds.length>=1&&segmentedEndpoints.every(client=>clouds.some(cloud=>!!findPath(client.id,cloud.id)))]
+  ];
 }
 function evaluateClassActivity(){
   if(!classroom.activity){rackNotice('Nenhuma atividade selecionada','Escolha uma atividade antes de solicitar a correção.');return;}
