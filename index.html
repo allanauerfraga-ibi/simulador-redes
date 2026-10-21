@@ -139,16 +139,16 @@ canvas{display:block;}
 @keyframes glow{0%,100%{box-shadow:0 0 8px #d2a679;}50%{box-shadow:0 0 20px #d2a679;}}
 
 /* EXPLAIN PANEL */
-#activity-bar{background:linear-gradient(90deg,#1b1430,#151c2b);border-bottom:1px solid #6e40c9;padding:7px 12px;color:#e7dcff;display:none;align-items:center;gap:9px;box-shadow:0 2px 8px rgba(0,0,0,.18);z-index:20;}
+#activity-bar{background:linear-gradient(90deg,#1b1430,#151c2b);border-bottom:1px solid #6e40c9;padding:9px 12px;color:#e7dcff;display:none;align-items:flex-start;gap:9px;box-shadow:0 2px 8px rgba(0,0,0,.18);z-index:20;}
 #activity-bar.show{display:flex;}
 #activity-bar .activity-icon{font-size:17px;flex:0 0 auto;}
-#activity-bar .activity-content{display:flex;align-items:center;gap:8px;min-width:0;flex:1;}
+#activity-bar .activity-content{display:flex;align-items:flex-start;gap:8px;min-width:0;flex:1;}
 #activity-bar .activity-badge{background:#6e40c9;color:#fff;border-radius:999px;padding:3px 7px;font-size:8px;font-weight:900;letter-spacing:.4px;white-space:nowrap;}
-#activity-bar .activity-question{font-size:11px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#activity-bar .activity-question{display:block;min-width:0;flex:1;font-size:11px;line-height:1.5;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;}
 #activity-bar .activity-question b{color:#d2a8ff;}
-#activity-correct-permanent{flex:0 0 auto;padding:5px 10px;border-radius:6px;border:1px solid #2e7046;background:#0d4a2c;color:#d7ffe4;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;}
+#activity-correct-permanent{flex:0 0 auto;align-self:flex-start;padding:5px 10px;border-radius:6px;border:1px solid #2e7046;background:#0d4a2c;color:#d7ffe4;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;}
 #activity-correct-permanent:hover{background:#17643d;border-color:#3fb950;}
-@media(max-width:860px){#activity-bar{align-items:flex-start;flex-wrap:wrap}#activity-bar .activity-content{align-items:flex-start}#activity-bar .activity-question{white-space:normal;max-height:3.8em}#activity-correct-permanent{margin-left:26px}}
+@media(max-width:860px){#activity-bar{flex-wrap:wrap}#activity-bar .activity-content{flex:1 1 calc(100% - 30px)}#activity-bar .activity-question{max-height:none}#activity-correct-permanent{margin-left:26px}}
 #explain-bar{background:#0e1620;border-bottom:1px solid #1a3a5c;padding:5px 12px;font-size:11px;color:#a8d8f0;display:none;align-items:center;gap:8px;}
 #explain-bar.show{display:flex;}
 #explain-bar .explain-icon{font-size:16px;}
