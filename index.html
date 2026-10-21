@@ -1243,7 +1243,7 @@ function selectWiFiDevice(dev){
   if(dev.type==='router'&&!isWirelessRouter(dev)){
     rackNotice('Roteador sem Wi-Fi','Este modelo não possui função sem fio. Adicione ou configure um roteador SOHO/Doméstico ou um Nó Mesh.');return;
   }
-  if(!wifiFirst){wifiFirst=dev;selected=dev;document.getElementById('s-mode').textContent='Wi-Fi: selecione o segundo equipamento';rackNotice('Primeiro equipamento selecionado',`${dev.name}. Agora selecione ${dev.type==='router'?'um celular ou PC com placa Wi-Fi':'o roteador sem fio'}.`,'ok');updateDevList();draw();return;}
+  if(!wifiFirst){wifiFirst=dev;selected=dev;document.getElementById('s-mode').textContent='Wi-Fi: selecione o segundo equipamento';updateDevList();draw();return;}
   if(wifiFirst.id===dev.id){rackNotice('Seleção inválida','Escolha outro equipamento.');return;}
   connectWiFiDevices(wifiFirst,dev);wifiFirst=null;selected=null;
   document.getElementById('s-mode').textContent='Wi-Fi ativo: selecione outro cliente e roteador';
@@ -1294,7 +1294,7 @@ function selectSatelliteLinkDevice(dev){
   if(!satelliteLinkFirst){
     satelliteLinkFirst=dev;selected=dev;updateDevList();draw();
     document.getElementById('s-mode').textContent='Enlace satelital: selecione o segundo equipamento';
-    rackNotice('Primeiro equipamento selecionado',`${dev.name}. Agora selecione o equipamento correspondente.`,'ok');return;
+    return;
   }
   if(satelliteLinkFirst.id===dev.id){rackNotice('Seleção inválida','Escolha outro equipamento.');return;}
   const a=satelliteLinkFirst,b=dev;
@@ -1351,7 +1351,7 @@ function selectBackboneDevice(dev){
     document.getElementById('explain-icon').textContent='2️⃣';
     document.getElementById('explain-text').textContent=`Origem selecionada: ${dev.name}. Agora clique no equipamento de destino.`;
     document.getElementById('explain-bar').classList.remove('activity-active');
-    rackNotice('Origem selecionada',`${dev.name}. Agora clique no equipamento de destino.`,'ok');return;
+    return;
   }
   if(dev.id===backboneFirst.id){rackNotice('Destino inválido','Escolha outro equipamento. A origem e o destino não podem ser iguais.');return;}
   backboneSecond=dev;selected=dev;draw();showBackboneConfig(backboneFirst,backboneSecond);
@@ -1411,7 +1411,7 @@ function selectISPFiberProvider(dev){
   if(!ispFiberFirst){
     ispFiberFirst=dev;selected=dev;updateDevList();draw();
     document.getElementById('s-mode').textContent='Fibra ISP: selecione o segundo provedor';
-    rackNotice('Primeiro provedor selecionado',`${dev.name}. Agora clique no segundo provedor.`,'ok');return;
+    return;
   }
   if(dev.id===ispFiberFirst.id){rackNotice('Seleção inválida','Escolha outro provedor.');return;}
   showISPFiberConfig(ispFiberFirst,dev);
@@ -3137,7 +3137,6 @@ function pickRouterType(key){
   setMode('add','router');
   // update button label
   document.getElementById('btn-router').innerHTML = rt.icon+' '+rt.name;
-  sysLog('Tipo selecionado: '+rt.name+' — clique no canvas para posicionar','lsys');
 }
 
 function pickMeshKit(key){
@@ -3148,7 +3147,6 @@ function pickMeshKit(key){
   document.getElementById('btn-router').innerHTML = kit.icon+' '+kit.name;
   // store kit for deployment
   _pendingMeshKit = key;
-  sysLog('Kit Mesh: '+kit.name+' — clique no canvas para posicionar o nó central','lsys');
 }
 
 let _pendingMeshKit = null;
@@ -3500,7 +3498,6 @@ function addISP(key){
   document.getElementById('isp-button-label').textContent=isp.name;
   document.getElementById('isp-badge').textContent=isp.type.toUpperCase();
   document.getElementById('isp-badge').style.background=isp.color;
-  sysLog('ISP selecionado: '+isp.name+' ('+isp.region+') — clique no canvas para posicionar','lsys');
 }
 
 let _pendingISP = null;
