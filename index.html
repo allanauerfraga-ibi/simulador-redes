@@ -808,7 +808,6 @@ function prepareSwitchPlacement(){
   pendingSwitchPorts=[4,8,16,24].includes(ports)?ports:24;
   pendingSwitchForm=document.getElementById('switch-form')?.value==='rack'?'rack':'desktop';
   closeModal();setMode('add','switch');
-  rackNotice('Switch selecionado',`Clique no espaço de trabalho para adicionar um switch ${pendingSwitchForm==='rack'?'rack 1U':'de mesa'} de ${pendingSwitchPorts} portas.`,'ok');
 }
 function showPatchPanelModal(){
   showModal(`<h3>🧩 Adicionar patch panel</h3>
@@ -825,7 +824,6 @@ function preparePatchPanelPlacement(){
   const ports=+document.getElementById('patch-port-count')?.value;
   pendingPatchPorts=[12,24,48].includes(ports)?ports:24;
   closeModal();setMode('add','patchPanel');
-  rackNotice('Patch panel selecionado',`Clique dentro de um rack para instalar o patch panel de ${pendingPatchPorts} portas.`,'ok');
 }
 function showServerTypeModal(){
   showModal(`<h3>🖥️ Adicionar servidor</h3>
@@ -840,14 +838,11 @@ function showServerTypeModal(){
 function prepareServerPlacement(){
   pendingServerType=document.getElementById('server-type')?.value==='rack'?'rack':'tower';
   closeModal();setMode('add','server');
-  const label=pendingServerType==='rack'?'servidor rack 2U':'servidor torre';
-  rackNotice('Formato selecionado',`Clique no espaço de trabalho para adicionar o ${label}.`,'ok');
 }
 function preparePCPlacement(style){
   pendingPCStyle=style==='complete'?'complete':'notebook';
   setMode('add','pc');
   document.getElementById('s-mode').textContent=pendingPCStyle==='complete'?'Adicionar: Computador':'Adicionar: Notebook';
-  rackNotice(pendingPCStyle==='complete'?'Computador selecionado':'Notebook selecionado',pendingPCStyle==='complete'?'Clique no espaço de trabalho para adicionar monitor, gabinete, teclado e mouse.':'Clique no espaço de trabalho para adicionar o notebook realista.','ok');
 }
 function showSatelliteEquipmentModal(){
   const providerOptions=Object.entries(SATELLITE_PROVIDERS).map(([key,p])=>`<option value="${key}" ${key===pendingSatelliteProvider?'selected':''}>${p.name} — ${p.orbit} · ${formatBandwidth(p.bw)} · ~${p.latency} ms</option>`).join('');
@@ -870,7 +865,6 @@ function prepareSatellitePlacement(){
   const p=SATELLITE_PROVIDERS[pendingSatelliteProvider];
   closeModal();setMode('add',pendingSatelliteEquipment);
   document.getElementById('s-mode').textContent=`Adicionar: ${pendingSatelliteEquipment==='satellite'?'Satélite':'Antena'} ${p.name}`;
-  rackNotice(`${pendingSatelliteEquipment==='satellite'?'Satélite orbital':'Terminal/antena'} selecionado`,`${p.name} · ${p.orbit}. Clique no espaço de trabalho para posicionar o equipamento.`,'ok');
 }
 function pcStyleOf(dev){return dev?.pcStyle==='complete'?'complete':'notebook';}
 function pcFormatLabel(dev){return pcStyleOf(dev)==='complete'?'Computador':'Notebook';}
