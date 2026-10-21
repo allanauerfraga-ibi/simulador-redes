@@ -2538,8 +2538,8 @@ function activateStudentMode(){
 // =========================================================
 // SALA DE PROVA — SUPABASE
 // =========================================================
-const DEFAULT_SUPABASE_URL='';
-const DEFAULT_SUPABASE_ANON_KEY='';
+const DEFAULT_SUPABASE_URL='https://puykkgwdaieoleerdrnv.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY='sb_publishable_D_2G7v2xmyEFqvpSO5gSrg_KrKDzd41';
 function examSettings(){
   let saved={};try{saved=JSON.parse(localStorage.getItem('allannet-supabase')||'{}');}catch(e){}
   return {url:(DEFAULT_SUPABASE_URL||saved.url||'').replace(/\/$/,''),anonKey:DEFAULT_SUPABASE_ANON_KEY||saved.anonKey||''};
