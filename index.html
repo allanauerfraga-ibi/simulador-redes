@@ -56,6 +56,10 @@ button:disabled{opacity:.4;cursor:not-allowed;}
 .activity-head{display:flex;align-items:center;gap:7px;margin-bottom:4px}.activity-head b{color:#58a6ff;flex:1;}
 .activity-level{font-size:8px;font-weight:800;color:#fff;background:#1f6feb;border-radius:999px;padding:2px 6px;white-space:nowrap;}
 .activity-card button{margin-top:6px;}
+.exam-status{padding:9px 10px;margin:7px 0;border:1px solid #7057b8;border-radius:8px;background:#171126;color:#e7dcff;font-size:10px;line-height:1.5;}
+.exam-status strong{color:#d2a8ff}.exam-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.exam-grid .full{grid-column:1/-1}
+.exam-table{width:100%;border-collapse:collapse;font-size:9px;margin-top:8px}.exam-table th,.exam-table td{padding:6px;border-bottom:1px solid #303946;text-align:left;vertical-align:top}.exam-table th{color:#8b98a8;text-transform:uppercase;font-size:8px}.exam-table .score{font-size:12px;font-weight:800;color:#3fb950}
+.exam-timer{font-family:monospace;font-size:12px;font-weight:900;color:#ffd166;white-space:nowrap}.exam-locked:after{content:'PROVA ENTREGUE';position:absolute;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;background:rgba(13,17,23,.72);color:#fff;font-size:24px;font-weight:900;letter-spacing:2px;pointer-events:auto}
 @keyframes menuIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 @media(max-width:1450px){#topbar h1{font-size:0}#topbar h1:after{content:'🌐 AllanNet EDU';font-size:13px}.menu-trigger{min-width:82px}.menu-bar{gap:3px}}
 @media(max-width:1180px){.menu-trigger{min-width:35px;padding:6px}.menu-trigger .menu-label{display:none}.menu-trigger:after{margin-left:1px}.quick-actions button{padding:5px 6px}}
@@ -449,6 +453,8 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         <div class="menu-title">Recursos didáticos</div>
         <div class="menu-grid one">
           <button class="menu-action green" onclick="showActivityModal()">✅ Atividades e correção</button>
+          <button class="menu-action green" onclick="showExamRoomModal()">📝 Entrar na sala de prova</button>
+          <button class="menu-action" data-teacher-only onclick="showTeacherExamPanel()">📊 Painel de provas</button>
           <button class="menu-action" data-teacher-only onclick="showFaultModal()">⚠️ Simular falhas</button>
           <button class="menu-action" onclick="showClassModeModal()">👩‍🏫 Modo professor/aluno</button>
           <button class="menu-action" onclick="showReportModal()">📄 Gerar relatório do projeto</button>
@@ -475,7 +481,8 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
     <span class="activity-badge" id="activity-level-badge">ATIVIDADE</span>
     <span class="activity-question" id="activity-question"></span>
   </div>
-  <button id="activity-correct-permanent" onclick="evaluateClassActivity()" title="Corrigir a atividade atual">✅ Corrigir</button>
+  <span id="exam-timer" class="exam-timer" style="display:none"></span>
+  <button id="activity-correct-permanent" onclick="handleActivityAction()" title="Corrigir a atividade atual">✅ Corrigir</button>
 </div>
 
 <!-- TOOL ORIENTATION BAR -->
@@ -613,6 +620,9 @@ let cliHist=[],cliHistIdx=-1;
 let arpTable={},macTable={};
 let history=[];// undo stack [{devices, connections}]
 let classroom={role:'student',studentName:'',activity:null,subnetColors:false,lastScore:null,faults:[],faultSnapshot:null};
+let teacherExamSession=null;
+let examState={active:false,locked:false,attemptToken:'',examId:'',title:'',activity:'',studentName:'',studentGrade:'',studentClass:'',deadline:''};
+try{examState={...examState,...JSON.parse(sessionStorage.getItem('allannet-exam-state')||'{}')};teacherExamSession=JSON.parse(sessionStorage.getItem('allannet-teacher-session')||'null');}catch(e){}
 const TEACHER_PASSWORD_HASH='ee710ab733f3255effb57c70900e7365d4af5eeb727610672ead4a953ad5ab2d';
 
 const ACTIVITY_ROOMS={
@@ -2053,6 +2063,7 @@ animate();
 // CANVAS EVENTS
 // =========================================================
 canvas.addEventListener('mousedown',e=>{
+  if(examState.active&&examState.locked){rackNotice('Prova já entregue','A topologia foi bloqueada após o envio ao professor.');return;}
   const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
   const dev=getAt(x,y);
   const rack=getRackAt(x,y);
@@ -2237,12 +2248,14 @@ function syncClassroomUI(){
   updateStats();draw();
 }
 function syncActivityBar(){
-  const bar=document.getElementById('activity-bar'),badge=document.getElementById('activity-level-badge'),question=document.getElementById('activity-question');
+  const bar=document.getElementById('activity-bar'),badge=document.getElementById('activity-level-badge'),question=document.getElementById('activity-question'),action=document.getElementById('activity-correct-permanent'),timer=document.getElementById('exam-timer');
   if(!bar||!badge||!question)return;
   const activity=CLASS_ACTIVITIES[classroom.activity];
-  if(!activity){bar.classList.remove('show');question.textContent='';return;}
-  badge.textContent=`NÍVEL ${activity.level}`;
+  if(!activity){bar.classList.remove('show');question.textContent='';if(timer)timer.style.display='none';return;}
+  badge.textContent=examState.active?'PROVA':`NÍVEL ${activity.level}`;
   question.innerHTML=`<b>${activity.title}</b> — ${activity.desc}`;
+  if(action){action.textContent=examState.active?(examState.locked?'✅ Entregue':'📨 Entregar prova'):'✅ Corrigir';action.disabled=!!(examState.active&&examState.locked);}
+  if(timer)timer.style.display=examState.active&&!examState.locked?'inline':'none';
   bar.classList.add('show');
 }
 function showActivityModal(){
@@ -2280,6 +2293,7 @@ function applyClassActivityAddressPlan(key){
   return true;
 }
 function startClassActivity(key){
+  if(examState.active&&classroom.role!=='teacher'&&key!==examState.activity){rackNotice('Atividade bloqueada','Durante a prova somente a atividade liberada pelo professor pode ser utilizada.');return;}
   classroom.studentName=document.getElementById('activity-student')?.value.trim()||classroom.studentName;
   classroom.activity=key;classroom.lastScore=null;
   const addressPlanApplied=applyClassActivityAddressPlan(key);closeModal();
@@ -2433,11 +2447,15 @@ function activityChecks(key){
   ];
 }
 function evaluateClassActivity(){
+  if(examState.active&&classroom.role!=='teacher'){submitExamAttempt(false);return;}
   if(!classroom.activity){rackNotice('Nenhuma atividade selecionada','Escolha uma atividade antes de solicitar a correção.');return;}
   const checks=activityChecks(classroom.activity),passed=checks.filter(c=>c[1]).length,score=Math.round(passed/checks.length*100);
   classroom.lastScore={score,passed,total:checks.length,date:new Date().toLocaleString('pt-BR'),activity:classroom.activity};
   showModal(`<h3>✅ Correção — ${CLASS_ACTIVITIES[classroom.activity].title}</h3><div class="edu-score">${score}%</div>${checks.map(([label,ok])=>`<div class="edu-check ${ok?'ok':'fail'}">${ok?'✅':'❌'} ${label}</div>`).join('')}<div class="edu-note">${score===100?'Parabéns! Todos os requisitos foram atendidos.':'Revise os itens marcados em vermelho e solicite uma nova correção.'}</div><div class="modal-btns"><button onclick="showActivityModal()">Voltar</button><button class="green" onclick="showReportModal()">📄 Relatório</button></div>`);
   sysLog(`CORREÇÃO: ${CLASS_ACTIVITIES[classroom.activity].title} — ${score}%`,'lsys');
+}
+function handleActivityAction(){
+  if(examState.active&&classroom.role!=='teacher')submitExamAttempt(false);else evaluateClassActivity();
 }
 function showVLANModal(){
   const opts=devices.filter(d=>d.type!=='cloud').map(d=>`<option value="${d.id}">${ICONS[d.type]} ${d.name} — VLAN ${d.vlan||1}</option>`).join('');
@@ -2515,6 +2533,132 @@ async function activateTeacherMode(){
 function activateStudentMode(){
   classroom.studentName=document.getElementById('class-student')?.value.trim()||classroom.studentName;
   classroom.role='student';closeModal();syncClassroomUI();rackNotice('Modo aluno ativado','Limpeza total e simulação de falhas estão bloqueadas.','ok');sysLog('Modo aluno ativado.','lsys');
+}
+
+// =========================================================
+// SALA DE PROVA — SUPABASE
+// =========================================================
+const DEFAULT_SUPABASE_URL='';
+const DEFAULT_SUPABASE_ANON_KEY='';
+function examSettings(){
+  let saved={};try{saved=JSON.parse(localStorage.getItem('allannet-supabase')||'{}');}catch(e){}
+  return {url:(DEFAULT_SUPABASE_URL||saved.url||'').replace(/\/$/,''),anonKey:DEFAULT_SUPABASE_ANON_KEY||saved.anonKey||''};
+}
+function examConfigured(){const s=examSettings();return /^https:\/\//.test(s.url)&&s.anonKey.length>20;}
+function persistExamState(){try{sessionStorage.setItem('allannet-exam-state',JSON.stringify(examState));}catch(e){}}
+function persistTeacherSession(){try{sessionStorage.setItem('allannet-teacher-session',JSON.stringify(teacherExamSession));}catch(e){}}
+async function supabaseRequest(path,{method='GET',body=null,token=''}={}){
+  const cfg=examSettings();if(!examConfigured())throw new Error('A Sala de Prova ainda não foi conectada ao banco de dados pelo professor.');
+  const response=await fetch(cfg.url+path,{method,headers:{apikey:cfg.anonKey,Authorization:`Bearer ${token||cfg.anonKey}`,'Content-Type':'application/json',Prefer:method==='POST'?'return=representation':'return=minimal'},body:body===null?null:JSON.stringify(body)});
+  let data=null;const text=await response.text();try{data=text?JSON.parse(text):null;}catch(e){data=text;}
+  if(!response.ok)throw new Error(data?.message||data?.error_description||data?.hint||`Falha no banco de dados (${response.status}).`);
+  return data;
+}
+function showSupabaseSetupModal(){
+  if(classroom.role!=='teacher'){rackNotice('Configuração restrita','Somente o professor pode configurar o banco de dados.');return;}
+  const cfg=examSettings();showModal(`<h3>🗄️ Configurar Sala de Prova</h3><div class="edu-note">Informe os dados públicos do projeto Supabase. A chave <b>anon/public</b> pode ficar no navegador; nunca utilize aqui a chave service_role.</div><label>Project URL</label><input id="exam-supabase-url" value="${escapeReport(cfg.url)}" placeholder="https://seu-projeto.supabase.co"><label>Anon public key</label><textarea id="exam-supabase-key" rows="3" placeholder="Chave anon/public">${escapeReport(cfg.anonKey)}</textarea><div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="saveSupabaseSettings()">Salvar e testar</button></div>`);
+}
+async function saveSupabaseSettings(){
+  const url=document.getElementById('exam-supabase-url')?.value.trim().replace(/\/$/,''),anonKey=document.getElementById('exam-supabase-key')?.value.trim();
+  if(!/^https:\/\//.test(url||'')||!anonKey||anonKey.length<20){rackNotice('Dados inválidos','Confira a Project URL e a chave anon/public.');return;}
+  localStorage.setItem('allannet-supabase',JSON.stringify({url,anonKey}));
+  try{await supabaseRequest('/rest/v1/exams?select=id&limit=1');rackNotice('Banco conectado','A Sala de Prova está conectada ao Supabase.','ok');closeModal();}
+  catch(err){rackNotice('Configuração salva',`A conexão respondeu: ${err.message}. Execute o arquivo SQL de instalação e confira as políticas.`);}
+}
+function showExamRoomModal(){
+  if(examState.active){
+    const status=examState.locked?'Entregue ao professor':'Em andamento';
+    showModal(`<h3>📝 Sala de Prova</h3><div class="exam-status"><strong>${escapeReport(examState.title)}</strong><br>Aluno: ${escapeReport(examState.studentName)} · ${escapeReport(examState.studentGrade)} · Turma ${escapeReport(examState.studentClass)}<br>Status: <b>${status}</b></div><div class="edu-note">${examState.locked?'Sua prova foi registrada. A nota ficará disponível somente no painel do professor.':'Monte a rede solicitada. Quando terminar, use “Entregar prova” na barra superior.'}</div><div class="modal-btns"><button onclick="closeModal()">Fechar</button>${examState.locked?'':`<button class="green" onclick="submitExamAttempt(false)">📨 Entregar agora</button>`}</div>`);return;
+  }
+  const setup=examConfigured()?'':`<div class="edu-note">A Sala de Prova ainda aguarda a conexão com o banco de dados pelo professor.</div>`;
+  showModal(`<h3>📝 Entrar na Sala de Prova</h3>${setup}<div class="edu-note">Digite a senha informada pelo professor e identifique-se. A nota não será exibida ao aluno após a entrega.</div><label>Senha da prova</label><input id="exam-password" type="password" autocomplete="off" placeholder="Senha informada pelo professor"><div class="exam-grid"><div class="full"><label>Nome completo</label><input id="exam-student-name" autocomplete="name" placeholder="Nome completo do aluno"></div><div><label>Série</label><input id="exam-student-grade" placeholder="Ex.: 3º ano"></div><div><label>Turma</label><input id="exam-student-class" placeholder="Ex.: 3M01"></div></div><div id="exam-entry-error" style="display:none;margin-top:8px;color:#f85149;font-weight:700"></div><div class="modal-btns">${classroom.role==='teacher'?`<button onclick="showSupabaseSetupModal()">⚙️ Banco de dados</button>`:''}<button onclick="closeModal()">Cancelar</button><button id="exam-entry-btn" class="green" onclick="enterExamRoom()" ${examConfigured()?'':'disabled'}>Entrar na prova</button></div>`);
+}
+async function enterExamRoom(){
+  const btn=document.getElementById('exam-entry-btn'),error=document.getElementById('exam-entry-error');if(!btn||!error)return;
+  const password=document.getElementById('exam-password')?.value||'',studentName=document.getElementById('exam-student-name')?.value.trim()||'',studentGrade=document.getElementById('exam-student-grade')?.value.trim()||'',studentClass=document.getElementById('exam-student-class')?.value.trim()||'';
+  if(!password||studentName.length<3||!studentGrade||!studentClass){error.textContent='Preencha senha, nome completo, série e turma.';error.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Liberando...';error.style.display='none';
+  try{
+    const data=await supabaseRequest('/rest/v1/rpc/start_exam',{method:'POST',body:{p_password:password,p_student_name:studentName,p_student_grade:studentGrade,p_student_class:studentClass}});
+    if(!CLASS_ACTIVITIES[data.activity_key])throw new Error('A atividade vinculada à prova não existe nesta versão do simulador.');
+    examState={active:true,locked:false,attemptToken:data.attempt_token,examId:data.exam_id,title:data.title,activity:data.activity_key,studentName,studentGrade,studentClass,deadline:data.deadline};persistExamState();
+    classroom.role='student';classroom.studentName=studentName;classroom.activity=data.activity_key;classroom.lastScore=null;
+    devices=[];connections=[];packets=[];racks=[];arpTable={};macTable={};selected=null;history=[];sTx=0;sRx=0;sDrop=0;
+    closeModal();setMode('select');syncClassroomUI();updateAll();updateExamTimer();rackNotice('Prova liberada',`${data.title}. O cronômetro já foi iniciado.`,'ok');
+  }catch(err){error.textContent=err.message;error.style.display='block';btn.disabled=false;btn.textContent='Entrar na prova';}
+}
+function examTopologySnapshot(){return {devices,connections,racks,activity:classroom.activity,statistics:{tx:sTx,rx:sRx,drops:sDrop}};}
+async function submitExamAttempt(automatic){
+  if(!examState.active||examState.locked)return;
+  if(!automatic&&!confirm('Entregar a prova agora? Depois do envio não será possível alterar a rede.'))return;
+  const checks=activityChecks(examState.activity),passed=checks.filter(item=>item[1]).length,total=checks.length,score=Math.round(passed/Math.max(1,total)*100);
+  try{
+    await supabaseRequest('/rest/v1/rpc/submit_exam',{method:'POST',body:{p_attempt_token:examState.attemptToken,p_score:score,p_passed_checks:passed,p_total_checks:total,p_checks:checks.map(([label,ok])=>({label,ok})),p_topology:examTopologySnapshot()}});
+    examState.locked=true;persistExamState();document.getElementById('canvas-area')?.classList.add('exam-locked');syncActivityBar();
+    showModal(`<h3>✅ Prova entregue</h3><div class="edu-note"><b>Envio concluído.</b> Sua montagem e a correção automática foram registradas. A nota e os critérios de correção são visíveis somente para o professor.</div><div class="modal-btns"><button class="green" onclick="closeModal()">Concluir</button></div>`);
+    sysLog('PROVA: entrega registrada no banco de dados.','lsys');
+  }catch(err){rackNotice('Não foi possível entregar',err.message,'err');}
+}
+function updateExamTimer(){
+  const timer=document.getElementById('exam-timer');if(!examState.active||examState.locked||!examState.deadline){if(timer)timer.style.display='none';return;}
+  const remaining=Math.max(0,new Date(examState.deadline).getTime()-Date.now()),minutes=Math.floor(remaining/60000),seconds=Math.floor((remaining%60000)/1000);
+  if(timer){timer.style.display='inline';timer.textContent=`⏱ ${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;}
+  if(remaining<=0)submitExamAttempt(true);
+}
+setInterval(updateExamTimer,1000);setTimeout(()=>{if(examState.active){classroom.activity=examState.activity;classroom.studentName=examState.studentName;if(examState.locked)document.getElementById('canvas-area')?.classList.add('exam-locked');syncClassroomUI();updateExamTimer();}},300);
+
+function showTeacherExamPanel(){
+  if(classroom.role!=='teacher'){rackNotice('Acesso restrito','Entre no modo professor para acessar as provas.');return;}
+  if(!examConfigured()){showSupabaseSetupModal();return;}
+  if(!teacherExamSession?.access_token){showTeacherExamLogin();return;}
+  loadTeacherExamDashboard();
+}
+function showTeacherExamLogin(){
+  showModal(`<h3>🔐 Painel de Provas</h3><div class="edu-note">Use o e-mail e a senha do professor cadastrados no Supabase Auth. Esta autenticação protege as notas dos alunos.</div><label>E-mail do professor</label><input id="exam-teacher-email" type="email" autocomplete="username"><label>Senha</label><input id="exam-teacher-password" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')teacherExamLogin()"><div id="exam-teacher-error" style="display:none;margin-top:8px;color:#f85149;font-weight:700"></div><div class="modal-btns"><button onclick="showSupabaseSetupModal()">⚙️ Banco</button><button onclick="closeModal()">Cancelar</button><button id="exam-teacher-login-btn" class="green" onclick="teacherExamLogin()">Entrar</button></div>`);
+}
+async function teacherExamLogin(){
+  const email=document.getElementById('exam-teacher-email')?.value.trim(),password=document.getElementById('exam-teacher-password')?.value||'',error=document.getElementById('exam-teacher-error'),btn=document.getElementById('exam-teacher-login-btn');
+  if(!email||!password){error.textContent='Informe e-mail e senha.';error.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Entrando...';
+  try{teacherExamSession=await supabaseRequest('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password}});persistTeacherSession();loadTeacherExamDashboard();}
+  catch(err){error.textContent=err.message;error.style.display='block';btn.disabled=false;btn.textContent='Entrar';}
+}
+async function loadTeacherExamDashboard(){
+  showModal('<h3>📊 Painel de Provas</h3><div class="edu-note">Carregando provas e resultados...</div>');
+  try{
+    const token=teacherExamSession.access_token;
+    const [exams,attempts]=await Promise.all([
+      supabaseRequest('/rest/v1/exams?select=id,title,activity_key,target_grade,target_class,duration_minutes,starts_at,ends_at,active,created_at&order=created_at.desc',{token}),
+      supabaseRequest('/rest/v1/exam_attempts?select=id,exam_id,student_name,student_grade,student_class,started_at,submitted_at,status,score,passed_checks,total_checks&order=started_at.desc&limit=300',{token})
+    ]);
+    window._examDashboard={exams,attempts};
+    const examRows=exams.map(e=>`<tr><td><b>${escapeReport(e.title)}</b><br><small>${escapeReport(CLASS_ACTIVITIES[e.activity_key]?.title||e.activity_key)}</small></td><td>${escapeReport(e.target_grade||'Todas')} · ${escapeReport(e.target_class||'Todas')}</td><td>${e.active?'🟢 Liberada':'⚫ Fechada'}</td><td><button onclick="toggleExamActive('${e.id}',${!e.active})" style="font-size:8px;padding:3px 5px">${e.active?'Encerrar':'Liberar'}</button></td></tr>`).join('');
+    const names=new Map(exams.map(e=>[e.id,e.title]));
+    const resultRows=attempts.map(a=>`<tr><td>${escapeReport(a.student_name)}<br><small>${escapeReport(a.student_grade)} · ${escapeReport(a.student_class)}</small></td><td>${escapeReport(names.get(a.exam_id)||'Prova')}</td><td>${a.status==='submitted'||a.status==='expired'?`<span class="score">${a.score??0}</span>`:'Em andamento'}</td><td>${a.passed_checks??'-'}/${a.total_checks??'-'}</td></tr>`).join('');
+    showModal(`<h3>📊 Painel de Provas</h3><div class="modal-btns" style="justify-content:flex-start"><button class="green" onclick="showCreateExamModal()">➕ Nova prova</button><button onclick="exportExamResultsCSV()">⬇️ Exportar notas</button><button onclick="teacherExamLogout()">Sair</button></div><details class="activity-room" open><summary><span>Provas cadastradas</span><small>${exams.length}</small></summary><div style="padding:6px;max-height:180px;overflow:auto"><table class="exam-table"><thead><tr><th>Prova</th><th>Série/Turma</th><th>Status</th><th>Ação</th></tr></thead><tbody>${examRows||'<tr><td colspan="4">Nenhuma prova cadastrada.</td></tr>'}</tbody></table></div></details><details class="activity-room" open><summary><span>Resultados dos alunos</span><small>${attempts.length}</small></summary><div style="padding:6px;max-height:240px;overflow:auto"><table class="exam-table"><thead><tr><th>Aluno</th><th>Prova</th><th>Nota</th><th>Critérios</th></tr></thead><tbody>${resultRows||'<tr><td colspan="4">Nenhuma entrega registrada.</td></tr>'}</tbody></table></div></details><div class="modal-btns"><button onclick="closeModal()">Fechar</button></div>`);
+  }catch(err){if(/401|JWT|token|autoriz/i.test(err.message)){teacherExamLogout();return;}showModal(`<h3>📊 Painel de Provas</h3><div class="edu-note">${escapeReport(err.message)}</div><div class="modal-btns"><button onclick="showSupabaseSetupModal()">⚙️ Configurar banco</button><button onclick="closeModal()">Fechar</button></div>`);}
+}
+function showCreateExamModal(){
+  const options=Object.entries(CLASS_ACTIVITIES).map(([key,a])=>`<option value="${key}">${ACTIVITY_ROOMS[a.room].title.replace(/^[^ ]+ /,'')} · Nível ${a.level} — ${a.title}</option>`).join('');
+  const start=new Date(Date.now()-3*60000),end=new Date(Date.now()+24*60*60000),local=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  showModal(`<h3>➕ Criar prova</h3><label>Título</label><input id="new-exam-title" value="Avaliação prática de redes"><label>Atividade prática</label><select id="new-exam-activity">${options}</select><div class="exam-grid"><div><label>Série</label><input id="new-exam-grade" placeholder="Ex.: 3º ano"></div><div><label>Turma</label><input id="new-exam-class" placeholder="Ex.: 3M01"></div><div><label>Duração (minutos)</label><input id="new-exam-duration" type="number" min="5" max="240" value="50"></div><div><label>Senha da prova</label><input id="new-exam-password" type="text" minlength="4" placeholder="Ex.: REDES2026"></div><div><label>Início</label><input id="new-exam-start" type="datetime-local" value="${local(start)}"></div><div><label>Encerramento</label><input id="new-exam-end" type="datetime-local" value="${local(end)}"></div></div><div class="edu-note">Informe aos alunos apenas a senha da prova. A nota será armazenada e exibida somente neste painel.</div><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar</button><button id="create-exam-btn" class="green" onclick="createExamOnline()">Criar e liberar</button></div>`);
+}
+async function createExamOnline(){
+  const btn=document.getElementById('create-exam-btn'),payload={p_title:document.getElementById('new-exam-title')?.value.trim(),p_activity_key:document.getElementById('new-exam-activity')?.value,p_password:document.getElementById('new-exam-password')?.value||'',p_target_grade:document.getElementById('new-exam-grade')?.value.trim()||'',p_target_class:document.getElementById('new-exam-class')?.value.trim()||'',p_duration_minutes:+document.getElementById('new-exam-duration')?.value||50,p_starts_at:new Date(document.getElementById('new-exam-start')?.value).toISOString(),p_ends_at:new Date(document.getElementById('new-exam-end')?.value).toISOString()};
+  if(!payload.p_title||payload.p_password.length<4){rackNotice('Dados incompletos','Informe o título e uma senha com pelo menos 4 caracteres.');return;}
+  btn.disabled=true;btn.textContent='Criando...';
+  try{await supabaseRequest('/rest/v1/rpc/create_exam',{method:'POST',body:payload,token:teacherExamSession.access_token});rackNotice('Prova criada','A prova foi liberada. Informe a senha aos alunos.','ok');loadTeacherExamDashboard();}
+  catch(err){rackNotice('Prova não criada',err.message,'err');btn.disabled=false;btn.textContent='Criar e liberar';}
+}
+async function toggleExamActive(id,active){
+  try{await supabaseRequest(`/rest/v1/exams?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',body:{active},token:teacherExamSession.access_token});loadTeacherExamDashboard();}
+  catch(err){rackNotice('Não foi possível alterar',err.message,'err');}
+}
+function teacherExamLogout(){teacherExamSession=null;sessionStorage.removeItem('allannet-teacher-session');showTeacherExamLogin();}
+function exportExamResultsCSV(){
+  const data=window._examDashboard||{exams:[],attempts:[]},names=new Map(data.exams.map(e=>[e.id,e.title]));
+  const csv=[['Aluno','Série','Turma','Prova','Status','Nota','Critérios atendidos','Total','Início','Entrega'],...data.attempts.map(a=>[a.student_name,a.student_grade,a.student_class,names.get(a.exam_id)||'',a.status,a.score??'',a.passed_checks??'',a.total_checks??'',a.started_at,a.submitted_at||''])].map(row=>row.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\n');
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='notas_allannet_edu.csv';a.click();URL.revokeObjectURL(url);
 }
 function showReportModal(){
   const act=classroom.activity?CLASS_ACTIVITIES[classroom.activity]:null,room=act?ACTIVITY_ROOMS[act.room]:null;
