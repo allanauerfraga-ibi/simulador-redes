@@ -18,23 +18,32 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_POOLER_HOST: ${{ secrets.SUPABASE_POOLER_HOST }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Avisar quando faltarem os dados seguros
-        if: ${{ env.SUPABASE_ACCESS_TOKEN == '' || env.SUPABASE_DB_PASSWORD == '' || env.SUPABASE_PROJECT_ID == '' }}
-        run: echo "::warning::Cadastre SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD e SUPABASE_PROJECT_REF nos Secrets do repositório e execute novamente este fluxo."
+        if: ${{ env.SUPABASE_ACCESS_TOKEN == '' || env.SUPABASE_DB_PASSWORD == '' || env.SUPABASE_PROJECT_ID == '' || env.SUPABASE_POOLER_HOST == '' }}
+        run: echo "::warning::Cadastre SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD, SUPABASE_PROJECT_REF e SUPABASE_POOLER_HOST nos Secrets do repositório e execute novamente este fluxo."
 
       - name: Instalar Supabase CLI
-        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_DB_PASSWORD != '' && env.SUPABASE_PROJECT_ID != '' }}
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_DB_PASSWORD != '' && env.SUPABASE_PROJECT_ID != '' && env.SUPABASE_POOLER_HOST != '' }}
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
       - name: Conectar ao projeto Supabase
-        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_DB_PASSWORD != '' && env.SUPABASE_PROJECT_ID != '' }}
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_DB_PASSWORD != '' && env.SUPABASE_PROJECT_ID != '' && env.SUPABASE_POOLER_HOST != '' }}
         run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
 
-      - name: Aplicar atualizações do banco
-        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_DB_PASSWORD != '' && env.SUPABASE_PROJECT_ID != '' }}
-        run: supabase db push
+      - name: Aplicar atualizações do banco por IPv4
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_DB_PASSWORD != '' && env.SUPABASE_PROJECT_ID != '' && env.SUPABASE_POOLER_HOST != '' }}
+        run: |
+          ENCODED_PASSWORD="$(python3 - <<'PY'
+          import os
+          import urllib.parse
+          print(urllib.parse.quote(os.environ["SUPABASE_DB_PASSWORD"], safe=""))
+          PY
+          )"
+          DB_URL="postgresql://postgres.${SUPABASE_PROJECT_ID}:${ENCODED_PASSWORD}@${SUPABASE_POOLER_HOST}:5432/postgres"
+          supabase db push --db-url "$DB_URL"
