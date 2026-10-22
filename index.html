@@ -2678,29 +2678,68 @@ function exportExamResultsCSV(){
   const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='notas_allannet_edu.csv';a.click();URL.revokeObjectURL(url);
 }
 function createExamAttemptPDFCanvases(attempt,exam){
-  const W=1240,H=1754,M=62,page=document.createElement('canvas'),p=page.getContext('2d'),activity=CLASS_ACTIVITIES[exam.activity_key],value=Number(exam.max_score)||10,points=examPoints(attempt.score,value),topology=attempt.topology&&typeof attempt.topology==='object'?attempt.topology:{},savedDevices=Array.isArray(topology.devices)?topology.devices:[],savedConnections=Array.isArray(topology.connections)?topology.connections:[],checks=Array.isArray(attempt.checks)?attempt.checks:[];
-  p.fillStyle='#fff';p.fillRect(0,0,W,H);p.fillStyle='#075da8';p.fillRect(0,0,W,20);
-  p.fillStyle='#17324a';p.font='bold 24px Arial';p.fillText('AllanNet EDU — Sala de Prova',M,62);p.textAlign='right';p.font='18px Arial';p.fillText('Relatório individual do aluno',W-M,62);p.textAlign='left';
-  p.strokeStyle='#c8d6e2';p.beginPath();p.moveTo(M,82);p.lineTo(W-M,82);p.stroke();
-  let y=115;
-  p.fillStyle='#075da8';p.font='bold 38px Arial';p.fillText(exam.title||'Avaliação prática de redes',M,y);y+=48;
-  const line=(label,valueText)=>{p.fillStyle='#f3f7fa';p.fillRect(M,y-24,W-2*M,36);p.fillStyle='#203b54';p.font='bold 19px Arial';p.fillText(label+':',M+10,y);p.font='19px Arial';p.fillText(String(valueText||'—'),M+205,y);y+=40;};
-  line('Aluno',attempt.student_name);line('Série / Turma',`${attempt.student_grade} / ${attempt.student_class}`);line('Atividade',activity?`Nível ${activity.level} — ${activity.title}`:exam.activity_key);line('Valor da prova',`${formatExamNumber(value)} pontos`);line('Resultado',`${formatExamNumber(points)} de ${formatExamNumber(value)} pontos (${attempt.score??0}%)`);line('Entrega',attempt.submitted_at?new Date(attempt.submitted_at).toLocaleString('pt-BR'):'Não entregue');
-  const section=title=>{y+=12;p.fillStyle='#075da8';p.font='bold 25px Arial';p.fillText(title,M,y);y+=12;p.strokeStyle='#9ec7e9';p.beginPath();p.moveTo(M,y);p.lineTo(W-M,y);p.stroke();y+=26;};
-  section('Enunciado');p.fillStyle='#263f55';p.font='19px Arial';reportWrapText(p,activity?.desc||'Atividade prática de rede.',W-2*M).forEach(text=>{p.fillText(text,M,y);y+=25;});
-  section('Correção automática');
-  if(!checks.length){p.fillStyle='#657789';p.font='18px Arial';p.fillText('Nenhum critério registrado.',M,y);y+=28;}
-  checks.forEach(item=>{p.fillStyle=item.ok?'#e9f7ee':'#fff0f0';p.fillRect(M,y-20,W-2*M,32);p.fillStyle=item.ok?'#1b7f3a':'#b42318';p.font='18px Arial';p.fillText(`${item.ok?'✓':'✗'} ${item.label||'Critério'}`,M+10,y+2);y+=36;});
-  section('Desenho entregue pelo aluno');
-  const boxX=M,boxY=y,boxW=W-2*M,boxH=Math.min(555,H-y-105);p.fillStyle='#f8fbfd';p.fillRect(boxX,boxY,boxW,boxH);p.strokeStyle='#afc2d2';p.strokeRect(boxX,boxY,boxW,boxH);
+  const W=1240,H=1754,M=60,pages=[];
+  const activity=CLASS_ACTIVITIES[exam.activity_key],value=Number(exam.max_score)||10,points=examPoints(attempt.score,value),topology=attempt.topology&&typeof attempt.topology==='object'?attempt.topology:{},savedDevices=Array.isArray(topology.devices)?topology.devices:[],savedConnections=Array.isArray(topology.connections)?topology.connections:[],checks=Array.isArray(attempt.checks)?attempt.checks:[];
+  const passed=checks.filter(item=>item&&item.ok).length,failed=Math.max(0,checks.length-passed);
+  let page=null,p=null,y=0,pageNumber=0;
+  const startPage=()=>{
+    page=document.createElement('canvas');page.width=W;page.height=H;p=page.getContext('2d');pageNumber++;
+    p.fillStyle='#fff';p.fillRect(0,0,W,H);p.fillStyle='#075da8';p.fillRect(0,0,W,18);
+    p.fillStyle='#17324a';p.font='bold 22px Arial';p.textAlign='left';p.fillText('AllanNet EDU — Sala de Prova',M,58);
+    p.textAlign='right';p.font='18px Arial';p.fillText('Relatório individual corrigido',W-M,58);p.textAlign='left';
+    p.strokeStyle='#d7e1ea';p.lineWidth=2;p.beginPath();p.moveTo(M,76);p.lineTo(W-M,76);p.stroke();y=105;
+  };
+  const finishPage=()=>{
+    p.strokeStyle='#d7e1ea';p.lineWidth=1;p.beginPath();p.moveTo(M,H-58);p.lineTo(W-M,H-58);p.stroke();
+    p.fillStyle='#657789';p.font='16px Arial';p.fillText(`Gerado pelo AllanNet EDU em ${new Date().toLocaleString('pt-BR')}`,M,H-31);
+    p.textAlign='right';p.fillText(`Página ${pageNumber}`,W-M,H-31);p.textAlign='left';pages.push(page);
+  };
+  const ensure=height=>{if(y+height>H-82){finishPage();startPage();}};
+  const section=title=>{ensure(62);y+=14;p.fillStyle='#075da8';p.font='bold 27px Arial';p.fillText(title,M,y+25);p.strokeStyle='#9ec7e9';p.lineWidth=2;p.beginPath();p.moveTo(M,y+36);p.lineTo(W-M,y+36);p.stroke();y+=54;};
+  const keyValue=(label,valueText)=>{
+    p.font='21px Arial';const lines=reportWrapText(p,valueText,W-2*M-220),height=Math.max(34,lines.length*28+7);ensure(height);
+    p.fillStyle='#f4f7fa';p.fillRect(M,y-4,W-2*M,height);p.fillStyle='#203b54';p.font='bold 20px Arial';p.fillText(label+':',M+12,y+22);
+    p.font='20px Arial';lines.forEach((text,index)=>p.fillText(text,M+215,y+22+index*28));y+=height+3;
+  };
+  const drawTable=(headers,rows,widths)=>{
+    const drawHeader=()=>{ensure(42);let x=M;p.fillStyle='#dceeff';p.fillRect(M,y,W-2*M,40);p.strokeStyle='#aebfce';p.font='bold 16px Arial';p.fillStyle='#17324a';headers.forEach((header,index)=>{p.strokeRect(x,y,widths[index],40);p.fillText(header,x+7,y+25);x+=widths[index];});y+=40;};
+    drawHeader();
+    if(!rows.length)rows=[['Nenhum registro.']];
+    rows.forEach(row=>{
+      p.font='15px Arial';const cellLines=headers.map((_,index)=>reportWrapText(p,row[index]??'',widths[index]-14)),rowHeight=Math.max(38,...cellLines.map(lines=>lines.length*20+14));
+      if(y+rowHeight>H-82){finishPage();startPage();drawHeader();}
+      let x=M;p.fillStyle='#fff';p.fillRect(M,y,W-2*M,rowHeight);p.strokeStyle='#b9c7d5';cellLines.forEach((lines,index)=>{p.strokeRect(x,y,widths[index],rowHeight);p.fillStyle='#263f55';lines.forEach((text,lineIndex)=>p.fillText(text,x+7,y+22+lineIndex*20));x+=widths[index];});y+=rowHeight;
+    });y+=12;
+  };
+  startPage();
+  p.fillStyle='#075da8';p.font='bold 38px Arial';reportWrapText(p,exam.title||'Avaliação prática de redes',W-2*M).slice(0,2).forEach((text,index)=>p.fillText(text,M,y+36+index*43));y+=82;
+  keyValue('Aluno',attempt.student_name||'Não informado');
+  keyValue('Série / Turma',`${attempt.student_grade||'Não informada'} / ${attempt.student_class||'Não informada'}`);
+  keyValue('Atividade',activity?`Nível ${activity.level} — ${activity.title}`:(exam.activity_key||'Atividade prática'));
+  keyValue('Entrega',attempt.submitted_at?new Date(attempt.submitted_at).toLocaleString('pt-BR'):'Não entregue');
+  ensure(125);y+=12;p.fillStyle=failed?'#fff7ed':'#edf9f0';p.fillRect(M,y,W-2*M,105);p.strokeStyle=failed?'#e8a34a':'#62aa72';p.lineWidth=2;p.strokeRect(M,y,W-2*M,105);
+  p.fillStyle='#17324a';p.font='bold 22px Arial';p.fillText('RESULTADO DA CORREÇÃO AUTOMÁTICA',M+18,y+31);
+  p.fillStyle='#075da8';p.font='bold 34px Arial';p.fillText(`${formatExamNumber(points)} / ${formatExamNumber(value)} pontos`,M+18,y+76);
+  p.textAlign='right';p.fillStyle='#1b7f3a';p.font='bold 21px Arial';p.fillText(`${passed} acerto(s)`,W-M-22,y+43);p.fillStyle='#b42318';p.fillText(`${failed} erro(s)`,W-M-22,y+76);p.textAlign='left';y+=122;
+  section('Enunciado da prova');p.fillStyle='#263f55';p.font='20px Arial';const statement=reportWrapText(p,activity?.desc||'Atividade prática de rede.',W-2*M);ensure(statement.length*28+8);statement.forEach(text=>{p.fillText(text,M,y);y+=28;});
+  section('Correção do sistema — acertos e erros');
+  drawTable(['Resultado','Critério avaliado','Situação'],checks.map(item=>[item?.ok?'ACERTO':'ERRO',item?.label||'Critério sem descrição',item?.ok?'Atendido corretamente':'Não atendido; deve ser corrigido']),[150,680,290]);
+  section('Desenho entregue pelo aluno');ensure(600);
+  const boxX=M,boxY=y,boxW=W-2*M,boxH=555;p.fillStyle='#f8fbfd';p.fillRect(boxX,boxY,boxW,boxH);p.strokeStyle='#afc2d2';p.lineWidth=2;p.strokeRect(boxX,boxY,boxW,boxH);
   if(!savedDevices.length){p.fillStyle='#657789';p.font='20px Arial';p.fillText('Nenhum equipamento registrado na entrega.',boxX+24,boxY+42);}else{
-    const xs=savedDevices.map(d=>Number(d.x)||0),ys=savedDevices.map(d=>Number(d.y)||0),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),scale=Math.min((boxW-150)/Math.max(1,maxX-minX),(boxH-120)/Math.max(1,maxY-minY),1.25),map=new Map();
-    savedDevices.forEach(d=>map.set(d.id,{x:boxX+75+(Number(d.x||0)-minX)*scale,y:boxY+60+(Number(d.y||0)-minY)*scale,d}));
+    const xs=savedDevices.map(d=>Number(d.x)||0),ys=savedDevices.map(d=>Number(d.y)||0),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),scale=Math.min((boxW-170)/Math.max(1,maxX-minX),(boxH-130)/Math.max(1,maxY-minY),1.25),map=new Map();
+    savedDevices.forEach(d=>map.set(d.id,{x:boxX+85+(Number(d.x||0)-minX)*scale,y:boxY+65+(Number(d.y||0)-minY)*scale,d}));
     savedConnections.forEach(c=>{const a=map.get(c.from),b=map.get(c.to);if(!a||!b)return;p.strokeStyle=c.active===false?'#d14343':(c.kind==='wifi'?'#8a58c7':'#4287b9');p.lineWidth=c.kind==='backbone'?6:3;p.setLineDash(c.kind==='wifi'?[10,7]:[]);p.beginPath();p.moveTo(a.x,a.y);p.lineTo(b.x,b.y);p.stroke();});p.setLineDash([]);
-    const colors={pc:'#dceeff',phone:'#f0e4ff',router:'#ffe8c7',switch:'#dcf4e4',server:'#e2e8f0',firewall:'#ffd9d9',cloud:'#e0f3ff',satellite:'#fff0bd',satDish:'#e8e8ff'};
-    map.forEach(({x,y,d})=>{const w=128,h=52;p.fillStyle=colors[d.type]||'#eef2f5';p.strokeStyle='#34566f';p.lineWidth=2;p.fillRect(x-w/2,y-h/2,w,h);p.strokeRect(x-w/2,y-h/2,w,h);p.fillStyle='#17324a';p.font='bold 14px Arial';p.textAlign='center';p.fillText(String(d.name||d.type).slice(0,18),x,y-3);p.font='12px Arial';p.fillText(String(d.ip||'').slice(0,20),x,y+16);});p.textAlign='left';
+    const colors={pc:'#dceeff',phone:'#f0e4ff',router:'#ffe8c7',switch:'#dcf4e4',server:'#e2e8f0',firewall:'#ffd9d9',cloud:'#e0f3ff',satellite:'#fff0bd',satDish:'#e8e8ff',rack:'#eeeeee',patchPanel:'#fff4d6'};
+    map.forEach(({x:dx,y:dy,d})=>{const w=136,h=56;p.fillStyle=colors[d.type]||'#eef2f5';p.strokeStyle='#34566f';p.lineWidth=2;p.fillRect(dx-w/2,dy-h/2,w,h);p.strokeRect(dx-w/2,dy-h/2,w,h);p.fillStyle='#17324a';p.font='bold 14px Arial';p.textAlign='center';p.fillText(String(d.name||d.type).slice(0,20),dx,dy-4);p.font='12px Arial';p.fillText(String(d.ip||LABELS[d.type]||d.type||'').slice(0,22),dx,dy+17);});p.textAlign='left';
   }
-  p.strokeStyle='#d7e1ea';p.beginPath();p.moveTo(M,H-55);p.lineTo(W-M,H-55);p.stroke();p.fillStyle='#657789';p.font='16px Arial';p.fillText(`Gerado pelo AllanNet EDU em ${new Date().toLocaleString('pt-BR')}`,M,H-28);return [page];
+  y+=boxH+24;
+  section('Equipamentos utilizados');
+  drawTable(['Nome','Tipo','Endereço IP','Máscara','VLAN','Status'],savedDevices.map(d=>[d.name||'—',LABELS[d.type]||d.type||'—',d.ip||'—',d.mask||'—',String(d.vlan||1),d.status==='down'?'Desligado':'Ativo']),[240,180,200,210,90,200]);
+  section('Conexões realizadas');
+  const deviceMap=new Map(savedDevices.map(d=>[d.id,d]));
+  drawTable(['Origem / porta','Destino / porta','Meio','Velocidade','Status'],savedConnections.map(c=>{const a=deviceMap.get(c.from),b=deviceMap.get(c.to);return [`${a?.name||'?'} · ${c.fromIface||'-'}`,`${b?.name||'?'} · ${c.toIface||'-'}`,c.kind==='wifi'?'Sem fio':(c.medium||c.kind||'Cabo'),formatBandwidth(c.bw||100),c.active===false?'Falha':'Ativa'];}),[290,290,200,170,170]);
+  finishPage();return pages;
 }
 function viewExamAttemptPDF(attemptId){
   const data=window._examDashboard||{exams:[],attempts:[]},attempt=data.attempts.find(a=>a.id===attemptId),exam=attempt&&data.exams.find(e=>e.id===attempt.exam_id);if(!attempt||!exam){rackNotice('Prova não encontrada','Atualize o painel e tente novamente.','err');return;}
