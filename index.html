@@ -2655,13 +2655,22 @@ async function submitExamAttempt(automatic){
     sysLog('PROVA: entrega registrada no banco de dados.','lsys');
   }catch(err){rackNotice('Não foi possível entregar',err.message,'err');}
 }
+let examDeadlineSyncing=false,examDeadlineRpcUnavailable=false,examExpiryChecking=false;
+async function syncExamDeadline(finalCheck=false){
+  if(!examState.active||examState.locked||!examState.attemptToken||examDeadlineSyncing)return;
+  if(examDeadlineRpcUnavailable){examExpiryChecking=false;if(finalCheck)submitExamAttempt(true);return;}
+  examDeadlineSyncing=true;
+  try{const data=await supabaseRequest('/rest/v1/rpc/exam_deadline',{method:'POST',body:{p_attempt_token:examState.attemptToken}});if(data?.deadline&&new Date(data.deadline).getTime()!==new Date(examState.deadline).getTime()){examState.deadline=data.deadline;persistExamState();rackNotice('Prazo atualizado',`O professor prorrogou a prova até ${formatExamDateTime(data.deadline)}.`,'ok');}if(finalCheck&&new Date(examState.deadline).getTime()<=Date.now())submitExamAttempt(true);}
+  catch(err){if(/exam_deadline|function|schema cache|404/i.test(err.message||''))examDeadlineRpcUnavailable=true;if(finalCheck)submitExamAttempt(true);}
+  finally{examDeadlineSyncing=false;examExpiryChecking=false;}
+}
 function updateExamTimer(){
   const timer=document.getElementById('exam-timer');if(!examState.active||examState.locked||!examState.deadline){if(timer)timer.style.display='none';return;}
   const remaining=Math.max(0,new Date(examState.deadline).getTime()-Date.now()),minutes=Math.floor(remaining/60000),seconds=Math.floor((remaining%60000)/1000);
   if(timer){timer.style.display='inline';timer.textContent=`⏱ ${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;}
-  if(remaining<=0)submitExamAttempt(true);
+  if(remaining<=0&&!examExpiryChecking){examExpiryChecking=true;syncExamDeadline(true);}
 }
-setInterval(updateExamTimer,1000);setTimeout(()=>{if(examState.active){classroom.activity=examState.activity;classroom.studentName=examState.studentName;if(examState.locked)document.getElementById('canvas-area')?.classList.add('exam-locked');syncClassroomUI();updateExamTimer();}},300);
+setInterval(updateExamTimer,1000);setInterval(()=>syncExamDeadline(false),15000);setTimeout(()=>{if(examState.active){classroom.activity=examState.activity;classroom.studentName=examState.studentName;if(examState.locked)document.getElementById('canvas-area')?.classList.add('exam-locked');syncClassroomUI();updateExamTimer();syncExamDeadline(false);}},300);
 
 function showTeacherExamPanel(){
   if(classroom.role!=='teacher'){rackNotice('Acesso restrito','Entre no modo professor para acessar as provas.');return;}
@@ -2688,7 +2697,7 @@ async function loadTeacherExamDashboard(){
     catch(err){if(!/max_score|column/i.test(err.message))throw err;exams=(await supabaseRequest('/rest/v1/exams?select=id,title,activity_key,target_grade,target_class,duration_minutes,starts_at,ends_at,active,created_at&order=created_at.desc',{token})).map(e=>({...e,max_score:10}));}
     const attempts=await supabaseRequest('/rest/v1/exam_attempts?select=id,exam_id,student_name,student_grade,student_class,started_at,submitted_at,status,score,passed_checks,total_checks,checks,topology&order=started_at.desc&limit=300',{token});
     window._examDashboard={exams,attempts};
-    const examRows=exams.map(e=>`<tr><td><b>${escapeReport(e.title)}</b><br><small>${escapeReport(CLASS_ACTIVITIES[e.activity_key]?.title||e.activity_key)}</small></td><td>${escapeReport(e.target_grade||'Todas')} · ${escapeReport(e.target_class||'Todas')}</td><td>${formatExamNumber(e.max_score||10)} pts</td><td><b>${formatExamDateTime(e.ends_at)}</b></td><td>${e.active?'🟢 Liberada':'⚫ Fechada'}</td><td style="white-space:normal;min-width:155px"><button onclick="toggleExamActive('${e.id}',${!e.active})" style="font-size:8px;padding:3px 5px">${e.active?'Encerrar':'Liberar'}</button> <button onclick="showDuplicateExamClassModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#075da8;border-color:#4e9bd3;color:#fff">↔ Outra turma</button> <button onclick="deleteExamOnline('${e.id}')" style="font-size:8px;padding:3px 5px;background:#b42318;border-color:#d94b45;color:#fff">🗑 Excluir</button></td></tr>`).join('');
+    const examRows=exams.map(e=>`<tr><td><b>${escapeReport(e.title)}</b><br><small>${escapeReport(CLASS_ACTIVITIES[e.activity_key]?.title||e.activity_key)}</small></td><td>${escapeReport(e.target_grade||'Todas')} · ${escapeReport(e.target_class||'Todas')}</td><td>${formatExamNumber(e.max_score||10)} pts</td><td><b>${formatExamDateTime(e.ends_at)}</b></td><td>${e.active?'🟢 Liberada':'⚫ Fechada'}</td><td style="white-space:normal;min-width:170px"><button onclick="toggleExamActive('${e.id}',${!e.active})" style="font-size:8px;padding:3px 5px">${e.active?'Encerrar':'Liberar'}</button> <button onclick="showExtendExamModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#6b4f00;border-color:#d29922;color:#ffd166">⏰ Prorrogar</button> <button onclick="showDuplicateExamClassModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#075da8;border-color:#4e9bd3;color:#fff">↔ Outra turma</button> <button onclick="deleteExamOnline('${e.id}')" style="font-size:8px;padding:3px 5px;background:#b42318;border-color:#d94b45;color:#fff">🗑 Excluir</button></td></tr>`).join('');
     const examMap=new Map(exams.map(e=>[e.id,e]));
     const resultRows=attempts.map(a=>{const e=examMap.get(a.exam_id),finished=a.status==='submitted'||a.status==='expired',value=Number(e?.max_score)||10,points=finished?examPoints(a.score,value):null;return `<tr><td>${escapeReport(a.student_name)}<br><small>${escapeReport(a.student_grade)} · ${escapeReport(a.student_class)}</small></td><td>${escapeReport(e?.title||'Prova')}</td><td>${finished?`<b>${formatExamNumber(points)}</b> / ${formatExamNumber(value)}<br><small>${a.score??0}%</small>`:'Em andamento'}</td><td>${a.passed_checks??'-'}/${a.total_checks??'-'}</td><td>${finished?`<button onclick="viewExamAttemptPDF('${a.id}')" style="font-size:8px;padding:4px 6px">👁 Ver PDF</button>`:'—'}</td></tr>`;}).join('');
     showModal(`<h3>📊 Painel de Provas</h3><div class="modal-btns" style="justify-content:flex-start"><button class="green" onclick="showCreateExamModal()">➕ Nova prova</button><button class="yellow" onclick="showCreateExamBatchModal()">🧪 Criar 15 versões</button><button onclick="exportExamResultsCSV()">⬇️ Exportar notas</button><button onclick="teacherExamLogout()">Sair</button></div><details class="activity-room" open><summary><span>Provas cadastradas</span><small>${exams.length}</small></summary><div style="padding:6px;max-height:180px;overflow:auto"><table class="exam-table"><thead><tr><th>Prova</th><th>Série/Turma</th><th>Valor</th><th>Expira em</th><th>Status</th><th>Ação</th></tr></thead><tbody>${examRows||'<tr><td colspan="6">Nenhuma prova cadastrada.</td></tr>'}</tbody></table></div></details><details class="activity-room" open><summary><span>Resultados dos alunos</span><small>${attempts.length}</small></summary><div style="padding:6px;max-height:260px;overflow:auto"><table class="exam-table"><thead><tr><th>Aluno</th><th>Prova</th><th>Nota</th><th>Critérios</th><th>Prova</th></tr></thead><tbody>${resultRows||'<tr><td colspan="5">Nenhuma entrega registrada.</td></tr>'}</tbody></table></div></details><div class="modal-btns"><button onclick="closeModal()">Fechar</button></div>`);
@@ -2757,6 +2766,19 @@ async function duplicateExamForClass(){
     rackNotice('Prova liberada para outra turma',`${baseTitle} agora também está disponível para ${SCHOOL_EXAM_GRADE} ${targetClass} e expira em ${formatExamDateTime(exam.ends_at)}.${legacyValue?' O banco usou o valor padrão; execute a atualização SQL para valores personalizados.':''}`,'ok');loadTeacherExamDashboard();
   }catch(err){rackNotice('Não foi possível duplicar a prova',err.message,'err');btn.disabled=false;btn.textContent='Criar e liberar';}
 }
+function showExtendExamModal(id){
+  const exam=(window._examDashboard?.exams||[]).find(item=>item.id===id);if(!exam){rackNotice('Prova não encontrada','Atualize o painel e tente novamente.','err');return;}
+  window._examExtendSource=id;
+  showModal(`<h3>⏰ Prorrogar término da prova</h3><div class="exam-status"><strong>${escapeReport(exam.title)}</strong><br>${escapeReport(exam.target_grade||SCHOOL_EXAM_GRADE)} ${escapeReport(exam.target_class||'')}<br>Expiração atual: <b>${formatExamDateTime(exam.ends_at)}</b></div><label>Nova data e horário de expiração</label><input id="extend-exam-end" type="datetime-local" value="${examDateTimeLocal(exam.ends_at)}"><div class="edu-note">Escolha uma data e um horário posteriores ao término atual. A atividade, a senha, o valor e as entregas dos alunos serão preservados.</div><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Cancelar</button><button id="extend-exam-btn" class="green" onclick="extendExamDeadline()">⏰ Confirmar prorrogação</button></div>`);
+}
+async function extendExamDeadline(){
+  const id=window._examExtendSource,exam=(window._examDashboard?.exams||[]).find(item=>item.id===id),field=document.getElementById('extend-exam-end'),btn=document.getElementById('extend-exam-btn'),newDate=new Date(field?.value||'');
+  if(!exam||Number.isNaN(newDate.getTime())){rackNotice('Data inválida','Informe a nova data e o horário de expiração.','err');return;}
+  const currentDate=new Date(exam.ends_at);if(newDate<=currentDate){rackNotice('Prazo não prorrogado','A nova expiração precisa ser posterior à data e ao horário atuais.','err');return;}
+  btn.disabled=true;btn.textContent='Prorrogando...';
+  try{await supabaseRequest(`/rest/v1/exams?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',body:{ends_at:newDate.toISOString()},token:teacherExamSession.access_token});rackNotice('Prazo prorrogado',`A prova agora expira em ${formatExamDateTime(newDate)}.`,'ok');loadTeacherExamDashboard();}
+  catch(err){rackNotice('Não foi possível prorrogar',err.message,'err');btn.disabled=false;btn.textContent='⏰ Confirmar prorrogação';}
+}
 async function toggleExamActive(id,active){
   try{await supabaseRequest(`/rest/v1/exams?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',body:{active},token:teacherExamSession.access_token});loadTeacherExamDashboard();}
   catch(err){rackNotice('Não foi possível alterar',err.message,'err');}
@@ -2774,6 +2796,9 @@ function formatExamNumber(value){
 }
 function formatExamDateTime(value){
   if(!value)return 'Não informado';const date=new Date(value);if(Number.isNaN(date.getTime()))return 'Data inválida';return date.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',', ' às');
+}
+function examDateTimeLocal(value){
+  const date=new Date(value);if(Number.isNaN(date.getTime()))return '';return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
 }
 function examPoints(percent,maxScore){return Math.round((Number(percent)||0)*(Number(maxScore)||10))/100;}
 function exportExamResultsCSV(){
