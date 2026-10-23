@@ -2690,7 +2690,7 @@ async function submitExamAttempt(automatic){
   if(!examState.active||examState.locked)return;
   if(!automatic&&!confirm('Entregar a prova agora? Depois do envio não será possível alterar a rede.'))return;
   try{
-    await supabaseRequest('/functions/v1/submit-exam',{method:'POST',body:{attempt_token:examState.attemptToken,topology:examTopologySnapshot()}});
+    await supabaseRequest('/rest/v1/rpc/submit_exam_secure',{method:'POST',body:{p_attempt_token:examState.attemptToken,p_topology:examTopologySnapshot()}});
     examState.locked=true;persistExamState();document.getElementById('canvas-area')?.classList.add('exam-locked');syncActivityBar();
     showModal(`<h3>✅ Prova entregue</h3><div class="edu-note"><b>Envio concluído.</b> Sua montagem e a correção automática foram registradas. A nota e os critérios de correção são visíveis somente para o professor.</div><div class="modal-btns"><button class="green" onclick="closeModal()">Concluir</button></div>`);
     sysLog('PROVA: entrega registrada no banco de dados.','lsys');
