@@ -2,6 +2,8 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://puykkgwdaieoleerdrnv.supabase.co; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
 <title>Allan Fraga - Simulador de Rede</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -622,8 +624,7 @@ let history=[];// undo stack [{devices, connections}]
 let classroom={role:'student',studentName:'',activity:null,subnetColors:false,lastScore:null,faults:[],faultSnapshot:null};
 let teacherExamSession=null;
 let examState={active:false,locked:false,attemptToken:'',examId:'',title:'',activity:'',studentName:'',studentGrade:'',studentClass:'',deadline:'',maxScore:10};
-try{examState={...examState,...JSON.parse(sessionStorage.getItem('allannet-exam-state')||'{}')};teacherExamSession=JSON.parse(sessionStorage.getItem('allannet-teacher-session')||'null');}catch(e){}
-const TEACHER_PASSWORD_HASH='ee710ab733f3255effb57c70900e7365d4af5eeb727610672ead4a953ad5ab2d';
+try{examState={...examState,...JSON.parse(sessionStorage.getItem('allannet-exam-state')||'{}')};sessionStorage.removeItem('allannet-teacher-session');}catch(e){}
 
 const ACTIVITY_ROOMS={
   lan:{title:'🔌 Sala LAN — básico ao avançado'},wifi:{title:'📶 Sala Rede sem fio'},
@@ -2212,18 +2213,61 @@ function autoLayout(){
 // =========================================================
 // SAVE / LOAD
 // =========================================================
+function sanitizeImportedText(value,maxLength=160){
+  return String(value??'').replace(/[\u0000-\u001f\u007f<>`"'&\\]/g,'').trim().slice(0,maxLength);
+}
+function sanitizeImportedValue(value,depth=0){
+  if(depth>5)return null;
+  if(typeof value==='string')return sanitizeImportedText(value,500);
+  if(typeof value==='number')return Number.isFinite(value)?value:0;
+  if(typeof value==='boolean'||value===null)return value;
+  if(Array.isArray(value))return value.slice(0,300).map(item=>sanitizeImportedValue(item,depth+1));
+  if(typeof value==='object'){
+    const clean={};let count=0;
+    for(const [key,item] of Object.entries(value)){
+      if(count++>100||['__proto__','prototype','constructor'].includes(key)||/^on/i.test(key))continue;
+      const safeKey=sanitizeImportedText(key,60);if(safeKey)clean[safeKey]=sanitizeImportedValue(item,depth+1);
+    }
+    return clean;
+  }
+  return null;
+}
+function validateImportedTopology(raw){
+  if(!raw||typeof raw!=='object'||!Array.isArray(raw.devices)||!Array.isArray(raw.connections))throw new Error('O arquivo não possui uma topologia válida.');
+  if(raw.devices.length>100||raw.connections.length>300||(Array.isArray(raw.racks)&&raw.racks.length>30))throw new Error('O arquivo excede o limite seguro de equipamentos ou conexões.');
+  const allowedTypes=new Set(['pc','phone','router','switch','patchPanel','server','firewall','cloud','satDish','satellite']);
+  const clean=sanitizeImportedValue(raw),ids=new Set();
+  clean.devices=clean.devices.map((dev,index)=>{
+    if(!dev||!allowedTypes.has(dev.type))throw new Error(`Tipo de equipamento inválido na posição ${index+1}.`);
+    const id=Number(dev.id);if(!Number.isSafeInteger(id)||id<1||ids.has(id))throw new Error('O arquivo possui identificadores inválidos ou repetidos.');
+    ids.add(id);dev.id=id;dev.x=Number.isFinite(+dev.x)?Math.max(-5000,Math.min(5000,+dev.x)):80;dev.y=Number.isFinite(+dev.y)?Math.max(-5000,Math.min(5000,+dev.y)):80;
+    dev.name=sanitizeImportedText(dev.name||`${LABELS[dev.type]}${id}`,80);dev.label=sanitizeImportedText(dev.label||dev.name,80);
+    dev.ip=sanitizeImportedText(dev.ip,64);dev.mask=sanitizeImportedText(dev.mask||'255.255.255.0',64);dev.mac=sanitizeImportedText(dev.mac,64);
+    dev.interfaces=Array.isArray(dev.interfaces)?dev.interfaces.slice(0,64):[];
+    return dev;
+  });
+  clean.connections=clean.connections.filter(link=>link&&ids.has(Number(link.from))&&ids.has(Number(link.to))&&Number(link.from)!==Number(link.to)).map(link=>({...link,id:Number(link.id)||0,from:Number(link.from),to:Number(link.to),bw:Math.max(1,Math.min(100000,Number(link.bw)||100)),lat:Math.max(0,Math.min(10000,Number(link.lat)||1))}));
+  clean.racks=Array.isArray(clean.racks)?clean.racks.slice(0,30).map((rack,index)=>({...rack,id:Number(rack.id)||index+1,name:sanitizeImportedText(rack.name||`Rack ${index+1}`,80)})):[];
+  clean.classroom={studentName:sanitizeImportedText(clean.classroom?.studentName,100),activity:sanitizeImportedText(clean.classroom?.activity,40),subnetColors:!!clean.classroom?.subnetColors,lastScore:null};
+  clean.nextId=Math.max(...clean.devices.map(d=>d.id),0)+1;clean.nextRackId=Math.max(...clean.racks.map(r=>Number(r.id)||0),0)+1;
+  return clean;
+}
 function saveTopology(){
+  if(examState.active&&!examState.locked){rackNotice('Ação bloqueada','Durante a prova não é permitido exportar a topologia.','err');return;}
   const classData={studentName:classroom.studentName,activity:classroom.activity,subnetColors:classroom.subnetColors,lastScore:classroom.lastScore};
   const data=JSON.stringify({devices,connections,racks,nextId,nextRackId,classroom:classData},null,2);
   const a=document.createElement('a');a.href='data:application/json,'+encodeURIComponent(data);a.download='topologia_netsim.json';a.click();
   sysLog('Topologia salva em JSON.','lsys');
 }
 function loadTopology(){
+  if(examState.active&&!examState.locked){rackNotice('Ação bloqueada','Durante a prova não é permitido carregar uma topologia pronta.','err');return;}
   const inp=document.createElement('input');inp.type='file';inp.accept='.json';
   inp.onchange=e=>{
     const file=e.target.files[0];if(!file)return;
+    if(file.size>2*1024*1024){rackNotice('Arquivo recusado','A topologia ultrapassa o limite de 2 MB.','err');return;}
     const rd=new FileReader();rd.onload=ev=>{
-      const dt=JSON.parse(ev.target.result);
+      try{
+      const dt=validateImportedTopology(JSON.parse(ev.target.result));
       devices=dt.devices||[];connections=dt.connections||[];racks=dt.racks||[];nextId=dt.nextId||100;nextRackId=dt.nextRackId||1;
       devices.forEach(d=>{if(d.type==='server'&&!d.serverType)d.serverType='rack';if(d.type==='switch'&&!d.switchForm)d.switchForm='rack';});
       devices.forEach(ensureInterfaceMetadata);
@@ -2237,6 +2281,7 @@ function loadTopology(){
       syncClassroomUI();
       arpTable={};macTable={};devices.filter(d=>d.type!=='patchPanel').forEach(d=>{arpTable[d.ip]=d.mac;macTable[d.mac]=d.id;});
       sysLog('Topologia carregada!','lsys');updateAll();
+      }catch(err){rackNotice('Arquivo recusado',err?.message||'O arquivo está corrompido ou contém dados inseguros.','err');}
     };rd.readAsText(file);
   };inp.click();
 }
@@ -2558,24 +2603,15 @@ function showClassModeModal(){
     showModal(`<h3>👩‍🏫 Modo professor ativo</h3><div class="edu-note">Você tem acesso às funções de controle da aula, incluindo limpeza completa e simulação de falhas.</div><label>Nome do aluno ou grupo</label><input id="class-student" value="${student}" placeholder="Ex.: Aluno ou Grupo 1"><div class="modal-btns"><button onclick="closeModal()">Fechar</button><button class="green" onclick="activateStudentMode()">🎓 Ativar modo aluno</button></div>`);
     return;
   }
-  showModal(`<h3>🔐 Acesso do professor</h3><div class="edu-note"><b>Modo aluno ativo.</b> Para liberar os controles do professor, informe a senha cadastrada.</div><label>Nome do aluno ou grupo</label><input id="class-student" value="${student}" placeholder="Ex.: Aluno ou Grupo 1"><label>Senha do professor</label><input id="teacher-password" type="password" autocomplete="current-password" placeholder="Digite a senha" onkeydown="if(event.key==='Enter')activateTeacherMode()"><div id="teacher-auth-error" style="display:none;margin-top:8px;color:#b42318;font-weight:700"></div><div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button onclick="activateStudentMode()">Continuar como aluno</button><button id="teacher-auth-btn" class="green" onclick="activateTeacherMode()">Entrar como professor</button></div>`);
-  setTimeout(()=>document.getElementById('teacher-password')?.focus(),0);
-}
-async function sha256Text(value){
-  if(!window.crypto?.subtle)throw new Error('Este navegador não oferece validação segura de senha.');
-  const bytes=new TextEncoder().encode(value),digest=await window.crypto.subtle.digest('SHA-256',bytes);
-  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+  showModal(`<h3>🔐 Acesso do professor</h3><div class="edu-note"><b>Modo aluno ativo.</b> O acesso do professor é validado diretamente pelo Supabase.</div><label>Nome do aluno ou grupo</label><input id="class-student" value="${student}" placeholder="Ex.: Aluno ou Grupo 1"><label>E-mail do professor</label><input id="teacher-email" type="email" autocomplete="username" placeholder="Seu e-mail cadastrado"><label>Senha do professor</label><input id="teacher-password" type="password" autocomplete="current-password" placeholder="Digite a senha" onkeydown="if(event.key==='Enter')activateTeacherMode()"><div id="teacher-auth-error" style="display:none;margin-top:8px;color:#b42318;font-weight:700"></div><div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button onclick="activateStudentMode()">Continuar como aluno</button><button id="teacher-auth-btn" class="green" onclick="activateTeacherMode()">Entrar como professor</button></div>`);
+  setTimeout(()=>document.getElementById('teacher-email')?.focus(),0);
 }
 async function activateTeacherMode(){
-  const input=document.getElementById('teacher-password'),error=document.getElementById('teacher-auth-error'),btn=document.getElementById('teacher-auth-btn');
-  if(!input||!error||!btn)return;
+  const email=document.getElementById('teacher-email')?.value.trim(),input=document.getElementById('teacher-password'),error=document.getElementById('teacher-auth-error'),btn=document.getElementById('teacher-auth-btn');
+  if(!email||!input?.value||!error||!btn){if(error){error.textContent='Informe o e-mail e a senha do professor.';error.style.display='block';}return;}
   error.style.display='none';btn.disabled=true;btn.textContent='Validando...';
   try{
-    const valid=(await sha256Text(input.value))===TEACHER_PASSWORD_HASH;
-    if(!valid){
-      error.textContent='Senha incorreta. Tente novamente.';error.style.display='block';input.value='';input.focus();
-      btn.disabled=false;btn.textContent='Entrar como professor';return;
-    }
+    teacherExamSession=await authenticateTeacher(email,input.value);
     classroom.studentName=document.getElementById('class-student')?.value.trim()||classroom.studentName;
     classroom.role='teacher';closeModal();syncClassroomUI();rackNotice('Modo professor ativado','Os controles exclusivos do professor foram liberados.','ok');sysLog('Modo professor ativado após autenticação.','lsys');
   }catch(err){
@@ -2601,13 +2637,19 @@ function examSettings(){
 }
 function examConfigured(){const s=examSettings();return /^https:\/\//.test(s.url)&&s.anonKey.length>20;}
 function persistExamState(){try{sessionStorage.setItem('allannet-exam-state',JSON.stringify(examState));}catch(e){}}
-function persistTeacherSession(){try{sessionStorage.setItem('allannet-teacher-session',JSON.stringify(teacherExamSession));}catch(e){}}
+function persistTeacherSession(){try{sessionStorage.removeItem('allannet-teacher-session');}catch(e){}}
 async function supabaseRequest(path,{method='GET',body=null,token=''}={}){
   const cfg=examSettings();if(!examConfigured())throw new Error('A Sala de Prova ainda não foi conectada ao banco de dados pelo professor.');
   const response=await fetch(cfg.url+path,{method,headers:{apikey:cfg.anonKey,Authorization:`Bearer ${token||cfg.anonKey}`,'Content-Type':'application/json',Prefer:method==='POST'?'return=representation':'return=minimal'},body:body===null?null:JSON.stringify(body)});
   let data=null;const text=await response.text();try{data=text?JSON.parse(text):null;}catch(e){data=text;}
   if(!response.ok)throw new Error(data?.message||data?.error_description||data?.hint||`Falha no banco de dados (${response.status}).`);
   return data;
+}
+async function authenticateTeacher(email,password){
+  const session=await supabaseRequest('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password}});
+  const allowed=await supabaseRequest('/rest/v1/rpc/teacher_access',{method:'POST',body:{},token:session.access_token});
+  if(allowed!==true)throw new Error('Esta conta não está autorizada como professor.');
+  return session;
 }
 function showSupabaseSetupModal(){
   if(classroom.role!=='teacher'){rackNotice('Configuração restrita','Somente o professor pode configurar o banco de dados.');return;}
@@ -2647,9 +2689,8 @@ function examTopologySnapshot(){return {devices,connections,racks,activity:class
 async function submitExamAttempt(automatic){
   if(!examState.active||examState.locked)return;
   if(!automatic&&!confirm('Entregar a prova agora? Depois do envio não será possível alterar a rede.'))return;
-  const checks=activityChecks(examState.activity),passed=checks.filter(item=>item[1]).length,total=checks.length,score=Math.round(passed/Math.max(1,total)*100);
   try{
-    await supabaseRequest('/rest/v1/rpc/submit_exam',{method:'POST',body:{p_attempt_token:examState.attemptToken,p_score:score,p_passed_checks:passed,p_total_checks:total,p_checks:checks.map(([label,ok])=>({label,ok})),p_topology:examTopologySnapshot()}});
+    await supabaseRequest('/functions/v1/submit-exam',{method:'POST',body:{attempt_token:examState.attemptToken,topology:examTopologySnapshot()}});
     examState.locked=true;persistExamState();document.getElementById('canvas-area')?.classList.add('exam-locked');syncActivityBar();
     showModal(`<h3>✅ Prova entregue</h3><div class="edu-note"><b>Envio concluído.</b> Sua montagem e a correção automática foram registradas. A nota e os critérios de correção são visíveis somente para o professor.</div><div class="modal-btns"><button class="green" onclick="closeModal()">Concluir</button></div>`);
     sysLog('PROVA: entrega registrada no banco de dados.','lsys');
@@ -2685,7 +2726,7 @@ async function teacherExamLogin(){
   const email=document.getElementById('exam-teacher-email')?.value.trim(),password=document.getElementById('exam-teacher-password')?.value||'',error=document.getElementById('exam-teacher-error'),btn=document.getElementById('exam-teacher-login-btn');
   if(!email||!password){error.textContent='Informe e-mail e senha.';error.style.display='block';return;}
   btn.disabled=true;btn.textContent='Entrando...';
-  try{teacherExamSession=await supabaseRequest('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password}});persistTeacherSession();loadTeacherExamDashboard();}
+  try{teacherExamSession=await authenticateTeacher(email,password);persistTeacherSession();classroom.role='teacher';syncClassroomUI();loadTeacherExamDashboard();}
   catch(err){error.textContent=err.message;error.style.display='block';btn.disabled=false;btn.textContent='Entrar';}
 }
 async function loadTeacherExamDashboard(){
@@ -2706,16 +2747,16 @@ async function loadTeacherExamDashboard(){
 function showCreateExamModal(){
   const options=Object.entries(CLASS_ACTIVITIES).map(([key,a])=>`<option value="${key}">${ACTIVITY_ROOMS[a.room].title.replace(/^[^ ]+ /,'')} · Nível ${a.level} — ${a.title}</option>`).join('');
   const start=new Date(Date.now()-3*60000),end=new Date(Date.now()+24*60*60000),local=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
-  showModal(`<h3>➕ Criar prova</h3><label>Título</label><input id="new-exam-title" value="Avaliação prática de redes"><label>Atividade prática</label><select id="new-exam-activity">${options}</select><div class="exam-grid"><div class="full"><label>Turma que poderá fazer a prova</label><select id="new-exam-class">${examClassOptions()}</select></div><div><label>Valor da prova (pontos)</label><input id="new-exam-max-score" type="number" min="0.1" max="1000" step="0.1" value="10"></div><div><label>Duração (minutos)</label><input id="new-exam-duration" type="number" min="5" max="240" value="50"></div><div><label>Senha da prova</label><input id="new-exam-password" type="text" minlength="4" placeholder="Ex.: REDES2026"></div><div><label>Início</label><input id="new-exam-start" type="datetime-local" value="${local(start)}"></div><div><label>Expira em (data e horário)</label><input id="new-exam-end" type="datetime-local" value="${local(end)}"></div></div><div class="edu-note">A data e o horário de expiração ficarão visíveis no painel do professor e para o aluno durante a prova.</div><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar</button><button id="create-exam-btn" class="green" onclick="createExamOnline()">Criar e liberar</button></div>`);
+  showModal(`<h3>➕ Criar prova</h3><label>Título</label><input id="new-exam-title" value="Avaliação prática de redes"><label>Atividade prática</label><select id="new-exam-activity">${options}</select><div class="exam-grid"><div class="full"><label>Turma que poderá fazer a prova</label><select id="new-exam-class">${examClassOptions()}</select></div><div><label>Valor da prova (pontos)</label><input id="new-exam-max-score" type="number" min="0.1" max="1000" step="0.1" value="10"></div><div><label>Duração (minutos)</label><input id="new-exam-duration" type="number" min="5" max="240" value="50"></div><div><label>Senha da prova</label><input id="new-exam-password" type="password" minlength="8" autocomplete="new-password" placeholder="Mínimo de 8 caracteres"></div><div><label>Início</label><input id="new-exam-start" type="datetime-local" value="${local(start)}"></div><div><label>Expira em (data e horário)</label><input id="new-exam-end" type="datetime-local" value="${local(end)}"></div></div><div class="edu-note">Use uma senha exclusiva com pelo menos 8 caracteres. A data e o horário de expiração ficarão visíveis durante a prova.</div><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar</button><button id="create-exam-btn" class="green" onclick="createExamOnline()">Criar e liberar</button></div>`);
 }
 function showCreateExamBatchModal(){
   const start=new Date(Date.now()-3*60000),end=new Date(Date.now()+24*60*60000),local=date=>new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
   const versions=PRACTICAL_EXAM_KEYS.map((key,index)=>`<tr><td>${String(index+1).padStart(2,'0')}</td><td><b>${escapeReport(CLASS_ACTIVITIES[key].title)}</b><br><small>${escapeReport(CLASS_ACTIVITIES[key].desc)}</small></td></tr>`).join('');
-  showModal(`<h3>🧪 Criar prova prática — 15 versões</h3><div class="edu-note">Serão criadas <b>15 provas diferentes de nível médio-avançado</b>, uma para cada dupla. As versões combinam LAN avançada, rede sem fio e as ferramentas atuais do simulador, com correção automática própria.</div><label>Título base</label><input id="batch-exam-title" value="Avaliação prática de redes"><div class="exam-grid"><div class="full"><label>Turma que poderá fazer as 15 versões</label><select id="batch-exam-class">${examClassOptions()}</select></div><div><label>Valor de cada prova</label><input id="batch-exam-max-score" type="number" min="0.1" max="1000" step="0.1" value="10"></div><div><label>Duração (minutos)</label><input id="batch-exam-duration" type="number" min="5" max="240" value="50"></div><div class="full"><label>Senha-base</label><input id="batch-exam-password" type="text" minlength="4" placeholder="Ex.: REDES"><small style="color:#8b949e">Cada dupla receberá a senha-base com o número da versão: REDES01, REDES02… REDES15.</small></div><div><label>Início</label><input id="batch-exam-start" type="datetime-local" value="${local(start)}"></div><div><label>Expira em (data e horário)</label><input id="batch-exam-end" type="datetime-local" value="${local(end)}"></div></div><details class="activity-room"><summary><span>Conferir as 15 versões</span><small>Nível médio-avançado</small></summary><div style="padding:6px;max-height:260px;overflow:auto"><table class="exam-table"><thead><tr><th>Versão</th><th>Enunciado</th></tr></thead><tbody>${versions}</tbody></table></div></details><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar</button><button id="create-batch-exam-btn" class="green" onclick="createExamBatchOnline()">Criar e liberar 15 versões</button></div>`);
+  showModal(`<h3>🧪 Criar prova prática — 15 versões</h3><div class="edu-note">Serão criadas <b>15 provas diferentes de nível médio-avançado</b>, uma para cada dupla. As versões combinam LAN avançada, rede sem fio e as ferramentas atuais do simulador, com correção automática própria.</div><label>Título base</label><input id="batch-exam-title" value="Avaliação prática de redes"><div class="exam-grid"><div class="full"><label>Turma que poderá fazer as 15 versões</label><select id="batch-exam-class">${examClassOptions()}</select></div><div><label>Valor de cada prova</label><input id="batch-exam-max-score" type="number" min="0.1" max="1000" step="0.1" value="10"></div><div><label>Duração (minutos)</label><input id="batch-exam-duration" type="number" min="5" max="240" value="50"></div><div class="full"><label>Senha-base</label><input id="batch-exam-password" type="password" minlength="6" autocomplete="new-password" placeholder="Mínimo de 6 caracteres"><small style="color:#8b949e">O número da versão será acrescentado, formando senhas com pelo menos 8 caracteres.</small></div><div><label>Início</label><input id="batch-exam-start" type="datetime-local" value="${local(start)}"></div><div><label>Expira em (data e horário)</label><input id="batch-exam-end" type="datetime-local" value="${local(end)}"></div></div><details class="activity-room"><summary><span>Conferir as 15 versões</span><small>Nível médio-avançado</small></summary><div style="padding:6px;max-height:260px;overflow:auto"><table class="exam-table"><thead><tr><th>Versão</th><th>Enunciado</th></tr></thead><tbody>${versions}</tbody></table></div></details><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar</button><button id="create-batch-exam-btn" class="green" onclick="createExamBatchOnline()">Criar e liberar 15 versões</button></div>`);
 }
 async function createExamBatchOnline(){
   const btn=document.getElementById('create-batch-exam-btn'),title=document.getElementById('batch-exam-title')?.value.trim(),grade=SCHOOL_EXAM_GRADE,studentClass=document.getElementById('batch-exam-class')?.value.trim()||'',duration=+document.getElementById('batch-exam-duration')?.value||50,maxScore=+document.getElementById('batch-exam-max-score')?.value||10,passwordBase=(document.getElementById('batch-exam-password')?.value||'').trim(),startsAt=new Date(document.getElementById('batch-exam-start')?.value),endsAt=new Date(document.getElementById('batch-exam-end')?.value);
-  if(!title||!studentClass||passwordBase.length<4||maxScore<=0||Number.isNaN(startsAt.getTime())||Number.isNaN(endsAt.getTime())||endsAt<=startsAt){rackNotice('Dados incompletos','Escolha 3º ano 01 ou 3º ano 02 e informe título, período válido, valor e uma senha-base com pelo menos 4 caracteres.','err');return;}
+  if(!title||!studentClass||passwordBase.length<6||maxScore<=0||Number.isNaN(startsAt.getTime())||Number.isNaN(endsAt.getTime())||endsAt<=startsAt){rackNotice('Dados incompletos','Escolha a turma e informe título, período válido, valor e uma senha-base com pelo menos 6 caracteres.','err');return;}
   if(!confirm('Criar e liberar agora as 15 versões diferentes da prova prática?'))return;
   btn.disabled=true;let created=[],errors=[];
   for(let index=0;index<PRACTICAL_EXAM_KEYS.length;index++){
@@ -2737,7 +2778,7 @@ function downloadExamBatchCSV(){
 }
 async function createExamOnline(){
   const btn=document.getElementById('create-exam-btn'),payload={p_title:document.getElementById('new-exam-title')?.value.trim(),p_activity_key:document.getElementById('new-exam-activity')?.value,p_password:document.getElementById('new-exam-password')?.value||'',p_target_grade:SCHOOL_EXAM_GRADE,p_target_class:document.getElementById('new-exam-class')?.value.trim()||'',p_duration_minutes:+document.getElementById('new-exam-duration')?.value||50,p_max_score:+document.getElementById('new-exam-max-score')?.value||10,p_starts_at:new Date(document.getElementById('new-exam-start')?.value).toISOString(),p_ends_at:new Date(document.getElementById('new-exam-end')?.value).toISOString()};
-  if(!payload.p_title||!payload.p_target_class||payload.p_password.length<4||payload.p_max_score<=0){rackNotice('Dados incompletos','Escolha 3º ano 01 ou 3º ano 02 e informe o título, o valor da prova e uma senha com pelo menos 4 caracteres.');return;}
+  if(!payload.p_title||!payload.p_target_class||payload.p_password.length<8||payload.p_max_score<=0){rackNotice('Dados incompletos','Escolha a turma e informe o título, o valor e uma senha com pelo menos 8 caracteres.');return;}
   btn.disabled=true;btn.textContent='Criando...';
   try{
     let legacyValue=false;
@@ -2750,13 +2791,13 @@ function showDuplicateExamClassModal(id){
   const exam=(window._examDashboard?.exams||[]).find(item=>item.id===id);if(!exam){rackNotice('Prova não encontrada','Atualize o painel e tente novamente.','err');return;}
   const source=String(exam.target_class||''),suggested=source==='01'?'02':'01',activity=CLASS_ACTIVITIES[exam.activity_key];
   window._examDuplicateSource=id;
-  showModal(`<h3>↔ Liberar a mesma prova para outra turma</h3><div class="exam-status"><strong>${escapeReport(exam.title)}</strong><br>${escapeReport(activity?.title||exam.activity_key)}<br>Turma atual: <b>${escapeReport(exam.target_grade||SCHOOL_EXAM_GRADE)} ${escapeReport(source||'não definida')}</b> · Valor: <b>${formatExamNumber(exam.max_score||10)} pontos</b><br>⏰ Expira em: <b>${formatExamDateTime(exam.ends_at)}</b></div><div class="edu-note">Será criada uma nova liberação com a mesma atividade, valor, duração e período. A prova original e as entregas já existentes não serão alteradas.</div><label>Nova turma</label><select id="duplicate-exam-class">${examClassOptions(suggested)}</select><label>Nova senha da prova</label><input id="duplicate-exam-password" type="text" minlength="4" placeholder="Ex.: REDES302"><div class="edu-note">Por segurança, a senha da prova original não pode ser recuperada. Informe uma nova senha para a outra turma.</div><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar</button><button id="duplicate-exam-btn" class="green" onclick="duplicateExamForClass()">Criar e liberar</button></div>`);
+  showModal(`<h3>↔ Liberar a mesma prova para outra turma</h3><div class="exam-status"><strong>${escapeReport(exam.title)}</strong><br>${escapeReport(activity?.title||exam.activity_key)}<br>Turma atual: <b>${escapeReport(exam.target_grade||SCHOOL_EXAM_GRADE)} ${escapeReport(source||'não definida')}</b> · Valor: <b>${formatExamNumber(exam.max_score||10)} pontos</b><br>⏰ Expira em: <b>${formatExamDateTime(exam.ends_at)}</b></div><div class="edu-note">Será criada uma nova liberação com a mesma atividade, valor, duração e período. A prova original e as entregas já existentes não serão alteradas.</div><label>Nova turma</label><select id="duplicate-exam-class">${examClassOptions(suggested)}</select><label>Nova senha da prova</label><input id="duplicate-exam-password" type="password" minlength="8" autocomplete="new-password" placeholder="Mínimo de 8 caracteres"><div class="edu-note">Por segurança, a senha da prova original não pode ser recuperada. Informe uma nova senha exclusiva.</div><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar</button><button id="duplicate-exam-btn" class="green" onclick="duplicateExamForClass()">Criar e liberar</button></div>`);
 }
 async function duplicateExamForClass(){
   const id=window._examDuplicateSource,exam=(window._examDashboard?.exams||[]).find(item=>item.id===id),targetClass=document.getElementById('duplicate-exam-class')?.value.trim()||'',password=document.getElementById('duplicate-exam-password')?.value||'',btn=document.getElementById('duplicate-exam-btn');
   if(!exam){rackNotice('Prova não encontrada','Volte ao painel e tente novamente.','err');return;}
   if(!targetClass||targetClass===String(exam.target_class||'')){rackNotice('Escolha outra turma','Selecione uma turma diferente da liberação atual.','err');return;}
-  if(password.length<4){rackNotice('Senha muito curta','Informe uma nova senha com pelo menos 4 caracteres.','err');return;}
+  if(password.length<8){rackNotice('Senha muito curta','Informe uma nova senha com pelo menos 8 caracteres.','err');return;}
   const baseTitle=String(exam.title||'Avaliação prática de redes').replace(/\s+—\s+3º ano\s+(01|02)$/i,''),payload={p_title:`${baseTitle} — ${SCHOOL_EXAM_GRADE} ${targetClass}`,p_activity_key:exam.activity_key,p_password:password,p_target_grade:SCHOOL_EXAM_GRADE,p_target_class:targetClass,p_duration_minutes:Number(exam.duration_minutes)||50,p_max_score:Number(exam.max_score)||10,p_starts_at:exam.starts_at,p_ends_at:exam.ends_at};
   btn.disabled=true;btn.textContent='Liberando...';
   try{
@@ -2790,7 +2831,7 @@ async function deleteExamOnline(id){
   try{await supabaseRequest(`/rest/v1/exams?id=eq.${encodeURIComponent(id)}`,{method:'DELETE',token:teacherExamSession.access_token});rackNotice('Prova excluída',`“${title}” e seus resultados vinculados foram removidos.`,'ok');loadTeacherExamDashboard();}
   catch(err){rackNotice('Não foi possível excluir',err.message,'err');}
 }
-function teacherExamLogout(){teacherExamSession=null;sessionStorage.removeItem('allannet-teacher-session');showTeacherExamLogin();}
+function teacherExamLogout(){teacherExamSession=null;classroom.role='student';sessionStorage.removeItem('allannet-teacher-session');syncClassroomUI();showTeacherExamLogin();}
 function formatExamNumber(value){
   return Number(value||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:2});
 }

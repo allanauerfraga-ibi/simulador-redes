@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "supabase/migrations/**"
+      - "supabase/functions/**"
+      - "supabase/config.toml"
       - ".github/workflows/supabase-migrations.yml"
   workflow_dispatch:
 
@@ -47,3 +49,7 @@ jobs:
           )"
           DB_URL="postgresql://postgres.${SUPABASE_PROJECT_ID}:${ENCODED_PASSWORD}@${SUPABASE_POOLER_HOST}:5432/postgres"
           supabase db push --db-url "$DB_URL"
+
+      - name: Publicar correção segura das provas
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_ID != '' }}
+        run: supabase functions deploy submit-exam --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
