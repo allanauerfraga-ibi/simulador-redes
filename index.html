@@ -623,7 +623,8 @@ let arpTable={},macTable={};
 let history=[];// undo stack [{devices, connections}]
 let classroom={role:'student',studentName:'',activity:null,subnetColors:false,lastScore:null,faults:[],faultSnapshot:null};
 let teacherExamSession=null;
-let examState={active:false,locked:false,attemptToken:'',examId:'',title:'',activity:'',assessmentType:'prova',customPrompt:'',knowledgeLevel:'',studentName:'',studentGrade:'',studentClass:'',studentSchool:'',deadline:'',maxScore:10};
+const EMPTY_EXAM_STATE=Object.freeze({active:false,locked:false,attemptToken:'',examId:'',title:'',activity:'',assessmentType:'prova',customPrompt:'',knowledgeLevel:'',studentName:'',studentGrade:'',studentClass:'',studentSchool:'',deadline:'',maxScore:10});
+let examState={...EMPTY_EXAM_STATE};
 try{examState={...examState,...JSON.parse(sessionStorage.getItem('allannet-exam-state')||'{}')};sessionStorage.removeItem('allannet-teacher-session');}catch(e){}
 if(examState.studentSchool==='narceu')examState.studentClass='UNICA';
 
@@ -2708,7 +2709,7 @@ function showExamRoomModal(){
   if(examState.active){
     const status=examState.locked?'Entregue ao professor':'Em andamento';
     const activity=currentActivityDefinition();
-    const type=examTypeName(examState.assessmentType);showModal(`<h3>📝 Sala de Prova</h3><div class="exam-status"><strong>${escapeReport(examState.title)}</strong><br>Tipo: <b>${escapeReport(type)}</b> · Escola: <b>${escapeReport(examSchoolName(examState.studentSchool,true))}</b><br>Aluno: ${escapeReport(examState.studentName)} · ${escapeReport(examClassName(examState.studentSchool,examState.studentClass))}<br>Valor: <b>${formatExamNumber(examState.maxScore||10)} pontos</b> · Status: <b>${status}</b><br>⏰ Prazo final: <b>${formatExamDateTime(examState.deadline)}</b></div><div class="edu-note"><b>Enunciado</b><br>${escapeReport(activity?.desc||'Monte a rede solicitada pelo professor.')}</div><div class="edu-note">${examState.locked?`${type} registrada. A nota ficará disponível somente no painel do professor.`:`Quando terminar, use “Entregar prova” na barra superior.`}</div><div class="modal-btns"><button onclick="closeModal()">Fechar</button>${examState.locked?'':`<button class="green" onclick="submitExamAttempt(false)">📨 Entregar agora</button>`}</div>`);return;
+    const type=examTypeName(examState.assessmentType);showModal(`<h3>📝 Sala de Prova</h3><div class="exam-status"><strong>${escapeReport(examState.title)}</strong><br>Tipo: <b>${escapeReport(type)}</b> · Escola: <b>${escapeReport(examSchoolName(examState.studentSchool,true))}</b><br>Aluno: ${escapeReport(examState.studentName)} · ${escapeReport(examClassName(examState.studentSchool,examState.studentClass))}<br>Valor: <b>${formatExamNumber(examState.maxScore||10)} pontos</b> · Status: <b>${status}</b><br>⏰ Prazo final: <b>${formatExamDateTime(examState.deadline)}</b></div><div class="edu-note"><b>Enunciado</b><br>${escapeReport(activity?.desc||'Monte a rede solicitada pelo professor.')}</div><div class="edu-note">${examState.locked?`${type} registrada. A nota ficará disponível somente no painel do professor. Clique em “Sair” para voltar ao simulador.`:`Quando terminar, use “Entregar prova” na barra superior.`}</div><div class="modal-btns">${examState.locked?`<button class="green" onclick="exitExamRoom()">🚪 Sair</button>`:`<button onclick="closeModal()">Fechar</button><button class="green" onclick="submitExamAttempt(false)">📨 Entregar agora</button>`}</div>`);return;
   }
   const setup=examConfigured()?'':`<div class="edu-note">A Sala de Prova ainda aguarda a conexão com o banco de dados pelo professor.</div>`;
   showModal(`<h3>📝 Entrar na Sala de Prova</h3>${setup}<div class="edu-note">Digite a senha informada pelo professor, seu nome e escolha a escola e a turma corretas. A nota não será exibida ao aluno após a entrega.</div><label>Senha da prova</label><input id="exam-password" type="password" autocomplete="off" placeholder="Senha informada pelo professor"><div class="exam-grid"><div class="full"><label>Nome completo</label><input id="exam-student-name" autocomplete="name" placeholder="Nome completo do aluno"></div><div class="full"><label>Escola</label><select id="exam-student-school" onchange="syncExamClassSelect('exam-student-school','exam-student-class')">${examSchoolOptions()}</select></div><div class="full"><label>Turma</label><select id="exam-student-class">${examClassOptions()}</select></div></div><div id="exam-entry-error" style="display:none;margin-top:8px;color:#f85149;font-weight:700"></div><div class="modal-btns">${classroom.role==='teacher'?`<button onclick="showSupabaseSetupModal()">⚙️ Banco de dados</button>`:''}<button onclick="closeModal()">Cancelar</button><button id="exam-entry-btn" class="green" onclick="enterExamRoom()" ${examConfigured()?'':'disabled'}>Entrar na prova</button></div>`);
@@ -2735,9 +2736,19 @@ async function submitExamAttempt(automatic){
   try{
     await supabaseRequest('/rest/v1/rpc/submit_exam_secure',{method:'POST',body:{p_attempt_token:examState.attemptToken,p_topology:examTopologySnapshot()}});
     examState.locked=true;persistExamState();document.getElementById('canvas-area')?.classList.add('exam-locked');syncActivityBar();
-    showModal(`<h3>✅ Prova entregue</h3><div class="edu-note"><b>Envio concluído.</b> Sua montagem e a correção automática foram registradas. A nota e os critérios de correção são visíveis somente para o professor.</div><div class="modal-btns"><button class="green" onclick="closeModal()">Concluir</button></div>`);
+    const deliveredType=examTypeName(examState.assessmentType);
+    showModal(`<h3>✅ ${escapeReport(deliveredType)} entregue</h3><div class="edu-note"><b>Envio concluído.</b> Sua montagem e a correção automática foram registradas. A nota e os critérios de correção são visíveis somente para o professor.</div><div class="edu-note">Clique em <b>Sair</b> para voltar ao simulador. A entrega continuará salva e você poderá iniciar outra prova ou atividade.</div><div class="modal-btns"><button class="green" onclick="exitExamRoom()">🚪 Sair</button></div>`);
     sysLog('PROVA: entrega registrada no banco de dados.','lsys');
   }catch(err){rackNotice('Não foi possível entregar',err.message,'err');}
+}
+function exitExamRoom(){
+  if(!examState.active||!examState.locked){closeModal();return;}
+  examState={...EMPTY_EXAM_STATE};
+  try{sessionStorage.removeItem('allannet-exam-state');}catch(e){}
+  classroom.activity=null;classroom.lastScore=null;
+  document.getElementById('canvas-area')?.classList.remove('exam-locked');
+  closeModal();setMode('select');syncClassroomUI();updateExamTimer();
+  rackNotice('Você saiu da sala de prova','A entrega permanece salva. O simulador foi liberado para outras atividades ou para entrar em uma nova prova.','ok');
 }
 let examDeadlineSyncing=false,examDeadlineRpcUnavailable=false,examExpiryChecking=false;
 async function syncExamDeadline(finalCheck=false){
