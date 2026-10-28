@@ -915,7 +915,13 @@ function addDevice(x,y,type){
   if(type==='switch'){d.portCount=pendingSwitchPorts;d.switchForm=pendingSwitchForm==='desktop'?'desktop':'rack';}
   if(type==='patchPanel')d.portCount=pendingPatchPorts;
   if(type==='server')d.serverType=pendingServerType==='tower'?'tower':'rack';
-  if(type==='pc')d.pcStyle=pendingPCStyle==='complete'?'complete':'notebook';
+  if(type==='pc'){
+    d.pcStyle=pendingPCStyle==='complete'?'complete':'notebook';
+    if(d.pcStyle==='notebook'){
+      d.interfaces.push({name:'wlan0',ip:'',mask:'255.255.255.0',status:'up',kind:'wireless',speed:300,mac:genMAC()});
+      d.hasBuiltInWifi=true;
+    }
+  }
   if(type==='satDish'){
     d.satelliteProvider=pendingSatelliteProvider;d.orbit=satProvider.orbit;d.providerName=satProvider.name;d.satelliteBW=satProvider.bw;d.satelliteLatency=satProvider.latency;
     d.interfaces=[
@@ -933,7 +939,7 @@ function addDevice(x,y,type){
   if(getRackAt(x,y))assignRack(d);
   if(type!=='patchPanel'){arpTable[ip]=mac;macTable[mac]=d.id;}
   updateAll();
-  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+switchFormatLabel(d)+' · '+d.portCount+' portas':type==='patchPanel'?' · passivo · '+d.portCount+' portas':type==='server'?' · '+serverFormatLabel(d):type==='pc'?' · '+pcFormatLabel(d):['satDish','satellite'].includes(type)?` · ${satProvider.orbit} · ${formatBandwidth(satProvider.bw)} · ~${satProvider.latency} ms`:''}${type==='patchPanel'?'':' IP:'+ip}`,'lsys');
+  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+switchFormatLabel(d)+' · '+d.portCount+' portas':type==='patchPanel'?' · passivo · '+d.portCount+' portas':type==='server'?' · '+serverFormatLabel(d):type==='pc'?' · '+pcFormatLabel(d)+(d.pcStyle==='notebook'?' · Wi-Fi integrado':''):['satDish','satellite'].includes(type)?` · ${satProvider.orbit} · ${formatBandwidth(satProvider.bw)} · ~${satProvider.latency} ms`:''}${type==='patchPanel'?'':' IP:'+ip}`,'lsys');
   showExplain(type);
   return d;
 }
@@ -4005,6 +4011,7 @@ const _origAddDev_isp = addDevice;
 addDevice = function(x,y,type){
   const dev = _origAddDev_isp(x,y,type);
   if(type==='cloud' && _pendingISP){
+    const providerUndoIndex=Math.max(0,history.length-1);
     const isp = ISP_DATA[_pendingISP];
     dev.ispKey  = _pendingISP;
     dev.ispData = isp;
@@ -4018,6 +4025,23 @@ addDevice = function(x,y,type){
     document.getElementById('isp-badge').textContent='ISP';
     document.getElementById('isp-badge').style.background='#1f6feb';
     sysLog('ISP adicionado: '+isp.name+' | ASN:'+isp.asn+' | '+isp.bw+'Mbps','lsys');
+    const routerX=x<=canvas.width-260?x+170:Math.max(80,x-170);
+    const routerY=Math.min(Math.max(80,y+80),canvas.height-80);
+    const previousRouterType=_pendingRouterType;
+    _pendingRouterType='soho';
+    const wifiRouter=_origAddDev_isp(routerX,routerY,'router');
+    _pendingRouterType=previousRouterType;
+    wifiRouter.routerType='soho';
+    wifiRouter.name=`Roteador Wi-Fi ${isp.name}`;
+    wifiRouter.label=wifiRouter.name;
+    wifiRouter.ssid=`${isp.name.replace(/[^a-z0-9]+/gi,'_').replace(/^_|_$/g,'')}_WiFi`;
+    wifiRouter.dhcpEnabled=true;
+    wifiRouter.isProviderRouter=true;
+    wifiRouter.ispProviderId=dev.id;
+    dev.wifiRouterId=wifiRouter.id;
+    connectDevices(dev,wifiRouter,{speed:1000});
+    history.splice(providerUndoIndex+1);
+    sysLog(`Roteador sem fio incluído: ${wifiRouter.name} · SSID ${wifiRouter.ssid} · conectado ao provedor em 1 Gb/s`,'lsys');
     // Show config for ISP
     setTimeout(()=>openISPConfig(dev.id),200);
   }
@@ -4443,7 +4467,7 @@ function openPCConfig(devId){
     </tr>`;
   }).join('');
   showModal(`<h3>💻 Configurar placas de rede — ${dev.name}</h3>
-    <div class="edu-note">Cada cabo usa uma placa Ethernet livre. Para conectar o computador por Wi-Fi, adicione uma placa sem fio e utilize o modo Conexão Wi-Fi.</div>
+    <div class="edu-note">O Notebook já vem com placa Wi-Fi integrada. O Computador começa com Ethernet e permite acrescentar placas com ou sem fio. Cada conexão utiliza uma interface livre.</div>
     <div class="cfg-sec"><h5>Placas instaladas (${dev.interfaces.length})</h5>
       <table class="iface-tbl"><tr><th>Interface</th><th>Endereço IP</th><th>Velocidade</th><th>Status</th><th>Uso</th><th></th></tr>${rows}</table>
     </div>
