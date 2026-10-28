@@ -32,30 +32,33 @@ jobs:
           response_file="$(mktemp)"
           trap 'rm -f "$response_file"' EXIT
 
-          http_code="$(curl \
-            --silent \
-            --show-error \
-            --location \
-            --retry 3 \
-            --retry-delay 5 \
-            --retry-all-errors \
-            --connect-timeout 15 \
-            --max-time 45 \
-            --output "$response_file" \
-            --write-out "%{http_code}" \
-            --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-            --header "Authorization: Bearer $SUPABASE_PUBLISHABLE_KEY" \
-            --header "Accept: application/openapi+json" \
-            "$SUPABASE_URL/rest/v1/")"
+          for query_number in 1 2 3; do
+            http_code="$(curl \
+              --silent \
+              --show-error \
+              --location \
+              --retry 3 \
+              --retry-delay 5 \
+              --retry-all-errors \
+              --connect-timeout 15 \
+              --max-time 45 \
+              --output "$response_file" \
+              --write-out "%{http_code}" \
+              --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+              --header "Authorization: Bearer $SUPABASE_PUBLISHABLE_KEY" \
+              --header "Accept: application/openapi+json" \
+              "$SUPABASE_URL/rest/v1/")"
 
-          if [[ "$http_code" != "200" ]]; then
-            echo "Falha ao consultar o Supabase (HTTP $http_code)."
-            exit 1
-          fi
+            if [[ "$http_code" != "200" ]]; then
+              echo "Falha na consulta $query_number ao Supabase (HTTP $http_code)."
+              exit 1
+            fi
 
-          if [[ ! -s "$response_file" ]]; then
-            echo "O Supabase respondeu sem conteudo."
-            exit 1
-          fi
+            if [[ ! -s "$response_file" ]]; then
+              echo "O Supabase respondeu sem conteudo na consulta $query_number."
+              exit 1
+            fi
 
-          echo "Supabase respondeu corretamente (HTTP 200)."
+            echo "Consulta $query_number de 3 concluida (HTTP 200)."
+            [[ "$query_number" == "3" ]] || sleep 5
+          done
