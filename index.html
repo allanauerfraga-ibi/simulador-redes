@@ -2283,6 +2283,7 @@ function loadTopology(){
         classroom={...classroom,...dt.classroom,role:'student',faults:[],faultSnapshot:null};
         const legacyActivities={lan:'lan1',wifi:'wifi1',backbone:'backbone1',vlan:'vlan1'};
         if(legacyActivities[classroom.activity])classroom.activity=legacyActivities[classroom.activity];
+        if(CLASS_ACTIVITIES[classroom.activity]?.room==='exam'&&!examState.active)classroom.activity=null;
       }
       else classroom.role='student';
       syncClassroomUI();
@@ -2319,6 +2320,9 @@ function syncActivityBar(){
   const bar=document.getElementById('activity-bar'),badge=document.getElementById('activity-level-badge'),question=document.getElementById('activity-question'),action=document.getElementById('activity-correct-permanent'),timer=document.getElementById('exam-timer');
   if(!bar||!badge||!question)return;
   const activity=CLASS_ACTIVITIES[classroom.activity];
+  if(activity?.room==='exam'&&classroom.role!=='teacher'&&(!examState.active||classroom.activity!==examState.activity)){
+    bar.classList.remove('show');question.textContent='';if(timer)timer.style.display='none';return;
+  }
   if(!activity){bar.classList.remove('show');question.textContent='';if(timer)timer.style.display='none';return;}
   badge.textContent=examState.active?'PROVA':`NÍVEL ${activity.level}`;
   const examValue=examState.active?` <strong style="color:#ffd866">Valor: ${formatExamNumber(examState.maxScore||10)} pontos</strong> —`:'';
@@ -2328,11 +2332,13 @@ function syncActivityBar(){
   bar.classList.add('show');
 }
 function showActivityModal(){
-  const rooms=Object.entries(ACTIVITY_ROOMS).map(([room,meta])=>{
-    const roomActivities=Object.entries(CLASS_ACTIVITIES).filter(([,a])=>a.room===room);
+  const rooms=Object.entries(ACTIVITY_ROOMS).filter(([room])=>room!=='exam'||classroom.role==='teacher'||examState.active).map(([room,meta])=>{
+    const roomActivities=Object.entries(CLASS_ACTIVITIES).filter(([key,a])=>a.room===room&&(room!=='exam'||classroom.role==='teacher'||key===examState.activity));
     const cards=roomActivities.map(([key,a])=>`<div class="activity-card ${classroom.activity===key?'current':''}"><div class="activity-head"><span class="activity-level">NÍVEL ${a.level}</span><b>${a.title}</b></div>${a.desc}<br><button class="green" onclick="startClassActivity('${key}')">${classroom.activity===key?'▶ Atividade atual':'Iniciar atividade'}</button></div>`).join('');
     const hasCurrent=CLASS_ACTIVITIES[classroom.activity]?.room===room;
-    return `<details class="activity-room" ${hasCurrent||room==='lan'?'open':''}><summary><span>${meta.title}</span><small>${roomActivities.length} níveis</small></summary><div class="activity-list">${cards}</div></details>`;
+    const roomTitle=room==='exam'&&classroom.role!=='teacher'?`🧪 ${escapeReport(examState.title||'Prova liberada pelo professor')}`:meta.title;
+    const roomCount=room==='exam'&&classroom.role!=='teacher'?'1 versão liberada':`${roomActivities.length} níveis`;
+    return `<details class="activity-room" ${hasCurrent||room==='lan'?'open':''}><summary><span>${roomTitle}</span><small>${roomCount}</small></summary><div class="activity-list">${cards}</div></details>`;
   }).join('');
   showModal(`<h3>✅ Atividades com correção automática</h3><div class="edu-note">Escolha uma sala e avance pelos níveis disponíveis. Durante a montagem, o enunciado e o botão Corrigir permanecerão na barra exclusiva da atividade. Cada nível possui critérios próprios de equipamentos, conexões, endereçamento e comunicação.</div><label>Nome do aluno ou grupo</label><input id="activity-student" value="${classroom.studentName||''}" placeholder="Ex.: Grupo 1">${rooms}${classroom.activity?`<div class="modal-btns"><button onclick="closeModal()">Fechar</button><button class="green" onclick="evaluateClassActivity()">✅ Corrigir atividade atual</button></div>`:'<div class="modal-btns"><button onclick="closeModal()">Fechar</button></div>'}`);
 }
@@ -2362,6 +2368,8 @@ function applyClassActivityAddressPlan(key){
   return true;
 }
 function startClassActivity(key){
+  const requested=CLASS_ACTIVITIES[key];
+  if(requested?.room==='exam'&&classroom.role!=='teacher'&&(!examState.active||key!==examState.activity)){rackNotice('Prova não liberada','Esta versão só fica disponível depois que o professor liberar a prova e o aluno entrar com a senha.');return;}
   if(examState.active&&classroom.role!=='teacher'&&key!==examState.activity){rackNotice('Atividade bloqueada','Durante a prova somente a atividade liberada pelo professor pode ser utilizada.');return;}
   classroom.studentName=document.getElementById('activity-student')?.value.trim()||classroom.studentName;
   classroom.activity=key;classroom.lastScore=null;
