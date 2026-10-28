@@ -1,0 +1,61 @@
+name: Manter Supabase ativo
+
+on:
+  schedule:
+    # 06:17 no horario de Brasilia (09:17 UTC), todos os dias.
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping-database:
+    name: Consultar banco AllanNet EDU
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_URL: https://puykkgwdaieoleerdrnv.supabase.co
+      # Chave publicavel: segura para uso em navegador e codigo publico.
+      # Nunca substituir por service_role ou secret key.
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_D_2G7v2xmyEFqvpSO5gSrg_KrKDzd41
+
+    steps:
+      - name: Fazer consulta autenticada ao PostgREST
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+
+          http_code="$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --retry 3 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            --connect-timeout 15 \
+            --max-time 45 \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_PUBLISHABLE_KEY" \
+            --header "Accept: application/openapi+json" \
+            "$SUPABASE_URL/rest/v1/")"
+
+          if [[ "$http_code" != "200" ]]; then
+            echo "Falha ao consultar o Supabase (HTTP $http_code)."
+            exit 1
+          fi
+
+          if [[ ! -s "$response_file" ]]; then
+            echo "O Supabase respondeu sem conteudo."
+            exit 1
+          fi
+
+          echo "Supabase respondeu corretamente (HTTP 200)."
