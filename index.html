@@ -2649,10 +2649,23 @@ function persistExamState(){try{sessionStorage.setItem('allannet-exam-state',JSO
 function persistTeacherSession(){try{sessionStorage.removeItem('allannet-teacher-session');}catch(e){}}
 async function supabaseRequest(path,{method='GET',body=null,token=''}={}){
   const cfg=examSettings();if(!examConfigured())throw new Error('A Sala de Prova ainda não foi conectada ao banco de dados pelo professor.');
-  const response=await fetch(cfg.url+path,{method,headers:{apikey:cfg.anonKey,Authorization:`Bearer ${token||cfg.anonKey}`,'Content-Type':'application/json',Prefer:method==='POST'?'return=representation':'return=minimal'},body:body===null?null:JSON.stringify(body)});
-  let data=null;const text=await response.text();try{data=text?JSON.parse(text):null;}catch(e){data=text;}
-  if(!response.ok)throw new Error(data?.message||data?.error_description||data?.hint||`Falha no banco de dados (${response.status}).`);
-  return data;
+  const retryable=method==='GET'||path.startsWith('/auth/v1/token')||path.includes('/rpc/teacher_access'),attempts=retryable?3:1;
+  for(let attempt=0;attempt<attempts;attempt++){
+    let response;
+    try{response=await fetch(cfg.url+path,{method,headers:{apikey:cfg.anonKey,Authorization:`Bearer ${token||cfg.anonKey}`,'Content-Type':'application/json',Prefer:method==='POST'?'return=representation':'return=minimal'},body:body===null?null:JSON.stringify(body)});}
+    catch(err){
+      if(attempt<attempts-1){await new Promise(resolve=>setTimeout(resolve,900*(attempt+1)));continue;}
+      if(navigator.onLine===false)throw new Error('Sem conexão com a Internet. Verifique a rede e tente novamente.');
+      throw new Error('Não foi possível conectar ao banco Supabase. Não é um erro da sua senha. O projeto pode estar pausado ou reiniciando. Confirme no painel do Supabase se o projeto AllanNet EDU está ativo e tente novamente em alguns minutos.');
+    }
+    let data=null;const text=await response.text();try{data=text?JSON.parse(text):null;}catch(e){data=text;}
+    if((response.status===502||response.status===503||response.status===504)&&attempt<attempts-1){await new Promise(resolve=>setTimeout(resolve,900*(attempt+1)));continue;}
+    if(!response.ok){
+      if(response.status===502||response.status===503||response.status===504)throw new Error('O banco Supabase está temporariamente indisponível. Não é um erro da sua senha. Confirme no painel do Supabase se o projeto AllanNet EDU está ativo e tente novamente em alguns minutos.');
+      throw new Error(data?.message||data?.error_description||data?.hint||`Falha no banco de dados (${response.status}).`);
+    }
+    return data;
+  }
 }
 async function authenticateTeacher(email,password){
   const session=await supabaseRequest('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password}});
