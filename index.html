@@ -2720,7 +2720,8 @@ async function enterExamRoom(){
   btn.disabled=true;btn.textContent='Liberando...';error.style.display='none';
   try{
     const data=await supabaseRequest('/rest/v1/rpc/start_exam',{method:'POST',body:{p_password:password,p_student_name:studentName,p_student_school:studentSchool,p_student_grade:studentGrade,p_student_class:studentClass}});
-    if(!CLASS_ACTIVITIES[data.activity_key])throw new Error('A atividade vinculada à prova não existe nesta versão do simulador.');
+    const isGeneratedActivity=data.activity_key==='gerada'&&typeof data.custom_prompt==='string'&&data.custom_prompt.trim().length>0;
+    if(!CLASS_ACTIVITIES[data.activity_key]&&!isGeneratedActivity)throw new Error('A atividade vinculada à prova não existe nesta versão do simulador.');
     examState={active:true,locked:false,attemptToken:data.attempt_token,examId:data.exam_id,title:data.title,activity:data.activity_key,assessmentType:data.assessment_type||'prova',customPrompt:data.custom_prompt||'',knowledgeLevel:data.knowledge_level||'',studentName,studentGrade,studentClass,studentSchool:data.school_code||studentSchool,deadline:data.deadline,maxScore:Number(data.max_score)||10};persistExamState();
     classroom.role='student';classroom.studentName=studentName;classroom.activity=data.activity_key;classroom.lastScore=null;
     devices=[];connections=[];packets=[];racks=[];arpTable={};macTable={};selected=null;history=[];sTx=0;sRx=0;sDrop=0;
