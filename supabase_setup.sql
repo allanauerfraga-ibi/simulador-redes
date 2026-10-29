@@ -763,10 +763,11 @@ on public.exams(teacher_id,generation_key) where generation_key is not null;
 
 do $$
 begin
-  if not exists(select 1 from pg_constraint where conname='exams_knowledge_level_check' and conrelid='public.exams'::regclass)then
-    alter table public.exams add constraint exams_knowledge_level_check
-    check(knowledge_level is null or knowledge_level in('basico','intermediario','avancado'));
+  if exists(select 1 from pg_constraint where conname='exams_knowledge_level_check' and conrelid='public.exams'::regclass)then
+    alter table public.exams drop constraint exams_knowledge_level_check;
   end if;
+  alter table public.exams add constraint exams_knowledge_level_check
+  check(knowledge_level is null or knowledge_level in('basico','intermediario','avancado','profissional'));
   if exists(select 1 from pg_constraint where conname='exams_school_class_check' and conrelid='public.exams'::regclass)then
     alter table public.exams drop constraint exams_school_class_check;
   end if;
@@ -785,12 +786,12 @@ language plpgsql security definer set search_path=public,extensions as $$
 declare
   v_id uuid;v_school text:=lower(trim(coalesce(p_school,'')));
   v_level text:=lower(trim(coalesce(p_knowledge_level,'')));v_class text:=upper(trim(coalesce(p_target_class,'')));
-  allowed_keys text[]:=array['pc','phone','switch','wirelessRouter','server','firewall','notebook','desktopComputer','pcWire','wifi','sameSubnet','switchesLinked','routerSwitch','minSubnets','gigabit','reach'];
+  allowed_keys text[]:=array['pc','phone','switch','wirelessRouter','server','firewall','notebook','desktopComputer','pcWire','wifi','sameSubnet','switchesLinked','routerSwitch','minSubnets','gigabit','reach','minAssigned','minVlans','minBackbones','backboneSpeed'];
 begin
   if auth.uid() is null or not exists(select 1 from public.teacher_profiles p where p.user_id=auth.uid())then raise exception 'Conta não autorizada como professor.';end if;
   if v_school not in('narceu','joao_neiva')then raise exception 'Selecione uma escola válida.';end if;
   if(v_school='narceu'and v_class not in('UNICA','TODAS'))or(v_school='joao_neiva'and v_class not in('01','02','TODAS'))then raise exception 'Selecione uma turma válida para a escola.';end if;
-  if v_level not in('basico','intermediario','avancado')then raise exception 'Selecione o nível básico, intermediário ou avançado.';end if;
+  if v_level not in('basico','intermediario','avancado','profissional')then raise exception 'Selecione o nível básico, intermediário, avançado ou profissional.';end if;
   if length(trim(coalesce(p_title,'')))<3 or length(trim(coalesce(p_prompt,'')))<40 then raise exception 'A atividade gerada está incompleta.';end if;
   if jsonb_typeof(p_rules)<>'object' or pg_column_size(p_rules)>4096 then raise exception 'Critérios automáticos inválidos.';end if;
   if exists(select 1 from jsonb_object_keys(p_rules)k where not(k=any(allowed_keys)))then raise exception 'A atividade contém um critério não autorizado.';end if;
@@ -804,6 +805,13 @@ begin
      or coalesce((p_rules->>'server')::integer,0) not between 0 and 4
      or coalesce((p_rules->>'firewall')::integer,0) not between 0 and 2 then
     raise exception 'Quantidade de equipamentos fora dos limites didáticos.';
+  end if;
+  if (p_rules?'minSubnets' and (p_rules->>'minSubnets')::integer not between 1 and 8)
+     or (p_rules?'minAssigned' and (p_rules->>'minAssigned')::integer not between 2 and 30)
+     or (p_rules?'minVlans' and (p_rules->>'minVlans')::integer not between 2 and 8)
+     or (p_rules?'minBackbones' and (p_rules->>'minBackbones')::integer not between 1 and 10)
+     or (p_rules?'backboneSpeed' and (p_rules->>'backboneSpeed')::integer not between 1000 and 100000) then
+    raise exception 'Critérios profissionais fora dos limites didáticos.';
   end if;
   insert into public.exams(
     teacher_id,title,activity_key,assessment_type,school_code,target_grade,target_class,
@@ -898,6 +906,10 @@ begin
   if r?'switchesLinked'then ok:=exists(select 1 from jsonb_array_elements(ds)a1 cross join jsonb_array_elements(ds)a2 cross join jsonb_array_elements(cs)c where a1->>'type'='switch'and a2->>'type'='switch'and a1->>'id'<>a2->>'id'and((c->>'from'=a1->>'id'and c->>'to'=a2->>'id')or(c->>'to'=a1->>'id'and c->>'from'=a2->>'id')));ch:=public._exam_check(ch,'Switches interligados',ok);end if;
   if r?'routerSwitch'then ok:=exists(select 1 from jsonb_array_elements(ds)ro cross join jsonb_array_elements(ds)sw cross join jsonb_array_elements(cs)c where ro->>'type'='router'and sw->>'type'='switch'and((c->>'from'=ro->>'id'and c->>'to'=sw->>'id')or(c->>'to'=ro->>'id'and c->>'from'=sw->>'id')));ch:=public._exam_check(ch,'Roteador sem fio ligado à LAN',ok);end if;
   if r?'minSubnets'then select count(distinct split_part(d->>'ip','.',1)||'.'||split_part(d->>'ip','.',2)||'.'||split_part(d->>'ip','.',3))into n from jsonb_array_elements(ds)d where d->>'type'='pc';ch:=public._exam_check(ch,'Redes /24: pelo menos '||(r->>'minSubnets'),n>=(r->>'minSubnets')::integer);end if;
+  if r?'minAssigned'then select count(*)into n from jsonb_array_elements(ds)d where d->>'type'in('pc','phone','server')and d->>'vlanAssigned'='true';ch:=public._exam_check(ch,'Clientes e servidores atribuídos a VLANs: pelo menos '||(r->>'minAssigned'),n>=(r->>'minAssigned')::integer);end if;
+  if r?'minVlans'then select count(distinct d->>'vlan')into n from jsonb_array_elements(ds)d where d->>'type'in('pc','phone','server')and d->>'vlanAssigned'='true'and coalesce(d->>'vlan','')<>'';ch:=public._exam_check(ch,'VLANs diferentes: pelo menos '||(r->>'minVlans'),n>=(r->>'minVlans')::integer);end if;
+  if r?'minBackbones'then select count(*)into n from jsonb_array_elements(cs)c where c->>'kind'='backbone'and coalesce(c->>'active','true')<>'false';ch:=public._exam_check(ch,'Enlaces de backbone: pelo menos '||(r->>'minBackbones'),n>=(r->>'minBackbones')::integer);end if;
+  if r?'backboneSpeed'then ok:=exists(select 1 from jsonb_array_elements(cs)c where c->>'kind'='backbone'and coalesce(c->>'active','true')<>'false'and coalesce((c->>'bw')::numeric,0)>=(r->>'backboneSpeed')::numeric);ch:=public._exam_check(ch,'Backbone principal de pelo menos 10 Gb/s',ok);end if;
   if r?'gigabit'then ok:=exists(select 1 from jsonb_array_elements(cs)c where coalesce(c->>'kind','')not in('wifi','satellite')and coalesce((c->>'bw')::numeric,0)>=1000);ch:=public._exam_check(ch,'Enlace central de pelo menos 1 Gb/s',ok);end if;
   if r?'reach'then
     select array_agg(d->>'id')into ids from jsonb_array_elements(ds)d where d->>'type'in('pc','phone','server');
