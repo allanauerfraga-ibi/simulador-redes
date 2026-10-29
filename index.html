@@ -2317,7 +2317,7 @@ function syncClassroomUI(){
   syncActivityBar();
   updateStats();draw();
 }
-function knowledgeLevelName(value){return({basico:'Básico',intermediario:'Intermediário',avancado:'Avançado'})[String(value||'').toLowerCase()]||'Personalizado';}
+function knowledgeLevelName(value){return({basico:'Básico',intermediario:'Intermediário',avancado:'Avançado',profissional:'Profissional'})[String(value||'').toLowerCase()]||'Personalizado';}
 function currentActivityDefinition(){
   if(examState.active&&examState.activity==='gerada')return{room:'exam',level:knowledgeLevelName(examState.knowledgeLevel),title:examState.title||'Atividade inédita',desc:examState.customPrompt||'Monte a rede solicitada pelo professor.',examRules:{}};
   return CLASS_ACTIVITIES[classroom.activity]||null;
@@ -2825,11 +2825,12 @@ let generatedActivityDraft=null;
 function generatedRandomInt(min,max){const data=new Uint32Array(1);crypto.getRandomValues(data);return min+(data[0]%(max-min+1));}
 function generatedChoice(items){return items[generatedRandomInt(0,items.length-1)];}
 function buildGeneratedActivity(level='intermediario'){
-  const normalized=['basico','intermediario','avancado'].includes(level)?level:'intermediario';
+  const normalized=['basico','intermediario','avancado','profissional'].includes(level)?level:'intermediario';
   const contexts={
     basico:['Sala de leitura conectada','Laboratório de iniciação digital','Espaço de estudos colaborativos','Oficina escolar de tecnologia','Sala de apoio pedagógico'],
     intermediario:['Biblioteca digital integrada','Sala maker conectada','Centro de mídia escolar','Feira de ciências interativa','Laboratório móvel de aprendizagem','Auditório multimídia'],
-    avancado:['Campus escolar convergente','Laboratório avançado de inovação','Centro de produção multimídia','Ambiente escolar de alta disponibilidade','Núcleo tecnológico integrado','Mostra regional de tecnologia']
+    avancado:['Campus escolar convergente','Laboratório avançado de inovação','Centro de produção multimídia','Ambiente escolar de alta disponibilidade','Núcleo tecnológico integrado','Mostra regional de tecnologia'],
+    profissional:['Campus multissetorial segmentado','Núcleo corporativo de alta capacidade','Centro de dados educacional segmentado','Rede metropolitana entre departamentos','Infraestrutura convergente de missão crítica','Backbone institucional com VLANs']
   };
   const context=generatedChoice(contexts[normalized]);let rules,requirements=[];
   if(normalized==='basico'){
@@ -2838,9 +2839,13 @@ function buildGeneratedActivity(level='intermediario'){
   }else if(normalized==='intermediario'){
     rules={pc:generatedRandomInt(4,6),phone:generatedRandomInt(3,5),switch:2,wirelessRouter:generatedRandomInt(1,2),server:1,notebook:1,desktopComputer:1,pcWire:true,wifi:true,switchesLinked:true,routerSwitch:true,gigabit:true,reach:true};
     requirements=[`${rules.pc} computadores, com Notebook e Computador`,`${rules.phone} celulares conectados por Wi-Fi`,`${rules.switch} switches interligados e ${rules.wirelessRouter} roteador${rules.wirelessRouter>1?'es':''} sem fio`,'1 servidor acessível por todos','computadores ligados por cabo aos switches','pelo menos um enlace de 1 Gb/s','comunicação entre todos os clientes e o servidor'];
-  }else{
+  }else if(normalized==='avancado'){
     rules={pc:generatedRandomInt(6,8),phone:generatedRandomInt(4,6),switch:generatedRandomInt(2,3),wirelessRouter:2,server:1,firewall:1,notebook:1,desktopComputer:1,pcWire:true,wifi:true,switchesLinked:true,routerSwitch:true,minSubnets:2,gigabit:true,reach:true};
     requirements=[`${rules.pc} computadores, com Notebook e Computador`,`${rules.phone} celulares distribuídos na rede Wi-Fi`,`${rules.switch} switches interligados e 2 roteadores sem fio`,'1 servidor e 1 firewall','computadores ligados aos switches por cabo','pelo menos duas redes /24','núcleo com enlace mínimo de 1 Gb/s','comunicação completa entre clientes e servidor'];
+  }else{
+    const vlanTotal=generatedRandomInt(3,4),backboneTotal=generatedRandomInt(4,5),assignedTotal=generatedRandomInt(12,14);
+    rules={pc:generatedRandomInt(8,10),phone:generatedRandomInt(4,6),switch:generatedRandomInt(3,4),wirelessRouter:2,server:2,firewall:1,notebook:1,desktopComputer:1,pcWire:true,wifi:true,switchesLinked:true,routerSwitch:true,minSubnets:vlanTotal,minAssigned:assignedTotal,minVlans:vlanTotal,minBackbones:backboneTotal,backboneSpeed:10000,reach:true};
+    requirements=[`${rules.pc} computadores, incluindo Notebook e Computador`,`${rules.phone} celulares conectados por Wi-Fi`,`${rules.switch} switches e 2 roteadores sem fio`,'2 servidores e 1 firewall',`${assignedTotal} clientes ou servidores atribuídos a pelo menos ${vlanTotal} VLANs`,`pelo menos ${vlanTotal} redes /24`,`${backboneTotal} enlaces de backbone`,'backbone principal de no mínimo 10 Gb/s','comunicação entre todos os clientes e servidores'];
   }
   const key=`allannet-${normalized}-${crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2)}`;
   const title=`${context} — desafio ${knowledgeLevelName(normalized)}`;
@@ -2857,8 +2862,8 @@ function showGeneratedActivityModal(level='intermediario'){
   const draft=generatedActivityDraft,start=new Date(Date.now()-3*60000),end=new Date(Date.now()+24*60*60000),local=date=>new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
   const selectedSchool=window._examSchoolFilter||'narceu',criteria=Object.entries(draft.rules).map(([key,value])=>`<span style="display:inline-block;margin:2px;padding:3px 6px;border-radius:10px;background:#23354a;color:#cfe8ff;font-size:9px">${escapeReport(key)}: ${escapeReport(value)}</span>`).join('');
   showModal(`<h3>✨ Gerar atividade inédita para todos</h3>
-    <div class="edu-note">O sistema combina LAN e rede sem fio para criar uma proposta nova. Todos os alunos da turma usarão <b>o mesmo enunciado e a mesma senha</b>, com correção automática protegida no servidor.</div>
-    <label>Nível de conhecimento</label><select id="generated-level" onchange="showGeneratedActivityModal(this.value)"><option value="basico" ${draft.level==='basico'?'selected':''}>Básico</option><option value="intermediario" ${draft.level==='intermediario'?'selected':''}>Intermediário</option><option value="avancado" ${draft.level==='avancado'?'selected':''}>Avançado</option></select>
+    <div class="edu-note">O sistema combina LAN e rede sem fio para criar uma proposta nova. No nível <b>Profissional</b>, também utiliza Backbone e Segmentação com VLANs. Todos os alunos da turma usarão <b>o mesmo enunciado e a mesma senha</b>, com correção automática protegida no servidor.</div>
+    <label>Nível de conhecimento</label><select id="generated-level" onchange="showGeneratedActivityModal(this.value)"><option value="basico" ${draft.level==='basico'?'selected':''}>Básico</option><option value="intermediario" ${draft.level==='intermediario'?'selected':''}>Intermediário</option><option value="avancado" ${draft.level==='avancado'?'selected':''}>Avançado</option><option value="profissional" ${draft.level==='profissional'?'selected':''}>Profissional — Backbone e Segmentação</option></select>
     <div class="exam-status"><strong>${escapeReport(draft.title)}</strong><br><br>${escapeReport(draft.prompt)}<div style="margin-top:8px">${criteria}</div></div>
     <div class="modal-btns" style="justify-content:flex-start"><button onclick="showGeneratedActivityModal('${draft.level}')">🔄 Gerar outra proposta deste nível</button></div>
     <label>Título da atividade</label><input id="generated-title" value="${escapeReport(draft.title)}">
