@@ -470,9 +470,11 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         <div class="menu-grid one">
           <button class="menu-action green" onclick="showCityBuilderModal()">🌄 Abrir cenário de cidade</button>
           <button class="menu-action" id="btn-cellTower" onclick="showCellTowerModal()">📡 Adicionar torre 4G/5G</button>
+          <button class="menu-action" id="btn-city-satellite" onclick="showCitySatelliteModal()">🛰️ Adicionar satélite</button>
           <button class="menu-action" id="btn-house" onclick="prepareCityDevice('house')">🏠 Adicionar residência</button>
           <button class="menu-action" id="btn-city-phone" onclick="prepareCityDevice('phone')">📱 Adicionar celular</button>
           <button class="menu-action" id="btn-person" onclick="prepareCityDevice('person')">🧍 Adicionar pessoa com celular</button>
+          <button class="menu-action" id="btn-satellite-tower" onclick="startSatelliteTowerLinkMode()">📡 Conectar satélite às torres</button>
           <button class="menu-action" id="btn-cellular" onclick="startCellularMode()">📶 Distribuir sinal da torre</button>
           <button class="menu-action" onclick="runCityCoverageTest()">✅ Testar Internet e telefonia</button>
           <button class="menu-action" onclick="toggleCityScene()">🗺️ Mostrar/ocultar paisagem</button>
@@ -628,6 +630,7 @@ let wifiFirst=null;
 let cellularFirst=null;
 let ispFiberFirst=null;
 let satelliteLinkFirst=null;
+let satelliteTowerOnly=false;
 let pendingSatelliteProvider='starlink';
 let pendingSatelliteEquipment='satDish';
 let pendingSwitchPorts=24;
@@ -929,11 +932,12 @@ function prepareSatellitePlacement(){
 // =========================================================
 function showCityBuilderModal(){
   showModal(`<h3>🏙️ Cidade Conectada</h3>
-    <div class="edu-note">Monte uma cidade realista entre montanhas. Posicione torres em pontos altos, residências no vale e pessoas usando celulares nas ruas. Depois, distribua sinal 4G/5G para Internet, telefonia móvel e Internet residencial fixa sem fio.</div>
+    <div class="edu-note">Monte uma cidade realista entre montanhas. Posicione torres em pontos altos, insira um satélite no céu e crie o enlace de backhaul Satélite ↔ Torre. Depois, distribua sinal 4G/5G para residências e pessoas usando celulares.</div>
     <div class="cfg-sec"><h5>O cenário inclui</h5>
       <div class="edu-check">🌄 Montanhas em camadas, vegetação e área elevada para as torres</div>
       <div class="edu-check">🏘️ Bairro residencial, ruas, postes e iluminação urbana</div>
       <div class="edu-check">📶 Visualização do raio de cobertura de cada torre</div>
+      <div class="edu-check">🛰️ Satélite conectado diretamente às torres por enlace de rádio</div>
       <div class="edu-check">☎️ Teste animado de Internet e telefonia para cada assinante</div>
     </div>
     <label>Nome do município ou cenário</label><input id="city-name" value="${escapeReport(cityScene.name||'Cidade Conectada')}" maxlength="60">
@@ -955,6 +959,24 @@ function toggleCityScene(){
 function prepareCityDevice(type){
   if(!cityScene.active)cityScene.active=true;
   setMode('add',type);
+}
+function showCitySatelliteModal(){
+  const providerOptions=Object.entries(SATELLITE_PROVIDERS).map(([key,p])=>`<option value="${key}" ${key===pendingSatelliteProvider?'selected':''}>${p.name} — ${p.orbit} · ${formatBandwidth(p.bw)} · ~${p.latency} ms</option>`).join('');
+  showModal(`<h3>🛰️ Satélite para a Cidade Conectada</h3>
+    <div class="edu-note">Escolha o sistema orbital. Depois de posicionar o satélite no céu, use <b>Cidade → Conectar satélite às torres</b> para criar o backhaul de Internet da estação 4G/5G.</div>
+    <label>Sistema de comunicação</label><select id="city-sat-provider">${providerOptions}</select>
+    <div class="cfg-sec"><h5>Aplicação no cenário</h5>
+      <div class="edu-check">📡 O satélite pode alimentar uma ou várias torres</div>
+      <div class="edu-check">🌐 O enlace participa dos testes Ping e Traceroute</div>
+      <div class="edu-check">✨ O tráfego aparece animado no feixe orbital</div>
+    </div>
+    <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="prepareCitySatellitePlacement()">📍 Posicionar no céu</button></div>`);
+}
+function prepareCitySatellitePlacement(){
+  const provider=document.getElementById('city-sat-provider')?.value;
+  pendingSatelliteProvider=SATELLITE_PROVIDERS[provider]?provider:'starlink';
+  pendingSatelliteEquipment='satellite';cityScene.active=true;closeModal();setMode('add','satellite');
+  document.getElementById('s-mode').textContent=`Adicionar satélite ${SATELLITE_PROVIDERS[pendingSatelliteProvider].name} — clique no céu`;
 }
 function showCellTowerModal(){
   showModal(`<h3>📡 Adicionar torre de telecomunicações</h3>
@@ -978,9 +1000,12 @@ function buildCityExample(){
   pendingTowerTechnology='4G/5G';pendingTowerOperator='AllanNet Mobile';pendingTowerRange=850;
   const tower=addDevice(w*.24,h*.25,'cellTower');
   const cloud=addDevice(w*.09,h*.14,'cloud');
+  pendingSatelliteProvider='starlink';
+  const satellite=addDevice(w*.48,h*.12,'satellite');
   const house1=addDevice(w*.57,h*.69,'house'),house2=addDevice(w*.70,h*.64,'house'),house3=addDevice(w*.80,h*.72,'house');
   const person1=addDevice(w*.48,h*.52,'person'),person2=addDevice(w*.64,h*.47,'person'),person3=addDevice(w*.75,h*.52,'person');
-  connections.push({id:nextId++,from:cloud.id,to:tower.id,bw:10000,lat:2,kind:'backbone',medium:'fiber'});
+  connectSatelliteDevices(cloud,satellite,true);
+  connectSatelliteDevices(satellite,tower,true);
   [house1,house2,house3,person1,person2,person3].forEach(client=>connectCellularDevices(tower,client,true));
   updateAll();
 }
@@ -1021,7 +1046,11 @@ function addDevice(x,y,type){
   }
   if(type==='cellTower'){
     d.towerTechnology=pendingTowerTechnology;d.operatorName=pendingTowerOperator;d.coverageRadius=pendingTowerRange;d.isInternetGateway=true;
-    d.interfaces=[{name:'backhaul0',ip,mask:'255.255.255.0',status:'up',kind:'wired',speed:10000,mac:genMAC()},...Array.from({length:32},(_,i)=>({name:`radio${i+1}`,ip:'',mask:'255.255.255.0',status:'up',kind:'cellular',speed:pendingTowerTechnology.includes('5G')?1000:300,mac:genMAC()}))];
+    d.interfaces=[
+      {name:'backhaul0',ip,mask:'255.255.255.0',status:'up',kind:'wired',speed:10000,mac:genMAC()},
+      ...Array.from({length:4},(_,i)=>({name:`sat-backhaul${i+1}`,ip:'',mask:'255.255.255.0',status:'up',kind:'satellite',speed:1000,mac:genMAC()})),
+      ...Array.from({length:32},(_,i)=>({name:`radio${i+1}`,ip:'',mask:'255.255.255.0',status:'up',kind:'cellular',speed:pendingTowerTechnology.includes('5G')?1000:300,mac:genMAC()}))
+    ];
   }
   if(type==='satDish'){
     d.satelliteProvider=pendingSatelliteProvider;d.orbit=satProvider.orbit;d.providerName=satProvider.name;d.satelliteBW=satProvider.bw;d.satelliteLatency=satProvider.latency;
@@ -1448,13 +1477,16 @@ function connectCellularDevices(a,b,silent=false){
   return true;
 }
 function runCityCoverageTest(){
-  const towers=devices.filter(d=>d.type==='cellTower'),houses=devices.filter(d=>d.type==='house'),phones=devices.filter(d=>d.type==='phone'),people=devices.filter(d=>d.type==='person');
+  const towers=devices.filter(d=>d.type==='cellTower'),satellites=devices.filter(d=>d.type==='satellite'),houses=devices.filter(d=>d.type==='house'),phones=devices.filter(d=>d.type==='phone'),people=devices.filter(d=>d.type==='person');
   if(!towers.length){rackNotice('Teste indisponível','Adicione pelo menos uma torre 4G/5G.');return;}
+  const orbitalTowers=towers.filter(tower=>connections.some(c=>c.kind==='satellite'&&c.towerBackhaul&&(c.from===tower.id||c.to===tower.id)));
   const clients=[...houses,...phones,...people],connected=clients.filter(client=>connections.some(c=>c.kind==='cellular'&&(c.from===client.id||c.to===client.id)));
-  connected.forEach((client,index)=>{const link=connections.find(c=>c.kind==='cellular'&&(c.from===client.id||c.to===client.id)),tower=devices.find(d=>d.id===(link.from===client.id?link.to:link.from)),isMobile=client.type!=='house';setTimeout(()=>launchPacket(tower.id,client.id,isMobile?'VOICE':'HTTP',isMobile?'Chamada + dados':'Internet residencial'),index*180);});
+  orbitalTowers.forEach((tower,index)=>{const link=connections.find(c=>c.kind==='satellite'&&c.towerBackhaul&&(c.from===tower.id||c.to===tower.id)),satellite=devices.find(d=>d.id===(link.from===tower.id?link.to:link.from));if(satellite)setTimeout(()=>launchPacket(satellite.id,tower.id,'SAT','Backhaul orbital'),index*180);});
+  connected.forEach((client,index)=>{const link=connections.find(c=>c.kind==='cellular'&&(c.from===client.id||c.to===client.id)),tower=devices.find(d=>d.id===(link.from===client.id?link.to:link.from)),isMobile=client.type!=='house';setTimeout(()=>launchPacket(tower.id,client.id,isMobile?'VOICE':'HTTP',isMobile?'Chamada + dados':'Internet residencial'),(orbitalTowers.length+index)*180);});
   const phoneOk=phones.filter(p=>connected.includes(p)).length,peopleOk=people.filter(p=>connected.includes(p)).length,houseOk=houses.filter(h=>connected.includes(h)).length,allOk=clients.length>0&&connected.length===clients.length;
   showModal(`<h3>${allOk?'✅':'⚠️'} Teste da Cidade Conectada</h3><div class="edu-note">O sistema conferiu a cobertura e iniciou uma animação de tráfego entre as torres e os assinantes.</div>
     <div class="edu-check">📡 Torres ativas: <b>${towers.filter(t=>t.status==='up').length}/${towers.length}</b></div>
+    ${satellites.length?`<div class="edu-check">🛰️ Torres com backhaul por satélite: <b>${orbitalTowers.length}/${towers.length}</b></div>`:''}
     <div class="edu-check">🏠 Residências com Internet: <b>${houseOk}/${houses.length}</b></div>
     ${phones.length?`<div class="edu-check">📱 Celulares com Internet e telefonia: <b>${phoneOk}/${phones.length}</b></div>`:''}
     ${people.length?`<div class="edu-check">🧍 Pessoas conectadas pelo smartphone: <b>${peopleOk}/${people.length}</b></div>`:''}
@@ -1467,18 +1499,31 @@ function runCityCoverageTest(){
 // INTERNET VIA SATÉLITE
 // =========================================================
 function startSatelliteLinkMode(){
-  const dishes=devices.filter(d=>d.type==='satDish'),satellites=devices.filter(d=>d.type==='satellite');
-  if(!dishes.length||!satellites.length){rackNotice('Equipamentos insuficientes','Adicione pelo menos uma antena/terminal e um satélite orbital em Adicionar → Internet via satélite.');return;}
-  mode='satelliteLink';addType='';connectFirst=null;satelliteLinkFirst=null;selected=null;
+  const counterparts=devices.filter(d=>['satDish','cloud','cellTower'].includes(d.type)),satellites=devices.filter(d=>d.type==='satellite');
+  if(!counterparts.length||!satellites.length){rackNotice('Equipamentos insuficientes','Adicione um satélite e pelo menos uma antena, uma Nuvem/Internet ou uma torre 4G/5G.');return;}
+  satelliteTowerOnly=false;mode='satelliteLink';addType='';connectFirst=null;satelliteLinkFirst=null;selected=null;
   document.querySelectorAll('#topbar button').forEach(b=>b.classList.remove('active'));
   document.getElementById('btn-satellite-link')?.classList.add('active');
-  document.getElementById('s-mode').textContent='Enlace satelital: selecione antena, satélite ou Nuvem';
+  document.getElementById('s-mode').textContent='Enlace satelital: selecione antena, satélite, Nuvem ou torre';
   document.getElementById('explain-icon').textContent='🛰️';
-  document.getElementById('explain-text').textContent='Clique na antena e depois no satélite da mesma empresa. Para completar o caminho até a Internet, conecte o satélite a uma Nuvem/Internet usando este mesmo modo.';
+  document.getElementById('explain-text').textContent='Ligue o satélite a uma antena, à Nuvem/Internet ou diretamente a uma torre 4G/5G para criar o backhaul orbital.';
+  document.getElementById('explain-bar').classList.remove('activity-active');document.getElementById('explain-bar').classList.add('show');draw();
+}
+function startSatelliteTowerLinkMode(){
+  const towers=devices.filter(d=>d.type==='cellTower'),satellites=devices.filter(d=>d.type==='satellite');
+  if(!satellites.length){rackNotice('Nenhum satélite inserido','Use Cidade → Adicionar satélite e posicione-o no céu.');return;}
+  if(!towers.length){rackNotice('Nenhuma torre instalada','Adicione uma torre 4G/5G antes de criar o enlace orbital.');return;}
+  satelliteTowerOnly=true;mode='satelliteLink';addType='';connectFirst=null;satelliteLinkFirst=null;selected=null;cityScene.active=true;
+  document.querySelectorAll('#topbar button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-satellite-tower')?.classList.add('active');
+  document.getElementById('s-mode').textContent='Backhaul orbital: selecione um satélite e uma torre 4G/5G';
+  document.getElementById('explain-icon').textContent='🛰️';
+  document.getElementById('explain-text').textContent='Clique no satélite e depois na torre. O modo continua ativo para conectar outras torres ao mesmo satélite.';
   document.getElementById('explain-bar').classList.remove('activity-active');document.getElementById('explain-bar').classList.add('show');draw();
 }
 function selectSatelliteLinkDevice(dev){
-  if(!dev||!['satDish','satellite','cloud'].includes(dev.type)){rackNotice('Equipamento incompatível','O enlace satelital aceita Antena/terminal, Satélite orbital ou Nuvem/Internet.');return;}
+  const allowed=satelliteTowerOnly?['satellite','cellTower']:['satDish','satellite','cloud','cellTower'];
+  if(!dev||!allowed.includes(dev.type)){rackNotice('Equipamento incompatível',satelliteTowerOnly?'Selecione um satélite orbital ou uma torre 4G/5G.':'O enlace aceita Antena/terminal, Satélite orbital, Nuvem/Internet ou Torre 4G/5G.');return;}
   if(!satelliteLinkFirst){
     satelliteLinkFirst=dev;selected=dev;updateDevList();draw();
     document.getElementById('s-mode').textContent='Enlace satelital: selecione o segundo equipamento';
@@ -1486,28 +1531,39 @@ function selectSatelliteLinkDevice(dev){
   }
   if(satelliteLinkFirst.id===dev.id){rackNotice('Seleção inválida','Escolha outro equipamento.');return;}
   const a=satelliteLinkFirst,b=dev;
-  const dish=a.type==='satDish'?a:(b.type==='satDish'?b:null);
-  const satellite=a.type==='satellite'?a:(b.type==='satellite'?b:null);
-  const cloud=a.type==='cloud'?a:(b.type==='cloud'?b:null);
-  if(!satellite||(!dish&&!cloud)||(dish&&cloud)){rackNotice('Ligação inválida','Conecte Antena ↔ Satélite ou Satélite ↔ Nuvem/Internet.');return;}
+  if(!connectSatelliteDevices(a,b,false))return;
+  satelliteLinkFirst=null;selected=null;updateAll();
+  document.getElementById('s-mode').textContent=satelliteTowerOnly?'Backhaul orbital ativo: selecione outro satélite e torre':'Enlace satelital ativo: selecione outro par';
+}
+function ensureTowerSatelliteInterfaces(tower,speed=1000){
+  ensureInterfaceMetadata(tower);
+  if(!tower.interfaces.some(i=>interfaceKind(i)==='satellite')){
+    for(let i=1;i<=4;i++)tower.interfaces.push({name:`sat-backhaul${i}`,ip:'',mask:'255.255.255.0',status:'up',kind:'satellite',speed,mac:genMAC()});
+  }
+}
+function connectSatelliteDevices(a,b,silent=false){
+  const dish=a?.type==='satDish'?a:(b?.type==='satDish'?b:null),satellite=a?.type==='satellite'?a:(b?.type==='satellite'?b:null);
+  const cloud=a?.type==='cloud'?a:(b?.type==='cloud'?b:null),tower=a?.type==='cellTower'?a:(b?.type==='cellTower'?b:null);
+  if(!satellite||(!dish&&!cloud&&!tower)||[dish,cloud,tower].filter(Boolean).length!==1){if(!silent)rackNotice('Ligação inválida','Conecte Satélite ↔ Antena, Satélite ↔ Nuvem/Internet ou Satélite ↔ Torre 4G/5G.');return false;}
   if(dish&&dish.satelliteProvider!==satellite.satelliteProvider){
     const dp=SATELLITE_PROVIDERS[dish.satelliteProvider]?.name||dish.providerName,sp=SATELLITE_PROVIDERS[satellite.satelliteProvider]?.name||satellite.providerName;
-    rackNotice('Provedores diferentes',`${dp} não pode ser associado ao satélite ${sp}. Escolha equipamentos da mesma empresa.`);return;
+    if(!silent)rackNotice('Provedores diferentes',`${dp} não pode ser associado ao satélite ${sp}. Escolha equipamentos da mesma empresa.`);return false;
   }
-  if(connections.some(c=>c.kind==='satellite'&&((c.from===a.id&&c.to===b.id)||(c.from===b.id&&c.to===a.id)))){rackNotice('Enlace já existente',`${a.name} e ${b.name} já estão conectados.`);return;}
+  if(connections.some(c=>c.kind==='satellite'&&((c.from===a.id&&c.to===b.id)||(c.from===b.id&&c.to===a.id)))){if(!silent)rackNotice('Enlace já existente',`${a.name} e ${b.name} já estão conectados.`);return false;}
   const providerKey=satellite.satelliteProvider||dish?.satelliteProvider||'starlink',provider=SATELLITE_PROVIDERS[providerKey]||SATELLITE_PROVIDERS.starlink;
-  const satIface=nextFreeInterface(satellite,'satellite');
-  const dishIface=dish?nextFreeInterface(dish,'satellite'):null;
-  if(!satIface||(dish&&!dishIface)){rackNotice('Canal indisponível',`${!satIface?satellite.name:dish.name} não possui canal satelital livre.`);return;}
-  const fromIface=a.type==='satellite'?satIface:(a.type==='satDish'?dishIface:`gateway-${satellite.id}`);
-  const toIface=b.type==='satellite'?satIface:(b.type==='satDish'?dishIface:`gateway-${satellite.id}`);
-  saveHistory();
-  connections.push({id:nextId++,from:a.id,to:b.id,bw:provider.bw,lat:provider.latency/4,kind:'satellite',medium:'radio-satellite',provider:providerKey,providerName:provider.name,orbit:provider.orbit,fromIface,toIface});
+  if(tower)ensureTowerSatelliteInterfaces(tower,provider.bw);
+  const satIface=nextFreeInterface(satellite,'satellite'),peer=tower||dish;
+  const peerIface=peer?nextFreeInterface(peer,'satellite'):null;
+  if(!satIface||(peer&&!peerIface)){if(!silent)rackNotice('Canal indisponível',`${!satIface?satellite.name:peer.name} não possui canal satelital livre.`);return false;}
+  const fromIface=a.type==='satellite'?satIface:(a.type==='cloud'?`gateway-${satellite.id}`:peerIface);
+  const toIface=b.type==='satellite'?satIface:(b.type==='cloud'?`gateway-${satellite.id}`:peerIface);
+  if(!silent)saveHistory();
+  const service=tower?'Backhaul orbital da torre':(cloud?'Gateway orbital':'Acesso do assinante');
+  connections.push({id:nextId++,from:a.id,to:b.id,bw:provider.bw,lat:provider.latency/4,kind:'satellite',medium:'radio-satellite',service,towerBackhaul:!!tower,provider:providerKey,providerName:provider.name,orbit:provider.orbit,fromIface,toIface});
   if(dish){dish.satelliteId=satellite.id;dish.satelliteStatus='conectado';dish.gw=satellite.ip;}
-  satelliteLinkFirst=null;selected=null;updateAll();
-  document.getElementById('s-mode').textContent='Enlace satelital ativo: selecione outro par';
-  rackNotice('Enlace satelital criado',`${a.name} ↔ ${b.name} · ${provider.name} ${provider.orbit} · ${formatBandwidth(provider.bw)} · ~${provider.latency} ms fim a fim.`,'ok');
-  sysLog(`🛰️ SATÉLITE: ${a.name} ↔ ${b.name} | ${provider.name} ${provider.orbit} | ${formatBandwidth(provider.bw)} | ~${provider.latency} ms`,'lsys');
+  if(tower){tower.satelliteId=satellite.id;tower.satelliteProvider=providerKey;tower.satelliteBackhaul='conectado';tower.gw=satellite.ip;}
+  if(!silent){updateAll();rackNotice(tower?'Torre conectada ao satélite':'Enlace satelital criado',`${a.name} ↔ ${b.name} · ${service} · ${provider.name} ${provider.orbit} · ${formatBandwidth(provider.bw)} · ~${provider.latency} ms.`,'ok');sysLog(`🛰️ SATÉLITE: ${a.name} ↔ ${b.name} | ${service} | ${provider.name} ${provider.orbit} | ${formatBandwidth(provider.bw)}`,'lsys');}
+  return true;
 }
 
 // =========================================================
@@ -1833,6 +1889,8 @@ function removeConnection(conn){
   if(conn.kind==='satellite'){
     const dish=a?.type==='satDish'?a:(b?.type==='satDish'?b:null);
     if(dish){dish.satelliteId=null;dish.satelliteStatus='desconectado';dish.gw='';}
+    const tower=a?.type==='cellTower'?a:(b?.type==='cellTower'?b:null);
+    if(tower){tower.satelliteId=null;tower.satelliteProvider='';tower.satelliteBackhaul='desconectado';tower.gw='';}
   }
   if(conn.kind==='cellular'){
     const client=['phone','house','person'].includes(a?.type)?a:(['phone','house','person'].includes(b?.type)?b:null);
@@ -2374,7 +2432,7 @@ canvas.addEventListener('mousemove',e=>{
   const tip=document.getElementById('tip');
   if(dev){
     tip.style.display='block';tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-40)+'px';
-    tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b>${dev.type==='server'?`<br>Formato: <b style="color:#bc8cff">${serverFormatLabel(dev)}</b>`:dev.type==='switch'?`<br>Formato: <b style="color:#56d364">${switchFormatLabel(dev)}</b>`:dev.type==='patchPanel'?`<br>Tipo: <b style="color:#f2cc60">Passivo · 1U · ${dev.portCount||24} portas</b>`:dev.type==='cellTower'?`<br>Operadora: <b style="color:#ff79b0">${dev.operatorName||'AllanNet Mobile'}</b><br>Tecnologia: ${dev.towerTechnology||'4G/5G'} · alcance ${towerRangeKm(dev.coverageRadius)} km`:dev.type==='house'?`<br>Serviço: <b style="color:#ffd166">Internet residencial FWA</b><br>Torre: ${devices.find(t=>t.id===dev.cellTowerId)?.name||'não conectada'}`:dev.type==='person'?`<br>Dispositivo: <b style="color:#5ee6b3">Smartphone 4G/5G</b><br>Operadora: ${dev.mobileOperator||'não conectada'}<br>Torre: ${devices.find(t=>t.id===dev.cellTowerId)?.name||'sem sinal'}`:['satDish','satellite'].includes(dev.type)?`<br>Provedor: <b style="color:${SATELLITE_PROVIDERS[dev.satelliteProvider]?.color||'#70e1ff'}">${dev.providerName||'Satelital'} · ${dev.orbit||'-'}</b><br>Banda: ${formatBandwidth(dev.satelliteBW||100)} · Latência: ~${dev.satelliteLatency||'-'} ms`:''}${dev.rackId?`<br>Posição no rack: <b style="color:#58a6ff">U${(dev.rackSlotU||0)+1}</b>`:''}${dev.type==='patchPanel'?'':`<br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code>`}<br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b>`;
+    tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b>${dev.type==='server'?`<br>Formato: <b style="color:#bc8cff">${serverFormatLabel(dev)}</b>`:dev.type==='switch'?`<br>Formato: <b style="color:#56d364">${switchFormatLabel(dev)}</b>`:dev.type==='patchPanel'?`<br>Tipo: <b style="color:#f2cc60">Passivo · 1U · ${dev.portCount||24} portas</b>`:dev.type==='cellTower'?`<br>Operadora: <b style="color:#ff79b0">${dev.operatorName||'AllanNet Mobile'}</b><br>Tecnologia: ${dev.towerTechnology||'4G/5G'} · alcance ${towerRangeKm(dev.coverageRadius)} km<br>Backhaul orbital: <b style="color:${dev.satelliteId?'#ffd166':'#8b949e'}">${dev.satelliteId?(devices.find(s=>s.id===dev.satelliteId)?.name||'conectado'):'não conectado'}</b>`:dev.type==='house'?`<br>Serviço: <b style="color:#ffd166">Internet residencial FWA</b><br>Torre: ${devices.find(t=>t.id===dev.cellTowerId)?.name||'não conectada'}`:dev.type==='person'?`<br>Dispositivo: <b style="color:#5ee6b3">Smartphone 4G/5G</b><br>Operadora: ${dev.mobileOperator||'não conectada'}<br>Torre: ${devices.find(t=>t.id===dev.cellTowerId)?.name||'sem sinal'}`:['satDish','satellite'].includes(dev.type)?`<br>Provedor: <b style="color:${SATELLITE_PROVIDERS[dev.satelliteProvider]?.color||'#70e1ff'}">${dev.providerName||'Satelital'} · ${dev.orbit||'-'}</b><br>Banda: ${formatBandwidth(dev.satelliteBW||100)} · Latência: ~${dev.satelliteLatency||'-'} ms`:''}${dev.rackId?`<br>Posição no rack: <b style="color:#58a6ff">U${(dev.rackSlotU||0)+1}</b>`:''}${dev.type==='patchPanel'?'':`<br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code>`}<br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b>`;
   }else{tip.style.display='none';}
 });
 canvas.addEventListener('mouseup',()=>{const moved=dragging;if(moved)assignRack(moved);dragging=null;draggingRack=null;updateAll();if(moved)updateProp(moved);});
@@ -2398,7 +2456,7 @@ function setMode(m,type){
   if(m!=='wifi')wifiFirst=null;
   if(m!=='cellular')cellularFirst=null;
   if(m!=='ispFiber')ispFiberFirst=null;
-  if(m!=='satelliteLink')satelliteLinkFirst=null;
+  if(m!=='satelliteLink'){satelliteLinkFirst=null;satelliteTowerOnly=false;}
   canvas.style.cursor=m==='deleteLink'?'crosshair':'default';
   if(m!=='backbone'){backboneFirst=null;backboneSecond=null;}
   document.querySelectorAll('#topbar button').forEach(b=>b.classList.remove('active'));
