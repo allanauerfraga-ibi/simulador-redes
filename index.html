@@ -462,6 +462,22 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         </div>
       </div>
     </div>
+
+    <div class="menu-group menu-right" id="menu-city">
+      <button class="menu-trigger" onclick="toggleMainMenu('menu-city',event)">🏙️ <span class="menu-label">Cidade</span></button>
+      <div class="menu-panel">
+        <div class="menu-title">Cidade conectada — 4G/5G e Internet residencial</div>
+        <div class="menu-grid one">
+          <button class="menu-action green" onclick="showCityBuilderModal()">🌄 Abrir cenário de cidade</button>
+          <button class="menu-action" id="btn-cellTower" onclick="showCellTowerModal()">📡 Adicionar torre 4G/5G</button>
+          <button class="menu-action" id="btn-house" onclick="prepareCityDevice('house')">🏠 Adicionar residência</button>
+          <button class="menu-action" id="btn-city-phone" onclick="prepareCityDevice('phone')">📱 Adicionar celular</button>
+          <button class="menu-action" id="btn-cellular" onclick="startCellularMode()">📶 Distribuir sinal da torre</button>
+          <button class="menu-action" onclick="runCityCoverageTest()">✅ Testar Internet e telefonia</button>
+          <button class="menu-action" onclick="toggleCityScene()">🗺️ Mostrar/ocultar paisagem</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="quick-actions">
@@ -508,7 +524,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
       <div class="panel-title">Legenda rápida</div>
       <div style="font-size:10px;display:flex;flex-direction:column;gap:3px;">
         <div>💻 <b>Notebook / PC</b> — Computador cliente</div>
-        <div>📱 <b>Celular</b> — Cliente Wi-Fi</div>
+        <div>📱 <b>Celular</b> — Cliente Wi-Fi / 4G / 5G</div>
         <div>🔀 <b>Router</b> — Roteia entre redes</div>
         <div>🔌 <b>Switch</b> — Liga dispositivos LAN</div>
         <div>🧩 <b>Patch panel</b> — Organiza cabos no rack</div>
@@ -518,6 +534,8 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         <div>☁️ <b>Cloud</b> — Internet/WAN</div>
         <div>📡 <b>Antena satelital</b> — Terminal do assinante</div>
         <div>🛰️ <b>Satélite</b> — Provedor orbital LEO/GEO</div>
+        <div>📡 <b>Torre 4G/5G</b> — Internet e telefonia móvel</div>
+        <div>🏠 <b>Residência</b> — Cliente de Internet fixa sem fio</div>
         <div>🟣 <b>Backbone</b> — Enlace principal</div>
       </div>
     </div>
@@ -605,6 +623,7 @@ let tracerouteRun=null,tracerouteSeq=0;
 let mode='select',addType='',connectFirst=null,selected=null;
 let backboneFirst=null,backboneSecond=null;
 let wifiFirst=null;
+let cellularFirst=null;
 let ispFiberFirst=null;
 let satelliteLinkFirst=null;
 let pendingSatelliteProvider='starlink';
@@ -614,12 +633,16 @@ let pendingSwitchForm='desktop';
 let pendingPatchPorts=24;
 let pendingServerType='tower';
 let pendingPCStyle='notebook';
+let pendingTowerTechnology='5G';
+let pendingTowerOperator='AllanNet Mobile';
+let pendingTowerRange=560;
 let dragging=null,draggingRack=null,dragOffX=0,dragOffY=0;
 let nextId=1,sTx=0,sRx=0,sDrop=0;
 let nextRackId=1,pendingRackSize=24;
 let cliHist=[],cliHistIdx=-1;
 let arpTable={},macTable={};
 let history=[];// undo stack [{devices, connections}]
+let cityScene={active:false,name:'Cidade Conectada',terrain:'mountains',time:'day'};
 let classroom={role:'student',studentName:'',activity:null,subnetColors:false,lastScore:null,faults:[],faultSnapshot:null};
 let teacherExamSession=null;
 const EMPTY_EXAM_STATE=Object.freeze({active:false,locked:false,attemptToken:'',examId:'',title:'',activity:'',assessmentType:'prova',customPrompt:'',knowledgeLevel:'',studentName:'',studentGrade:'',studentClass:'',studentSchool:'',deadline:'',maxScore:10});
@@ -678,11 +701,11 @@ const CLASS_ACTIVITIES={
 };
 const PRACTICAL_EXAM_KEYS=Array.from({length:15},(_,index)=>`prova${String(index+1).padStart(2,'0')}`);
 
-const COLORS={pc:'#1f6feb',phone:'#00b8d9',router:'#e05c2a',switch:'#1a7f37',patchPanel:'#d29922',server:'#8250df',firewall:'#cf222e',cloud:'#0969da',satDish:'#00a6c7',satellite:'#f0a91f'};
-const GLOW={pc:'#58a6ff',phone:'#70e1ff',router:'#ff8a50',switch:'#56d364',patchPanel:'#f2cc60',server:'#bc8cff',firewall:'#ff6166',cloud:'#4dabf7',satDish:'#70e1ff',satellite:'#ffd166'};
-const ICONS={pc:'💻',phone:'📱',router:'🔀',switch:'🔌',patchPanel:'🧩',server:'🖥️',firewall:'🛡️',cloud:'☁️',satDish:'📡',satellite:'🛰️'};
-const LABELS={pc:'PC',phone:'Celular',router:'Router',switch:'Switch',patchPanel:'Patch panel',server:'Server',firewall:'Firewall',cloud:'Cloud',satDish:'Antena satelital',satellite:'Satélite'};
-const BW={router:1000,switch:1000,patchPanel:1000,firewall:1000,pc:1000,phone:300,server:1000,cloud:1000,satDish:1000,satellite:300};
+const COLORS={pc:'#1f6feb',phone:'#00b8d9',router:'#e05c2a',switch:'#1a7f37',patchPanel:'#d29922',server:'#8250df',firewall:'#cf222e',cloud:'#0969da',satDish:'#00a6c7',satellite:'#f0a91f',cellTower:'#ff3d8d',house:'#f59e0b'};
+const GLOW={pc:'#58a6ff',phone:'#70e1ff',router:'#ff8a50',switch:'#56d364',patchPanel:'#f2cc60',server:'#bc8cff',firewall:'#ff6166',cloud:'#4dabf7',satDish:'#70e1ff',satellite:'#ffd166',cellTower:'#ff79b0',house:'#ffd166'};
+const ICONS={pc:'💻',phone:'📱',router:'🔀',switch:'🔌',patchPanel:'🧩',server:'🖥️',firewall:'🛡️',cloud:'☁️',satDish:'📡',satellite:'🛰️',cellTower:'📡',house:'🏠'};
+const LABELS={pc:'PC',phone:'Celular',router:'Router',switch:'Switch',patchPanel:'Patch panel',server:'Server',firewall:'Firewall',cloud:'Cloud',satDish:'Antena satelital',satellite:'Satélite',cellTower:'Torre 4G/5G',house:'Residência'};
+const BW={router:1000,switch:1000,patchPanel:1000,firewall:1000,pc:1000,phone:300,server:1000,cloud:1000,satDish:1000,satellite:300,cellTower:10000,house:1000};
 const SATELLITE_PROVIDERS={
   starlink:{name:'Starlink',orbit:'LEO',color:'#4dabf7',bw:300,latency:40,terminal:'Terminal Starlink',detail:'Constelação em órbita baixa · baixa latência'},
   hughesnet:{name:'HughesNet',orbit:'GEO',color:'#f28c28',bw:100,latency:600,terminal:'Antena HughesNet',detail:'Satélite geoestacionário · cobertura rural'},
@@ -736,7 +759,7 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape')closeMainMen
 
 const EXPLAIN={
   pc:'💻 Notebook / PC: computador cliente que envia e recebe dados. Possui endereço IP único e conecta-se a switches, roteadores ou redes Wi-Fi quando equipado com placa sem fio.',
-  phone:'📱 Celular: dispositivo móvel que acessa a rede por Wi-Fi. Deve ser associado a um roteador sem fio ou nó Mesh antes de realizar testes de conectividade.',
+  phone:'📱 Celular: dispositivo móvel que acessa a rede por Wi-Fi ou por cobertura 4G/5G. Na Cidade Conectada, recebe Internet e telefonia móvel diretamente de uma torre.',
   router:'🔀 Router (Roteador): Conecta redes diferentes. Decide o melhor caminho para os pacotes usando tabelas de roteamento. Opera na Camada 3 (IP).',
   switch:'🔌 Switch (Comutador): Liga múltiplos dispositivos na mesma rede local (LAN). Aprende endereços MAC e entrega quadros apenas à porta correta. Camada 2.',
   patchPanel:'🧩 Patch panel: painel passivo instalado no rack para terminar, identificar e organizar os cabos de rede. Ele não possui IP e deve ser ligado ao switch com cabos curtos (patch cords).',
@@ -745,6 +768,8 @@ const EXPLAIN={
   cloud:'☁️ Cloud (Nuvem/Internet): Representa a Internet ou uma WAN externa. Pacotes que passam por aqui simulam tráfego externo com maior latência.',
   satDish:'📡 Antena/terminal satelital: equipamento instalado no local do assinante. Liga-se ao roteador por cabo Ethernet e troca dados com o satélite por radiofrequência.',
   satellite:'🛰️ Satélite de Internet: retransmite o sinal entre o terminal do assinante e a infraestrutura do provedor. Satélites LEO possuem menor latência que satélites GEO.',
+  cellTower:'📡 Torre 4G/5G: estação rádio-base instalada em ponto elevado. Distribui Internet e telefonia móvel para celulares e acesso fixo sem fio para residências dentro da área de cobertura.',
+  house:'🏠 Residência conectada: representa uma casa com modem/CPE para receber Internet fixa sem fio da torre e distribuir a conexão aos moradores.',
 };
 const RACK_SIZES={
   12:{label:'Rack compacto 12U',height:126},
@@ -795,7 +820,7 @@ function toggleSystemLog(forceOpen){
 // UNDO
 // =========================================================
 function saveHistory(){
-  history.push({devices:JSON.parse(JSON.stringify(devices)),connections:JSON.parse(JSON.stringify(connections)),racks:JSON.parse(JSON.stringify(racks))});
+  history.push({devices:JSON.parse(JSON.stringify(devices)),connections:JSON.parse(JSON.stringify(connections)),racks:JSON.parse(JSON.stringify(racks)),cityScene:JSON.parse(JSON.stringify(cityScene))});
   if(history.length>50)history.shift();
   document.querySelectorAll('#btn-undo,#btn-undo-quick').forEach(btn=>btn.disabled=false);
 }
@@ -803,6 +828,7 @@ function undo(){
   if(!history.length)return;
   const snap=history.pop();
   devices=snap.devices;connections=snap.connections;racks=snap.racks||[];
+  cityScene=snap.cityScene||cityScene;
   racks.forEach(organizeRackAssets);
   selected=null;arpTable={};macTable={};
   devices.filter(d=>d.type!=='patchPanel').forEach(d=>{arpTable[d.ip]=d.mac;macTable[d.mac]=d.id;});
@@ -894,6 +920,67 @@ function prepareSatellitePlacement(){
   closeModal();setMode('add',pendingSatelliteEquipment);
   document.getElementById('s-mode').textContent=`Adicionar: ${pendingSatelliteEquipment==='satellite'?'Satélite':'Antena'} ${p.name}`;
 }
+
+// =========================================================
+// CIDADE CONECTADA — CENÁRIO, TORRES E ASSINANTES
+// =========================================================
+function showCityBuilderModal(){
+  showModal(`<h3>🏙️ Cidade Conectada</h3>
+    <div class="edu-note">Monte uma cidade realista entre montanhas. Posicione torres em pontos altos, residências no vale e celulares nas ruas. Depois, distribua sinal 4G/5G para Internet, telefonia móvel e Internet residencial fixa sem fio.</div>
+    <div class="cfg-sec"><h5>O cenário inclui</h5>
+      <div class="edu-check">🌄 Montanhas em camadas, vegetação e área elevada para as torres</div>
+      <div class="edu-check">🏘️ Bairro residencial, ruas, postes e iluminação urbana</div>
+      <div class="edu-check">📶 Visualização do raio de cobertura de cada torre</div>
+      <div class="edu-check">☎️ Teste animado de Internet e telefonia para cada assinante</div>
+    </div>
+    <label>Nome do município ou cenário</label><input id="city-name" value="${escapeReport(cityScene.name||'Cidade Conectada')}" maxlength="60">
+    <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button onclick="activateCityScene(false)">Abrir cidade vazia</button><button class="green" onclick="activateCityScene(true)">✨ Montar exemplo completo</button></div>`);
+}
+function activateCityScene(withExample){
+  const name=(document.getElementById('city-name')?.value||'Cidade Conectada').trim().slice(0,60);
+  if(withExample&&(devices.length||connections.length||racks.length)&&!confirm('Montar o exemplo completo apagará a topologia atual. Deseja continuar?'))return;
+  saveHistory();cityScene={active:true,name,terrain:'mountains',time:'day'};closeModal();
+  if(withExample)buildCityExample();
+  setMode('select');draw();
+  rackNotice('Cenário de cidade aberto',withExample?'O exemplo foi montado. Você pode mover, excluir ou acrescentar equipamentos.':'Use a aba Cidade para adicionar torres, residências e celulares.','ok');
+  sysLog(`🏙️ Cenário urbano ativado: ${name}.`,'lsys');
+}
+function toggleCityScene(){
+  saveHistory();cityScene.active=!cityScene.active;draw();
+  rackNotice(cityScene.active?'Paisagem exibida':'Paisagem ocultada',cityScene.active?'Montanhas, cidade e área residencial estão visíveis.':'A topologia foi mantida; apenas a paisagem foi ocultada.','ok');
+}
+function prepareCityDevice(type){
+  if(!cityScene.active)cityScene.active=true;
+  setMode('add',type);
+}
+function showCellTowerModal(){
+  showModal(`<h3>📡 Adicionar torre de telecomunicações</h3>
+    <div class="edu-note">Posicione a torre no alto da montanha para representar uma estação rádio-base com maior área de cobertura.</div>
+    <label>Tecnologia</label><select id="tower-tech"><option value="5G" selected>5G — alta velocidade e baixa latência</option><option value="4G/5G">4G/5G — cobertura combinada</option><option value="4G LTE">4G LTE — maior alcance</option></select>
+    <label>Operadora</label><select id="tower-operator"><option>AllanNet Mobile</option><option>Vivo</option><option>Claro</option><option>TIM</option></select>
+    <label>Raio de cobertura simulado</label><select id="tower-range"><option value="360">2 km — área urbana densa</option><option value="560" selected>5 km — cidade e bairros</option><option value="850">10 km — área rural e montanhosa</option></select>
+    <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="prepareCellTowerPlacement()">📍 Escolher o alto da montanha</button></div>`);
+}
+function prepareCellTowerPlacement(){
+  pendingTowerTechnology=document.getElementById('tower-tech')?.value||'5G';
+  pendingTowerOperator=document.getElementById('tower-operator')?.value||'AllanNet Mobile';
+  pendingTowerRange=+document.getElementById('tower-range')?.value||560;
+  cityScene.active=true;closeModal();setMode('add','cellTower');
+  document.getElementById('s-mode').textContent='Adicionar torre — clique preferencialmente no topo de uma montanha';
+}
+function towerRangeKm(radius){return +radius>=800?10:+radius>=500?5:2;}
+function buildCityExample(){
+  devices=[];connections=[];packets=[];racks=[];arpTable={};macTable={};selected=null;nextId=1;nextRackId=1;
+  const w=Math.max(canvas.width,780),h=Math.max(canvas.height,430);
+  pendingTowerTechnology='4G/5G';pendingTowerOperator='AllanNet Mobile';pendingTowerRange=850;
+  const tower=addDevice(w*.24,h*.25,'cellTower');
+  const cloud=addDevice(w*.09,h*.14,'cloud');
+  const house1=addDevice(w*.57,h*.69,'house'),house2=addDevice(w*.70,h*.64,'house'),house3=addDevice(w*.80,h*.72,'house');
+  const phone1=addDevice(w*.48,h*.52,'phone'),phone2=addDevice(w*.64,h*.47,'phone'),phone3=addDevice(w*.75,h*.52,'phone');
+  connections.push({id:nextId++,from:cloud.id,to:tower.id,bw:10000,lat:2,kind:'backbone',medium:'fiber'});
+  [house1,house2,house3,phone1,phone2,phone3].forEach(client=>connectCellularDevices(tower,client,true));
+  updateAll();
+}
 function pcStyleOf(dev){return dev?.pcStyle==='complete'?'complete':'notebook';}
 function pcFormatLabel(dev){return pcStyleOf(dev)==='complete'?'Computador':'Notebook';}
 function serverTypeOf(dev){return dev?.serverType==='tower'?'tower':'rack';}
@@ -904,13 +991,13 @@ function addDevice(x,y,type){
   saveHistory();
   const n=devices.filter(d=>d.type===type).length+1;
   const satProvider=SATELLITE_PROVIDERS[pendingSatelliteProvider]||SATELLITE_PROVIDERS.starlink;
-  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:type==='switch'?`Switch ${pendingSwitchForm==='rack'?'Rack':'Mesa'} ${n}`:type==='patchPanel'?`Patch Panel ${n}`:type==='pc'?(pendingPCStyle==='complete'?`Computador ${n}`:`Notebook ${n}`):type==='satDish'?`${satProvider.terminal} ${n}`:type==='satellite'?`${satProvider.name} Satélite ${n}`:LABELS[type]+n;
+  const name=type==='server'?`Servidor ${pendingServerType==='tower'?'Torre':'Rack'} ${n}`:type==='switch'?`Switch ${pendingSwitchForm==='rack'?'Rack':'Mesa'} ${n}`:type==='patchPanel'?`Patch Panel ${n}`:type==='pc'?(pendingPCStyle==='complete'?`Computador ${n}`:`Notebook ${n}`):type==='satDish'?`${satProvider.terminal} ${n}`:type==='satellite'?`${satProvider.name} Satélite ${n}`:type==='cellTower'?`Torre ${pendingTowerTechnology} ${n}`:type==='house'?`Residência ${n}`:LABELS[type]+n;
   const ip=type==='patchPanel'?'Sem IP':genIP(type,n);
   const mac=type==='patchPanel'?'—':genMAC();
-  const firstKind=type==='phone'?'wireless':'wired';
-  const firstSpeed=type==='phone'?300:(BW[type]||1000);
+  const firstKind=type==='phone'?'wireless':type==='house'?'cellular':'wired';
+  const firstSpeed=type==='phone'?300:type==='house'?500:(BW[type]||1000);
   const d={id:nextId++,x,y,type,name,ip,mask:'255.255.255.0',mac,status:'up',
-    interfaces:[{name:type==='phone'?'wlan0':type==='patchPanel'?'porta1':'eth0',ip:type==='patchPanel'?'':ip,mask:'255.255.255.0',status:'up',kind:firstKind,speed:firstSpeed,mac:type==='patchPanel'?'—':genMAC()}],
+    interfaces:[{name:type==='phone'?'wlan0':type==='house'?'cpe0':type==='patchPanel'?'porta1':'eth0',ip:type==='patchPanel'?'':ip,mask:'255.255.255.0',status:'up',kind:firstKind,speed:firstSpeed,mac:type==='patchPanel'?'—':genMAC()}],
     acl:[],routes:[],label:name,vlan:1,vlanAssigned:false,dhcpEnabled:false,dhcpFrom:''};
   if(type==='switch'){d.portCount=pendingSwitchPorts;d.switchForm=pendingSwitchForm==='desktop'?'desktop':'rack';}
   if(type==='patchPanel')d.portCount=pendingPatchPorts;
@@ -921,6 +1008,14 @@ function addDevice(x,y,type){
       d.interfaces.push({name:'wlan0',ip:'',mask:'255.255.255.0',status:'up',kind:'wireless',speed:300,mac:genMAC()});
       d.hasBuiltInWifi=true;
     }
+  }
+  if(type==='phone')d.interfaces.push({name:'cell0',ip:'',mask:'255.255.255.0',status:'up',kind:'cellular',speed:1000,mac:genMAC()});
+  if(type==='house'){
+    d.serviceType='fixed-wireless';d.interfaces.push({name:'lan0',ip:'',mask:'255.255.255.0',status:'up',kind:'wired',speed:1000,mac:genMAC()});
+  }
+  if(type==='cellTower'){
+    d.towerTechnology=pendingTowerTechnology;d.operatorName=pendingTowerOperator;d.coverageRadius=pendingTowerRange;d.isInternetGateway=true;
+    d.interfaces=[{name:'backhaul0',ip,mask:'255.255.255.0',status:'up',kind:'wired',speed:10000,mac:genMAC()},...Array.from({length:32},(_,i)=>({name:`radio${i+1}`,ip:'',mask:'255.255.255.0',status:'up',kind:'cellular',speed:pendingTowerTechnology.includes('5G')?1000:300,mac:genMAC()}))];
   }
   if(type==='satDish'){
     d.satelliteProvider=pendingSatelliteProvider;d.orbit=satProvider.orbit;d.providerName=satProvider.name;d.satelliteBW=satProvider.bw;d.satelliteLatency=satProvider.latency;
@@ -939,7 +1034,7 @@ function addDevice(x,y,type){
   if(getRackAt(x,y))assignRack(d);
   if(type!=='patchPanel'){arpTable[ip]=mac;macTable[mac]=d.id;}
   updateAll();
-  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+switchFormatLabel(d)+' · '+d.portCount+' portas':type==='patchPanel'?' · passivo · '+d.portCount+' portas':type==='server'?' · '+serverFormatLabel(d):type==='pc'?' · '+pcFormatLabel(d)+(d.pcStyle==='notebook'?' · Wi-Fi integrado':''):['satDish','satellite'].includes(type)?` · ${satProvider.orbit} · ${formatBandwidth(satProvider.bw)} · ~${satProvider.latency} ms`:''}${type==='patchPanel'?'':' IP:'+ip}`,'lsys');
+  sysLog(`Dispositivo adicionado: ${name}${type==='switch'?' · '+switchFormatLabel(d)+' · '+d.portCount+' portas':type==='patchPanel'?' · passivo · '+d.portCount+' portas':type==='server'?' · '+serverFormatLabel(d):type==='pc'?' · '+pcFormatLabel(d)+(d.pcStyle==='notebook'?' · Wi-Fi integrado':''):type==='cellTower'?` · ${d.operatorName} · cobertura ${towerRangeKm(d.coverageRadius)} km`:type==='house'?' · CPE residencial':['satDish','satellite'].includes(type)?` · ${satProvider.orbit} · ${formatBandwidth(satProvider.bw)} · ~${satProvider.latency} ms`:''}${type==='patchPanel'?'':' IP:'+ip}`,'lsys');
   showExplain(type);
   return d;
 }
@@ -949,7 +1044,7 @@ function genIP(type,n){
   if(type==='router'&&['lan4','lan5'].includes(classroom.activity))return '192.168.1.'+(255-n);
   if(type==='server'&&classroom.activity==='lan5')return `192.168.${n%2?1:2}.${100+Math.ceil(n/2)}`;
   if(type==='server')return '192.168.1.'+(100+n);
-  const b={pc:'192.168.1',phone:'192.168.10',router:'10.0.0',switch:'172.16.0',server:'192.168.0',firewall:'10.10.0',cloud:'203.0.113',satDish:'100.64.10',satellite:'100.64.250'};
+  const b={pc:'192.168.1',phone:'192.168.10',router:'10.0.0',switch:'172.16.0',server:'192.168.0',firewall:'10.10.0',cloud:'203.0.113',satDish:'100.64.10',satellite:'100.64.250',cellTower:'10.50.0',house:'10.60.0'};
   return (b[type]||'10.0.0')+'.'+n;
 }
 function genMAC(){return 'XX:XX:XX:XX:XX:XX'.replace(/X/g,()=>'0123456789ABCDEF'[Math.floor(Math.random()*16)]);}
@@ -1309,6 +1404,58 @@ function connectWiFiDevices(a,b){
   return true;
 }
 
+function startCellularMode(){
+  if(!devices.some(d=>d.type==='cellTower')){rackNotice('Nenhuma torre instalada','Adicione uma torre 4G/5G no alto da montanha antes de distribuir o sinal.');return;}
+  mode='cellular';addType='';connectFirst=null;wifiFirst=null;cellularFirst=null;selected=null;cityScene.active=true;
+  document.querySelectorAll('#topbar button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-cellular')?.classList.add('active');
+  document.getElementById('s-mode').textContent='4G/5G: selecione uma torre e depois uma residência ou celular';
+  document.getElementById('explain-icon').textContent='📶';
+  document.getElementById('explain-text').textContent='Selecione a torre e depois o assinante. Celulares recebem Internet e telefonia; residências recebem Internet fixa sem fio pelo modem/CPE.';
+  document.getElementById('explain-bar').classList.remove('activity-active');document.getElementById('explain-bar').classList.add('show');draw();
+}
+function selectCellularDevice(dev){
+  if(!dev||!['cellTower','phone','house'].includes(dev.type)){rackNotice('Equipamento incompatível','Selecione uma torre 4G/5G, uma residência ou um celular.');return;}
+  if(!cellularFirst){cellularFirst=dev;selected=dev;updateDevList();draw();document.getElementById('s-mode').textContent='4G/5G: selecione o segundo equipamento';return;}
+  if(cellularFirst.id===dev.id){rackNotice('Seleção inválida','Escolha outro equipamento.');return;}
+  connectCellularDevices(cellularFirst,dev,false);cellularFirst=null;selected=null;
+  document.getElementById('s-mode').textContent='4G/5G ativo: selecione outro assinante e uma torre';updateDevList();draw();
+}
+function connectCellularDevices(a,b,silent=false){
+  const tower=a?.type==='cellTower'?a:(b?.type==='cellTower'?b:null);
+  const client=['phone','house'].includes(a?.type)?a:(['phone','house'].includes(b?.type)?b:null);
+  if(!tower||!client){if(!silent)rackNotice('Ligação 4G/5G recusada','A conexão deve ligar uma torre a um celular ou residência.');return false;}
+  const distance=Math.hypot(tower.x-client.x,tower.y-client.y),range=tower.coverageRadius||560;
+  if(distance>range){if(!silent)rackNotice('Fora da área de cobertura',`${client.name} está fora do raio da ${tower.name}. Aproxime o assinante ou use uma torre de maior alcance.`);return false;}
+  if(connections.some(c=>c.kind==='cellular'&&((c.from===tower.id&&c.to===client.id)||(c.from===client.id&&c.to===tower.id)))){if(!silent)rackNotice('Assinante já conectado',`${client.name} já utiliza esta torre.`);return false;}
+  ensureInterfaceMetadata(tower);ensureInterfaceMetadata(client);
+  const towerIface=nextFreeInterface(tower,'cellular'),clientIface=nextFreeInterface(client,'cellular');
+  if(!towerIface||!clientIface){if(!silent)rackNotice('Canal indisponível',`${!towerIface?tower.name:client.name} não possui uma interface celular livre.`);return false;}
+  if(!silent)saveHistory();
+  const prefix=tower.ip.split('.').slice(0,3).join('.');let host=100;while(devices.some(d=>d.id!==client.id&&d.ip===`${prefix}.${host}`)&&host<250)host++;
+  const assignedIP=`${prefix}.${host}`,iface=client.interfaces.find(i=>i.name===clientIface);if(iface)iface.ip=assignedIP;
+  delete arpTable[client.ip];client.ip=assignedIP;arpTable[client.ip]=client.mac;client.gw=tower.ip;client.cellTowerId=tower.id;client.mobileOperator=tower.operatorName;
+  const is5G=String(tower.towerTechnology||'').includes('5G'),bw=client.type==='house'?(is5G?500:100):(is5G?1000:300),lat=is5G?8:25;
+  const service=client.type==='phone'?'Internet + telefonia móvel':'Internet residencial FWA';
+  connections.push({id:nextId++,from:tower.id,to:client.id,bw,lat,kind:'cellular',medium:tower.towerTechnology||'4G/5G',service,fromIface:towerIface,toIface:clientIface});
+  if(!silent){updateAll();updateProp(client);rackNotice('Sinal distribuído',`${client.name} conectado à ${tower.name} — ${tower.towerTechnology} — ${service} — ${formatBandwidth(bw)}.`,'ok');sysLog(`📶 ${tower.towerTechnology}: ${tower.name} ↔ ${client.name} | ${service} | ${formatBandwidth(bw)}`,'lsys');}
+  return true;
+}
+function runCityCoverageTest(){
+  const towers=devices.filter(d=>d.type==='cellTower'),houses=devices.filter(d=>d.type==='house'),phones=devices.filter(d=>d.type==='phone');
+  if(!towers.length){rackNotice('Teste indisponível','Adicione pelo menos uma torre 4G/5G.');return;}
+  const clients=[...houses,...phones],connected=clients.filter(client=>connections.some(c=>c.kind==='cellular'&&(c.from===client.id||c.to===client.id)));
+  connected.forEach((client,index)=>{const link=connections.find(c=>c.kind==='cellular'&&(c.from===client.id||c.to===client.id)),tower=devices.find(d=>d.id===(link.from===client.id?link.to:link.from));setTimeout(()=>launchPacket(tower.id,client.id,client.type==='phone'?'VOICE':'HTTP',client.type==='phone'?'Chamada + dados':'Internet residencial'),index*180);});
+  const phoneOk=phones.filter(p=>connected.includes(p)).length,houseOk=houses.filter(h=>connected.includes(h)).length,allOk=clients.length>0&&connected.length===clients.length;
+  showModal(`<h3>${allOk?'✅':'⚠️'} Teste da Cidade Conectada</h3><div class="edu-note">O sistema conferiu a cobertura e iniciou uma animação de tráfego entre as torres e os assinantes.</div>
+    <div class="edu-check">📡 Torres ativas: <b>${towers.filter(t=>t.status==='up').length}/${towers.length}</b></div>
+    <div class="edu-check">🏠 Residências com Internet: <b>${houseOk}/${houses.length}</b></div>
+    <div class="edu-check">📱 Celulares com Internet e telefonia: <b>${phoneOk}/${phones.length}</b></div>
+    <div class="edu-check">📶 Cobertura geral: <b style="color:${allOk?'#3fb950':'#f85149'}">${allOk?'TODOS ATENDIDOS':'EXISTEM ÁREAS SEM SINAL'}</b></div>
+    ${!allOk?'<div class="edu-note">Aproxime os clientes, aumente o alcance da torre ou instale outra torre para eliminar as áreas sem cobertura.</div>':''}
+    <div class="modal-btns"><button class="green" onclick="closeModal()">Entendi</button></div>`);
+}
+
 // =========================================================
 // INTERNET VIA SATÉLITE
 // =========================================================
@@ -1525,12 +1672,51 @@ function randColor(){return['#58a6ff','#3fb950','#f78166','#d2a679','#bc8cff'][M
 // =========================================================
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawGrid();
+  if(cityScene.active)drawCitySceneBackground();else drawGrid();
+  if(cityScene.active)drawCityCoverage();
   racks.forEach(drawRack);
   connections.forEach(drawConn);
   packets.forEach(drawPkt);
   devices.forEach(drawDev);
   drawTracerouteOverlay();
+}
+
+function drawCitySceneBackground(){
+  const w=canvas.width,h=canvas.height,ground=h*.60;
+  ctx.save();
+  const sky=ctx.createLinearGradient(0,0,0,ground);sky.addColorStop(0,'#68b8ec');sky.addColorStop(.55,'#a8d8ee');sky.addColorStop(1,'#e9f3e6');ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
+  // Sol e névoa atmosférica.
+  const sunX=w*.82,sunY=h*.14,sun=ctx.createRadialGradient(sunX,sunY,4,sunX,sunY,55);sun.addColorStop(0,'rgba(255,250,210,.98)');sun.addColorStop(.35,'rgba(255,220,120,.55)');sun.addColorStop(1,'rgba(255,220,120,0)');ctx.fillStyle=sun;ctx.beginPath();ctx.arc(sunX,sunY,55,0,Math.PI*2);ctx.fill();
+  // Nuvens suaves.
+  [[w*.52,h*.13,1],[w*.9,h*.26,.75],[w*.12,h*.12,.65]].forEach(([x,y,s])=>{ctx.fillStyle='rgba(255,255,255,.72)';[[0,0,28],[28,4,22],[-25,7,19],[4,-12,23]].forEach(([dx,dy,r])=>{ctx.beginPath();ctx.arc(x+dx*s,y+dy*s,r*s,0,Math.PI*2);ctx.fill();});});
+  function mountain(points,top,bottom){const g=ctx.createLinearGradient(0,h*.18,0,ground);g.addColorStop(0,top);g.addColorStop(1,bottom);ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(0,ground);points.forEach(p=>ctx.lineTo(p[0]*w,p[1]*h));ctx.lineTo(w,ground);ctx.closePath();ctx.fill();}
+  mountain([[0,.46],[.12,.25],[.22,.43],[.34,.19],[.47,.45],[.61,.28],[.74,.46],[.88,.24],[1,.43]],'#6c8d8e','#42645b');
+  // Penhascos iluminados e cumes verdes em primeiro plano.
+  mountain([[0,.56],[.11,.34],[.23,.25],[.34,.52],[.47,.39],[.6,.48],[.74,.35],[.86,.49],[1,.38]],'#4d7959','#274d38');
+  ctx.fillStyle='rgba(225,238,223,.72)';ctx.beginPath();ctx.moveTo(w*.17,h*.31);ctx.lineTo(w*.23,h*.25);ctx.lineTo(w*.285,h*.36);ctx.lineTo(w*.235,h*.32);ctx.closePath();ctx.fill();
+  // Área urbana no vale.
+  const grass=ctx.createLinearGradient(0,ground,0,h);grass.addColorStop(0,'#71935d');grass.addColorStop(1,'#33513c');ctx.fillStyle=grass;ctx.fillRect(0,ground,w,h-ground);
+  // Rio ao fundo.
+  ctx.strokeStyle='rgba(102,190,220,.7)';ctx.lineWidth=18;ctx.beginPath();ctx.moveTo(-20,h*.69);ctx.bezierCurveTo(w*.28,h*.62,w*.53,h*.77,w+20,h*.66);ctx.stroke();ctx.strokeStyle='rgba(220,248,255,.55)';ctx.lineWidth=2;ctx.stroke();
+  // Estrada principal com perspectiva e faixa central.
+  ctx.fillStyle='#4d5457';ctx.beginPath();ctx.moveTo(w*.35,h);ctx.lineTo(w*.47,ground);ctx.lineTo(w*.57,ground);ctx.lineTo(w*.78,h);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#e7d98b';ctx.lineWidth=3;ctx.setLineDash([18,15]);ctx.beginPath();ctx.moveTo(w*.565,h);ctx.lineTo(w*.52,ground);ctx.stroke();ctx.setLineDash([]);
+  ctx.strokeStyle='#c9d0d1';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(w*.35,h);ctx.lineTo(w*.47,ground);ctx.moveTo(w*.78,h);ctx.lineTo(w*.57,ground);ctx.stroke();
+  // Árvores distribuídas nas encostas e no bairro.
+  for(let i=0;i<22;i++){const x=(i*83+37)%Math.max(1,w),y=ground-5+((i*47)%75);if(x>w*.34&&x<w*.79&&y>h*.72)continue;const s=.55+(i%4)*.13;ctx.fillStyle='#59452c';ctx.fillRect(x-2*s,y,4*s,12*s);ctx.fillStyle=i%3?'#285d35':'#367244';ctx.beginPath();ctx.arc(x,y-5*s,9*s,0,Math.PI*2);ctx.arc(x-6*s,y,7*s,0,Math.PI*2);ctx.arc(x+6*s,y,7*s,0,Math.PI*2);ctx.fill();}
+  // Pequenas construções ao fundo para dar profundidade urbana.
+  for(let i=0;i<10;i++){const x=w*.39+i*w*.055,y=ground+12+(i%2)*8,ww=22+(i%3)*5,hh=18+(i%4)*4;ctx.fillStyle=['#e6d8bf','#d3e0e8','#e4c4b8'][i%3];ctx.fillRect(x,y-hh,ww,hh);ctx.fillStyle=['#8b4b3e','#536d7a','#76604d'][i%3];ctx.beginPath();ctx.moveTo(x-3,y-hh);ctx.lineTo(x+ww/2,y-hh-10);ctx.lineTo(x+ww+3,y-hh);ctx.closePath();ctx.fill();ctx.fillStyle='#8fc7e5';ctx.fillRect(x+5,y-hh+6,5,6);ctx.fillRect(x+ww-10,y-hh+6,5,6);}
+  // Identificação discreta da sala.
+  ctx.fillStyle='rgba(10,35,45,.76)';ctx.beginPath();ctx.roundRect?.(14,14,Math.min(310,w-28),48,9);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 15px "Segoe UI",sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(`🏙️ ${cityScene.name||'Cidade Conectada'}`,28,24);ctx.font='9px "Segoe UI",sans-serif';ctx.fillStyle='#d7f4ff';ctx.fillText('Montanhas • bairro residencial • cobertura 4G/5G',28,45);
+  ctx.restore();
+}
+function drawCityCoverage(){
+  const pulse=(Math.sin(performance.now()/650)+1)/2;
+  devices.filter(d=>d.type==='cellTower'&&d.status==='up').forEach(tower=>{
+    const radius=Math.min(tower.coverageRadius||560,Math.max(canvas.width,canvas.height)),color=tower.towerTechnology?.includes('5G')?'#ff3d8d':'#3b82f6';
+    ctx.save();const g=ctx.createRadialGradient(tower.x,tower.y,18,tower.x,tower.y,radius);g.addColorStop(0,color+'26');g.addColorStop(.55,color+'10');g.addColorStop(1,color+'00');ctx.fillStyle=g;ctx.beginPath();ctx.arc(tower.x,tower.y,radius,0,Math.PI*2);ctx.fill();
+    [0.32,0.56,0.8].forEach((factor,index)=>{ctx.strokeStyle=color+(index===2?'40':'28');ctx.lineWidth=1.3;ctx.setLineDash([7,9]);ctx.beginPath();ctx.arc(tower.x,tower.y,radius*factor+pulse*4,0,Math.PI*2);ctx.stroke();});ctx.restore();
+  });
 }
 
 function drawGrid(){
@@ -1552,11 +1738,12 @@ function drawConn(c){
   ctx.save();
   const isBackbone=c.kind==='backbone';
   const isWifi=c.kind==='wifi';
+  const isCellular=c.kind==='cellular';
   const isISPFiber=c.kind==='ispFiber';
   const isSatellite=c.kind==='satellite';
   const isRackCable=!!c.rackCable;
-  if(active){ctx.shadowColor=isBackbone?'#a371f7':((isWifi||isISPFiber||isSatellite)?'#70e1ff':'#58a6ff');ctx.shadowBlur=14;}
-  ctx.setLineDash(isSatellite?[8,5]:(isWifi?[3,6]:(up?[]:[5,4])));
+  if(active){ctx.shadowColor=isBackbone?'#a371f7':(isCellular?'#ff79b0':((isWifi||isISPFiber||isSatellite)?'#70e1ff':'#58a6ff'));ctx.shadowBlur=14;}
+  ctx.setLineDash(isSatellite?[8,5]:(isCellular?[5,7]:(isWifi?[3,6]:(up?[]:[5,4]))));
   if(isBackbone){
     ctx.beginPath();ctx.strokeStyle=up?'rgba(163,113,247,.38)':'#3d1c1c';ctx.lineWidth=9;
     ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
@@ -1576,6 +1763,10 @@ function drawConn(c){
       for(let i=0;i<3;i++){const t=(phase+i/3)%1,px=a.x+(b.x-a.x)*t,py=a.y+(b.y-a.y)*t;ctx.fillStyle='#ffffff';ctx.shadowColor=beamColor;ctx.shadowBlur=8;ctx.beginPath();ctx.arc(px,py,2.2,0,Math.PI*2);ctx.fill();}
       ctx.shadowBlur=0;
     }
+  }else if(isCellular){
+    const cellColor=String(c.medium||'').includes('5G')?'#ff3d8d':'#3b82f6';
+    ctx.beginPath();ctx.strokeStyle=up?(active?'#ffffff':cellColor):'#6b3030';ctx.lineWidth=active?4:2.6;ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    if(up){const phase=(performance.now()/800)%1;for(let i=0;i<3;i++){const t=(phase+i/3)%1,px=a.x+(b.x-a.x)*t,py=a.y+(b.y-a.y)*t;ctx.fillStyle='#fff';ctx.shadowColor=cellColor;ctx.shadowBlur=7;ctx.beginPath();ctx.arc(px,py,2.2,0,Math.PI*2);ctx.fill();}ctx.shadowBlur=0;}
   }else if(isWifi){
     ctx.beginPath();ctx.strokeStyle=up?(active?'#d7f8ff':'#38bcd8'):'#6b3030';ctx.lineWidth=active?4:2.5;
     ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
@@ -1595,13 +1786,13 @@ function drawConn(c){
   const mx=isRackCable?(rackForCable?rackForCable.x+rackForCable.w/2+52:Math.max(a.x,b.x)+70):(a.x+b.x)/2;
   const my=(a.y+b.y)/2+(isRackCable?17:0);
   const mediumLabel={fiber:'Fibra',copper:'Cat6A',radio:'Rádio','radio-satellite':'RF'}[c.medium]||'';
-  const linkLabel=isRackCable?`PATCH • ${formatBandwidth(c.bw)}`:(isISPFiber?`FIBRA ISP • ${formatBandwidth(c.bw)}`:(isSatellite?`SAT • ${c.providerName||'ORBITAL'} • ${formatBandwidth(c.bw)} • ${Math.round((c.lat||0)*2)}ms`:(isBackbone?`BACKBONE • ${formatBandwidth(c.bw)}${mediumLabel?' • '+mediumLabel:''}`:(isWifi?`WI-FI • ${c.ssid||'SSID'} • ${c.bw}M`:c.bw+'M'))));
-  ctx.font=(isBackbone||isWifi||isISPFiber||isSatellite)?'bold 8px monospace':'8px monospace';
+  const linkLabel=isRackCable?`PATCH • ${formatBandwidth(c.bw)}`:(isISPFiber?`FIBRA ISP • ${formatBandwidth(c.bw)}`:(isSatellite?`SAT • ${c.providerName||'ORBITAL'} • ${formatBandwidth(c.bw)} • ${Math.round((c.lat||0)*2)}ms`:(isBackbone?`BACKBONE • ${formatBandwidth(c.bw)}${mediumLabel?' • '+mediumLabel:''}`:(isCellular?`${c.medium||'4G/5G'} • ${c.service?.includes('telefonia')?'DADOS + VOZ':'INTERNET FWA'} • ${formatBandwidth(c.bw)}`:(isWifi?`WI-FI • ${c.ssid||'SSID'} • ${c.bw}M`:c.bw+'M')))));
+  ctx.font=(isBackbone||isWifi||isCellular||isISPFiber||isSatellite)?'bold 8px monospace':'8px monospace';
   const labelW=Math.max(36,ctx.measureText(linkLabel).width+12);
-  ctx.fillStyle=isRackCable?'#3b2f0a':(isISPFiber?'#082f49':(isSatellite?'#11243a':(isBackbone?'#24183a':(isWifi?'#0b2933':themeColor('#1c2128','#ffffff')))));ctx.beginPath();
+  ctx.fillStyle=isRackCable?'#3b2f0a':(isISPFiber?'#082f49':(isSatellite?'#11243a':(isBackbone?'#24183a':(isCellular?'#3a0d26':(isWifi?'#0b2933':themeColor('#1c2128','#ffffff'))))));ctx.beginPath();
   if(ctx.roundRect)ctx.roundRect(mx-labelW/2,my-8,labelW,15,4);else{ctx.rect(mx-labelW/2,my-8,labelW,15);}
   ctx.fill();
-  ctx.fillStyle=isRackCable?'#fff3b0':(isISPFiber?'#bae6fd':(isSatellite?'#d7f8ff':(isBackbone?'#d8c3ff':(isWifi?'#70e1ff':themeColor('#6e7681','#40566c')))));ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle=isRackCable?'#fff3b0':(isISPFiber?'#bae6fd':(isSatellite?'#d7f8ff':(isBackbone?'#d8c3ff':(isCellular?'#ffb4d2':(isWifi?'#70e1ff':themeColor('#6e7681','#40566c'))))));ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.fillText(linkLabel,mx,my);
   ctx.restore();
 }
@@ -1616,7 +1807,7 @@ function getConnectionAt(x,y){
   return connections.slice().reverse().find(c=>{
     const a=devices.find(d=>d.id===c.from),b=devices.find(d=>d.id===c.to);if(!a||!b)return false;
     if(c.rackCable){const rack=racks.find(r=>r.id===a.rackId&&r.id===b.rackId),loopX=rack?rack.x+rack.w/2+18:Math.max(a.x,b.x)+55,startX=rack?rack.x+rack.w/2-30:a.x+28,my=(a.y+b.y)/2;return Math.min(pointToSegmentDistance(x,y,startX,a.y,loopX,my),pointToSegmentDistance(x,y,loopX,my,startX,b.y))<12;}
-    return pointToSegmentDistance(x,y,a.x,a.y,b.x,b.y)<((c.kind==='backbone'||c.kind==='ispFiber'||c.kind==='satellite')?12:(c.kind==='wifi'?11:9));
+    return pointToSegmentDistance(x,y,a.x,a.y,b.x,b.y)<((c.kind==='backbone'||c.kind==='ispFiber'||c.kind==='satellite')?12:((c.kind==='wifi'||c.kind==='cellular')?11:9));
   });
 }
 function deleteConnectionAt(x,y){
@@ -1636,8 +1827,12 @@ function removeConnection(conn){
     const dish=a?.type==='satDish'?a:(b?.type==='satDish'?b:null);
     if(dish){dish.satelliteId=null;dish.satelliteStatus='desconectado';dish.gw='';}
   }
+  if(conn.kind==='cellular'){
+    const client=['phone','house'].includes(a?.type)?a:(['phone','house'].includes(b?.type)?b:null);
+    if(client){client.cellTowerId=null;client.mobileOperator='';client.gw='';}
+  }
   connections=connections.filter(c=>c.id!==conn.id);updateAll();
-  const kind=conn.kind==='backbone'?'Backbone':(conn.kind==='ispFiber'?'Fibra entre provedores':(conn.kind==='satellite'?'Enlace satelital':(conn.kind==='wifi'?'Conexão Wi-Fi':'Cabo de rede')));
+  const kind=conn.kind==='backbone'?'Backbone':(conn.kind==='ispFiber'?'Fibra entre provedores':(conn.kind==='satellite'?'Enlace satelital':(conn.kind==='cellular'?'Cobertura 4G/5G':(conn.kind==='wifi'?'Conexão Wi-Fi':'Cabo de rede'))));
   rackNotice(`${kind} removido`,`${a?.name||'Dispositivo'} ↔ ${b?.name||'Dispositivo'}.`,'ok');
   sysLog(`${kind} removido: ${a?.name||'?'} ↔ ${b?.name||'?'}`,'lwarn');
   if(selected&&!selected._rack&&devices.some(d=>d.id===selected.id))updateProp(selected);
@@ -1645,7 +1840,7 @@ function removeConnection(conn){
 
 function drawDev(d){
   const isSel=selected&&selected.id===d.id;
-  const isConn=(connectFirst&&connectFirst.id===d.id)||(backboneFirst&&backboneFirst.id===d.id)||(wifiFirst&&wifiFirst.id===d.id)||(ispFiberFirst&&ispFiberFirst.id===d.id)||(satelliteLinkFirst&&satelliteLinkFirst.id===d.id);
+  const isConn=(connectFirst&&connectFirst.id===d.id)||(backboneFirst&&backboneFirst.id===d.id)||(wifiFirst&&wifiFirst.id===d.id)||(cellularFirst&&cellularFirst.id===d.id)||(ispFiberFirst&&ispFiberFirst.id===d.id)||(satelliteLinkFirst&&satelliteLinkFirst.id===d.id);
   const isDown=d.status==='down';
   const col=isDown?'#555':COLORS[d.type];
   ctx.save();
@@ -1761,6 +1956,33 @@ function drawDev(d){
     }
     // Alto-falante e barra de navegação.
     ctx.fillStyle=isDown?'#1b1b1b':'rgba(255,255,255,.82)';rr2(d.x-4,d.y+ph/2-4.2,8,1.1,.55);ctx.fill();
+
+  } else if(d.type==='cellTower'){
+    // Torre treliçada de telecomunicações com três setores de antena.
+    const towerH=76,baseY=d.y+30,topY=d.y-46,cellCol=String(d.towerTechnology||'').includes('5G')?'#ff3d8d':'#3b82f6';
+    ctx.shadowBlur=isDown?0:12;ctx.shadowColor=cellCol+'88';ctx.strokeStyle=isSel?'#f78166':(isConn?'#ffd166':(isDown?'#555':'#c8d0d6'));ctx.lineWidth=2.2;
+    ctx.beginPath();ctx.moveTo(d.x-21,baseY);ctx.lineTo(d.x-5,topY);ctx.lineTo(d.x+21,baseY);ctx.moveTo(d.x+5,topY);ctx.lineTo(d.x-21,baseY);ctx.stroke();ctx.shadowBlur=0;
+    // Travessas da estrutura metálica.
+    for(let i=0;i<6;i++){const t=i/6,y=topY+12+i*10,half=7+t*12;ctx.strokeStyle=isDown?'#414141':'#87939b';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(d.x-half,y);ctx.lineTo(d.x+half,y);ctx.moveTo(d.x-half,y);ctx.lineTo(d.x+half-3,y+9);ctx.moveTo(d.x+half,y);ctx.lineTo(d.x-half+3,y+9);ctx.stroke();}
+    ctx.fillStyle='#4b5560';ctx.fillRect(d.x-25,baseY,50,5);ctx.fillStyle='#30363d';ctx.fillRect(d.x-17,baseY+5,34,4);
+    // Antenas setoriais e enlace de micro-ondas.
+    [-1,0,1].forEach((side,i)=>{const ax=d.x+side*13,ay=topY+5+(i%2)*4;ctx.fillStyle=isDown?'#333':'#e8eef2';ctx.strokeStyle=cellCol;ctx.lineWidth=1.2;rr2(ax-4,ay-10,8,23,3);ctx.fill();ctx.stroke();});
+    ctx.fillStyle=isDown?'#333':'#eef3f6';ctx.strokeStyle=cellCol;ctx.beginPath();ctx.arc(d.x+17,topY+24,8,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#586977';ctx.beginPath();ctx.arc(d.x+17,topY+24,2,0,Math.PI*2);ctx.fill();
+    if(!isDown){[18,27,36].forEach((rad,i)=>{ctx.strokeStyle=cellCol+(i===0?'aa':i===1?'66':'33');ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(d.x,topY+1,rad,Math.PI+.45,-.45);ctx.stroke();});}
+    ctx.fillStyle='#17212b';ctx.strokeStyle=cellCol;rr2(d.x-17,baseY-9,34,12,3);ctx.fill();ctx.stroke();ctx.fillStyle='#fff';ctx.font='bold 6px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(d.towerTechnology||'4G/5G',d.x,baseY-3);
+
+  } else if(d.type==='house'){
+    // Residência em perspectiva com telhado, varanda, janelas e CPE externo.
+    const hw=62,hh=40,left=d.x-hw/2,top=d.y-12;
+    ctx.shadowBlur=isDown?2:12;ctx.shadowColor=isDown?'#000':'rgba(0,0,0,.28)';ctx.fillStyle=isDown?'#222':'#eadcc5';ctx.strokeStyle=isSel?'#f78166':(isConn?'#ffd166':'#8b6a48');ctx.lineWidth=isSel||isConn?2.3:1.2;rr2(left,top,hw,hh,3);ctx.fill();ctx.stroke();ctx.shadowBlur=0;
+    const roof=ctx.createLinearGradient(left,d.y-37,left+hw,d.y-10);roof.addColorStop(0,isDown?'#292929':'#8d3d32');roof.addColorStop(1,isDown?'#161616':'#54251f');ctx.fillStyle=roof;ctx.beginPath();ctx.moveTo(left-6,top+2);ctx.lineTo(d.x,d.y-38);ctx.lineTo(left+hw+7,top+2);ctx.closePath();ctx.fill();ctx.strokeStyle=isSel?'#f78166':'#4d2c25';ctx.stroke();
+    // Porta, janelas e varanda.
+    ctx.fillStyle=isDown?'#151515':'#6f4a32';rr2(d.x-6,d.y+4,12,24,2);ctx.fill();ctx.fillStyle='#d2a679';ctx.beginPath();ctx.arc(d.x+3,d.y+16,1.2,0,Math.PI*2);ctx.fill();
+    [-20,13].forEach(wx=>{ctx.fillStyle=isDown?'#111':'#89c7e8';ctx.strokeStyle='#f5e8c9';ctx.lineWidth=2;ctx.fillRect(d.x+wx,d.y,13,12);ctx.strokeRect(d.x+wx,d.y,13,12);ctx.strokeStyle='rgba(255,255,255,.65)';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(d.x+wx+6.5,d.y);ctx.lineTo(d.x+wx+6.5,d.y+12);ctx.moveTo(d.x+wx,d.y+6);ctx.lineTo(d.x+wx+13,d.y+6);ctx.stroke();});
+    ctx.fillStyle=isDown?'#1b1b1b':'#5c7b45';ctx.fillRect(left-5,d.y+27,hw+10,5);ctx.fillStyle='#747b80';ctx.fillRect(d.x+20,d.y-25,5,13);
+    // Antena/CPE fixo no telhado.
+    ctx.save();ctx.translate(d.x+22,d.y-28);ctx.rotate(-.32);ctx.fillStyle=isDown?'#333':'#f5f7f8';ctx.strokeStyle=col;rr2(-7,-4,14,8,2);ctx.fill();ctx.stroke();ctx.restore();
+    if(!isDown){ctx.strokeStyle=col+'88';ctx.lineWidth=1;[8,13].forEach(rad=>{ctx.beginPath();ctx.arc(d.x+24,d.y-31,rad,Math.PI+.4,-.5);ctx.stroke();});}
 
   } else if(d.type==='router'){
     const rw=46,rh=22;
@@ -2095,6 +2317,7 @@ canvas.addEventListener('mousedown',e=>{
   if(mode==='add'){addDevice(x,y,addType);return;}
   if(mode==='deleteLink'){deleteConnectionAt(x,y);return;}
   if(mode==='wifi'){selectWiFiDevice(dev);return;}
+  if(mode==='cellular'){selectCellularDevice(dev);return;}
   if(mode==='satelliteLink'){selectSatelliteLinkDevice(dev);return;}
   if(mode==='ispFiber'){selectISPFiberProvider(dev);return;}
   if(mode==='backbone'){selectBackboneDevice(dev);return;}
@@ -2120,7 +2343,7 @@ canvas.addEventListener('mousemove',e=>{
   const tip=document.getElementById('tip');
   if(dev){
     tip.style.display='block';tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-40)+'px';
-    tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b>${dev.type==='server'?`<br>Formato: <b style="color:#bc8cff">${serverFormatLabel(dev)}</b>`:dev.type==='switch'?`<br>Formato: <b style="color:#56d364">${switchFormatLabel(dev)}</b>`:dev.type==='patchPanel'?`<br>Tipo: <b style="color:#f2cc60">Passivo · 1U · ${dev.portCount||24} portas</b>`:['satDish','satellite'].includes(dev.type)?`<br>Provedor: <b style="color:${SATELLITE_PROVIDERS[dev.satelliteProvider]?.color||'#70e1ff'}">${dev.providerName||'Satelital'} · ${dev.orbit||'-'}</b><br>Banda: ${formatBandwidth(dev.satelliteBW||100)} · Latência: ~${dev.satelliteLatency||'-'} ms`:''}${dev.rackId?`<br>Posição no rack: <b style="color:#58a6ff">U${(dev.rackSlotU||0)+1}</b>`:''}${dev.type==='patchPanel'?'':`<br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code>`}<br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b>`;
+    tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b>${dev.type==='server'?`<br>Formato: <b style="color:#bc8cff">${serverFormatLabel(dev)}</b>`:dev.type==='switch'?`<br>Formato: <b style="color:#56d364">${switchFormatLabel(dev)}</b>`:dev.type==='patchPanel'?`<br>Tipo: <b style="color:#f2cc60">Passivo · 1U · ${dev.portCount||24} portas</b>`:dev.type==='cellTower'?`<br>Operadora: <b style="color:#ff79b0">${dev.operatorName||'AllanNet Mobile'}</b><br>Tecnologia: ${dev.towerTechnology||'4G/5G'} · alcance ${towerRangeKm(dev.coverageRadius)} km`:dev.type==='house'?`<br>Serviço: <b style="color:#ffd166">Internet residencial FWA</b><br>Torre: ${devices.find(t=>t.id===dev.cellTowerId)?.name||'não conectada'}`:['satDish','satellite'].includes(dev.type)?`<br>Provedor: <b style="color:${SATELLITE_PROVIDERS[dev.satelliteProvider]?.color||'#70e1ff'}">${dev.providerName||'Satelital'} · ${dev.orbit||'-'}</b><br>Banda: ${formatBandwidth(dev.satelliteBW||100)} · Latência: ~${dev.satelliteLatency||'-'} ms`:''}${dev.rackId?`<br>Posição no rack: <b style="color:#58a6ff">U${(dev.rackSlotU||0)+1}</b>`:''}${dev.type==='patchPanel'?'':`<br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code>`}<br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b>`;
   }else{tip.style.display='none';}
 });
 canvas.addEventListener('mouseup',()=>{const moved=dragging;if(moved)assignRack(moved);dragging=null;draggingRack=null;updateAll();if(moved)updateProp(moved);});
@@ -2133,7 +2356,7 @@ function getAt(x,y){
     return Math.abs(x-d.x)<=halfW&&Math.abs(y-d.y)<=halfH;
   });
   if(rackHit)return rackHit;
-  return ordered.find(d=>Math.hypot(x-d.x,y-d.y)<32);
+  return ordered.find(d=>d.type==='cellTower'?(Math.abs(x-d.x)<31&&y>d.y-54&&y<d.y+43):d.type==='house'?(Math.abs(x-d.x)<38&&Math.abs(y-d.y)<42):Math.hypot(x-d.x,y-d.y)<32);
 }
 
 // =========================================================
@@ -2142,16 +2365,17 @@ function getAt(x,y){
 function setMode(m,type){
   mode=m;addType=type||'';connectFirst=null;
   if(m!=='wifi')wifiFirst=null;
+  if(m!=='cellular')cellularFirst=null;
   if(m!=='ispFiber')ispFiberFirst=null;
   if(m!=='satelliteLink')satelliteLinkFirst=null;
   canvas.style.cursor=m==='deleteLink'?'crosshair':'default';
   if(m!=='backbone'){backboneFirst=null;backboneSecond=null;}
   document.querySelectorAll('#topbar button').forEach(b=>b.classList.remove('active'));
-  const id=type?'btn-'+type:(m==='connect'?'btn-connect':(m==='wifi'?'btn-wifi':(m==='satelliteLink'?'btn-satellite-link':(m==='ispFiber'?'btn-isp-fiber':(m==='deleteLink'?'btn-delete-link':(m==='select'?'btn-select':null))))));
+  const id=type?'btn-'+type:(m==='connect'?'btn-connect':(m==='wifi'?'btn-wifi':(m==='cellular'?'btn-cellular':(m==='satelliteLink'?'btn-satellite-link':(m==='ispFiber'?'btn-isp-fiber':(m==='deleteLink'?'btn-delete-link':(m==='select'?'btn-select':null)))))));
   if(id){const btn=document.getElementById(id);if(btn)btn.classList.add('active');}
   if(m==='select')document.getElementById('btn-select-quick')?.classList.add('active');
   if(!document.getElementById('right')?.classList.contains('terminal-hidden'))document.getElementById('btn-terminal-quick')?.classList.add('active');
-  const lbl={select:'Selecionar (arrastar)',connect:'Conectar — clique no 1º dispositivo',wifi:'Wi-Fi — selecione celular e roteador sem fio',satelliteLink:'Enlace satelital — selecione dois equipamentos',ispFiber:'Fibra ISP — selecione dois provedores',deleteLink:'Apagar cabo — clique diretamente na conexão',add:'Adicionar: '+LABELS[type||'']};
+  const lbl={select:'Selecionar (arrastar)',connect:'Conectar — clique no 1º dispositivo',wifi:'Wi-Fi — selecione celular e roteador sem fio',cellular:'4G/5G — selecione torre e assinante',satelliteLink:'Enlace satelital — selecione dois equipamentos',ispFiber:'Fibra ISP — selecione dois provedores',deleteLink:'Apagar cabo — clique diretamente na conexão',add:'Adicionar: '+LABELS[type||'']};
   document.getElementById('s-mode').textContent=lbl[m]||m;
   if(m==='deleteLink'){
     document.getElementById('explain-icon').textContent='✂️';
@@ -2188,6 +2412,7 @@ function deleteSelected(){
   }
   const oldRack=racks.find(r=>r.id===selected.rackId);
   if(selected.type==='satellite')devices.filter(d=>d.type==='satDish'&&d.satelliteId===selected.id).forEach(d=>{d.satelliteId=null;d.satelliteStatus='desconectado';d.gw='';});
+  if(selected.type==='cellTower')devices.filter(d=>d.cellTowerId===selected.id).forEach(d=>{d.cellTowerId=null;d.mobileOperator='';d.gw='';});
   connections=connections.filter(c=>c.from!==selected.id&&c.to!==selected.id);
   delete arpTable[selected.ip];delete macTable[selected.mac];
   devices=devices.filter(d=>d.id!==selected.id);
@@ -2200,8 +2425,9 @@ function clearAll(){
   if(!confirm('Limpar toda a topologia?'))return;
   saveHistory();
   devices=[];connections=[];packets=[];racks=[];arpTable={};macTable={};selected=null;
-  connectFirst=null;backboneFirst=null;backboneSecond=null;wifiFirst=null;ispFiberFirst=null;satelliteLinkFirst=null;
+  connectFirst=null;backboneFirst=null;backboneSecond=null;wifiFirst=null;cellularFirst=null;ispFiberFirst=null;satelliteLinkFirst=null;
   dragging=null;draggingRack=null;sTx=0;sRx=0;sDrop=0;classroom.lastScore=null;classroom.faults=[];classroom.faultSnapshot=null;
+  cityScene={active:false,name:'Cidade Conectada',terrain:'mountains',time:'day'};
   closeModal();setMode('select');updateProp(null);updateAll();
   rackNotice('Rede limpa','Todos os dispositivos, racks e conexões foram removidos. Use Desfazer para restaurar a topologia.','ok');
   sysLog('Topologia limpa. A ação pode ser desfeita.','lwarn');
@@ -2242,7 +2468,7 @@ function sanitizeImportedValue(value,depth=0){
 function validateImportedTopology(raw){
   if(!raw||typeof raw!=='object'||!Array.isArray(raw.devices)||!Array.isArray(raw.connections))throw new Error('O arquivo não possui uma topologia válida.');
   if(raw.devices.length>100||raw.connections.length>300||(Array.isArray(raw.racks)&&raw.racks.length>30))throw new Error('O arquivo excede o limite seguro de equipamentos ou conexões.');
-  const allowedTypes=new Set(['pc','phone','router','switch','patchPanel','server','firewall','cloud','satDish','satellite']);
+  const allowedTypes=new Set(['pc','phone','router','switch','patchPanel','server','firewall','cloud','satDish','satellite','cellTower','house']);
   const clean=sanitizeImportedValue(raw),ids=new Set();
   clean.devices=clean.devices.map((dev,index)=>{
     if(!dev||!allowedTypes.has(dev.type))throw new Error(`Tipo de equipamento inválido na posição ${index+1}.`);
@@ -2256,13 +2482,14 @@ function validateImportedTopology(raw){
   clean.connections=clean.connections.filter(link=>link&&ids.has(Number(link.from))&&ids.has(Number(link.to))&&Number(link.from)!==Number(link.to)).map(link=>({...link,id:Number(link.id)||0,from:Number(link.from),to:Number(link.to),bw:Math.max(1,Math.min(100000,Number(link.bw)||100)),lat:Math.max(0,Math.min(10000,Number(link.lat)||1))}));
   clean.racks=Array.isArray(clean.racks)?clean.racks.slice(0,30).map((rack,index)=>({...rack,id:Number(rack.id)||index+1,name:sanitizeImportedText(rack.name||`Rack ${index+1}`,80)})):[];
   clean.classroom={studentName:sanitizeImportedText(clean.classroom?.studentName,100),activity:sanitizeImportedText(clean.classroom?.activity,40),subnetColors:!!clean.classroom?.subnetColors,lastScore:null};
+  clean.cityScene={active:!!clean.cityScene?.active,name:sanitizeImportedText(clean.cityScene?.name||'Cidade Conectada',60),terrain:'mountains',time:'day'};
   clean.nextId=Math.max(...clean.devices.map(d=>d.id),0)+1;clean.nextRackId=Math.max(...clean.racks.map(r=>Number(r.id)||0),0)+1;
   return clean;
 }
 function saveTopology(){
   if(examState.active&&!examState.locked){rackNotice('Ação bloqueada','Durante a prova não é permitido exportar a topologia.','err');return;}
   const classData={studentName:classroom.studentName,activity:classroom.activity,subnetColors:classroom.subnetColors,lastScore:classroom.lastScore};
-  const data=JSON.stringify({devices,connections,racks,nextId,nextRackId,classroom:classData},null,2);
+  const data=JSON.stringify({devices,connections,racks,nextId,nextRackId,classroom:classData,cityScene},null,2);
   const a=document.createElement('a');a.href='data:application/json,'+encodeURIComponent(data);a.download='topologia_netsim.json';a.click();
   sysLog('Topologia salva em JSON.','lsys');
 }
@@ -2276,6 +2503,7 @@ function loadTopology(){
       try{
       const dt=validateImportedTopology(JSON.parse(ev.target.result));
       devices=dt.devices||[];connections=dt.connections||[];racks=dt.racks||[];nextId=dt.nextId||100;nextRackId=dt.nextRackId||1;
+      cityScene=dt.cityScene||{active:false,name:'Cidade Conectada',terrain:'mountains',time:'day'};
       devices.forEach(d=>{if(d.type==='server'&&!d.serverType)d.serverType='rack';if(d.type==='switch'&&!d.switchForm)d.switchForm='rack';});
       devices.forEach(ensureInterfaceMetadata);
       racks.forEach(organizeRackAssets);
@@ -3109,8 +3337,8 @@ function createExamAttemptPDFCanvases(attempt,exam){
   if(!savedDevices.length){p.fillStyle='#657789';p.font='20px Arial';p.fillText('Nenhum equipamento registrado na entrega.',boxX+24,boxY+42);}else{
     const xs=savedDevices.map(d=>Number(d.x)||0),ys=savedDevices.map(d=>Number(d.y)||0),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),scale=Math.min((boxW-170)/Math.max(1,maxX-minX),(boxH-130)/Math.max(1,maxY-minY),1.25),map=new Map();
     savedDevices.forEach(d=>map.set(d.id,{x:boxX+85+(Number(d.x||0)-minX)*scale,y:boxY+65+(Number(d.y||0)-minY)*scale,d}));
-    savedConnections.forEach(c=>{const a=map.get(c.from),b=map.get(c.to);if(!a||!b)return;p.strokeStyle=c.active===false?'#d14343':(c.kind==='wifi'?'#8a58c7':'#4287b9');p.lineWidth=c.kind==='backbone'?6:3;p.setLineDash(c.kind==='wifi'?[10,7]:[]);p.beginPath();p.moveTo(a.x,a.y);p.lineTo(b.x,b.y);p.stroke();});p.setLineDash([]);
-    const colors={pc:'#dceeff',phone:'#f0e4ff',router:'#ffe8c7',switch:'#dcf4e4',server:'#e2e8f0',firewall:'#ffd9d9',cloud:'#e0f3ff',satellite:'#fff0bd',satDish:'#e8e8ff',rack:'#eeeeee',patchPanel:'#fff4d6'};
+    savedConnections.forEach(c=>{const a=map.get(c.from),b=map.get(c.to);if(!a||!b)return;p.strokeStyle=c.active===false?'#d14343':(c.kind==='cellular'?'#d63384':(c.kind==='wifi'?'#8a58c7':'#4287b9'));p.lineWidth=c.kind==='backbone'?6:3;p.setLineDash((c.kind==='wifi'||c.kind==='cellular')?[10,7]:[]);p.beginPath();p.moveTo(a.x,a.y);p.lineTo(b.x,b.y);p.stroke();});p.setLineDash([]);
+    const colors={pc:'#dceeff',phone:'#f0e4ff',router:'#ffe8c7',switch:'#dcf4e4',server:'#e2e8f0',firewall:'#ffd9d9',cloud:'#e0f3ff',satellite:'#fff0bd',satDish:'#e8e8ff',rack:'#eeeeee',patchPanel:'#fff4d6',cellTower:'#ffd6e7',house:'#fff0c2'};
     map.forEach(({x:dx,y:dy,d})=>{const w=136,h=56;p.fillStyle=colors[d.type]||'#eef2f5';p.strokeStyle='#34566f';p.lineWidth=2;p.fillRect(dx-w/2,dy-h/2,w,h);p.strokeRect(dx-w/2,dy-h/2,w,h);p.fillStyle='#17324a';p.font='bold 14px Arial';p.textAlign='center';p.fillText(String(d.name||d.type).slice(0,20),dx,dy-4);p.font='12px Arial';p.fillText(String(d.ip||LABELS[d.type]||d.type||'').slice(0,22),dx,dy+17);});p.textAlign='left';
   }
   y+=boxH+24;
@@ -3118,7 +3346,7 @@ function createExamAttemptPDFCanvases(attempt,exam){
   drawTable(['Nome','Tipo','Endereço IP','Máscara','VLAN','Status'],savedDevices.map(d=>[d.name||'—',LABELS[d.type]||d.type||'—',d.ip||'—',d.mask||'—',String(d.vlan||1),d.status==='down'?'Desligado':'Ativo']),[240,180,200,210,90,200]);
   section('Conexões realizadas');
   const deviceMap=new Map(savedDevices.map(d=>[d.id,d]));
-  drawTable(['Origem / porta','Destino / porta','Meio','Velocidade','Status'],savedConnections.map(c=>{const a=deviceMap.get(c.from),b=deviceMap.get(c.to);return [`${a?.name||'?'} · ${c.fromIface||'-'}`,`${b?.name||'?'} · ${c.toIface||'-'}`,c.kind==='wifi'?'Sem fio':(c.medium||c.kind||'Cabo'),formatBandwidth(c.bw||100),c.active===false?'Falha':'Ativa'];}),[290,290,200,170,170]);
+  drawTable(['Origem / porta','Destino / porta','Meio','Velocidade','Status'],savedConnections.map(c=>{const a=deviceMap.get(c.from),b=deviceMap.get(c.to);return [`${a?.name||'?'} · ${c.fromIface||'-'}`,`${b?.name||'?'} · ${c.toIface||'-'}`,c.kind==='cellular'?`${c.medium||'4G/5G'} — ${c.service||'Cobertura'}`:(c.kind==='wifi'?'Sem fio':(c.medium||c.kind||'Cabo')),formatBandwidth(c.bw||100),c.active===false?'Falha':'Ativa'];}),[290,290,200,170,170]);
   finishPage();
 
   // Última folha: referência visual da solução correta para o professor.
@@ -3641,7 +3869,7 @@ function updateProp(dev){
       const other=devices.find(d=>d.id===(c.from===dev.id?c.to:c.from));
       const localPort=c.from===dev.id?c.fromIface:c.toIface,remotePort=c.from===dev.id?c.toIface:c.fromIface;
       const speedControl=c.kind==='cable'?`<button onclick="openCableSpeedConfig(${c.id})" title="Alterar velocidade do cabo" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">⚙️ ${formatBandwidth(c.bw||100)}</button>`:formatBandwidth(c.bw||100);
-      return `${c.kind==='backbone'?'🟣':c.kind==='ispFiber'?'🔷':c.kind==='satellite'?'🛰️':c.kind==='wifi'?'📶':c.rackCable?'🟡':'🔗'} ${localPort||'-'} ↔ ${other?.name||'Dispositivo'} ${remotePort||''} · ${c.rackCable?'Patch cord no rack':c.kind==='ispFiber'?'Fibra ISP':c.kind==='satellite'?`Enlace ${c.providerName||'satelital'} ${c.orbit||''}`:c.medium==='fiber'?'Fibra':c.kind==='wifi'?'Wi-Fi':'Ethernet'} · ${speedControl} <button class="danger" onclick="deleteConnectionById(${c.id})" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">Apagar</button>`;
+      return `${c.kind==='backbone'?'🟣':c.kind==='ispFiber'?'🔷':c.kind==='satellite'?'🛰️':c.kind==='cellular'?'📡':c.kind==='wifi'?'📶':c.rackCable?'🟡':'🔗'} ${localPort||'-'} ↔ ${other?.name||'Dispositivo'} ${remotePort||''} · ${c.rackCable?'Patch cord no rack':c.kind==='ispFiber'?'Fibra ISP':c.kind==='satellite'?`Enlace ${c.providerName||'satelital'} ${c.orbit||''}`:c.kind==='cellular'?`${c.medium||'4G/5G'} · ${c.service||'Cobertura móvel'}`:c.medium==='fiber'?'Fibra':c.kind==='wifi'?'Wi-Fi':'Ethernet'} · ${speedControl} <button class="danger" onclick="deleteConnectionById(${c.id})" style="display:inline-flex;padding:1px 5px;font-size:8px;margin-left:4px">Apagar</button>`;
     }).join('<br>'):'Nenhuma conexão.'}</div>`;
 }
 function dev_shutdown(id){
