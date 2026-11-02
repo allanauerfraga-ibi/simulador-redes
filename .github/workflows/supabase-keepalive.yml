@@ -50,8 +50,8 @@ jobs:
               --output "$response_file" \
               --write-out "%{http_code}" \
               --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-              --header "Accept: application/openapi+json" \
-              "$SUPABASE_URL/rest/v1/")"
+              --header "Accept: application/json" \
+              "$SUPABASE_URL/rest/v1/exams?select=id&limit=1")"
 
             if [[ "$http_code" != "200" ]]; then
               echo "Falha na consulta $query_number ao Supabase (HTTP $http_code)."
