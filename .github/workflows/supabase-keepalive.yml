@@ -55,6 +55,15 @@ jobs:
 
             if [[ "$http_code" != "200" ]]; then
               echo "Falha na consulta $query_number ao Supabase (HTTP $http_code)."
+              if grep -qi "invalid.*api.*key\|api.*key.*invalid" "$response_file"; then
+                echo "Diagnostico: a chave publicavel foi recusada pelo Supabase."
+              elif grep -qi "invalid.*jwt\|jwt.*invalid" "$response_file"; then
+                echo "Diagnostico: o Supabase tentou validar um JWT invalido."
+              elif grep -qi "paused\|suspended" "$response_file"; then
+                echo "Diagnostico: o projeto Supabase esta pausado ou suspenso."
+              else
+                echo "Diagnostico: autenticacao recusada sem categoria conhecida."
+              fi
               exit 1
             fi
 
