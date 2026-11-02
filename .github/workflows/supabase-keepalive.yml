@@ -24,54 +24,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      SUPABASE_URL: https://puykkgwdaieoleerdrnv.supabase.co
-      # Chave publicavel: segura para uso em navegador e codigo publico.
-      # Nunca substituir por service_role ou secret key.
-      SUPABASE_PUBLISHABLE_KEY: sb_publishable_D_2G7v2xmyEFqvpSO5gSrg_KrKDzd41
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_POOLER_HOST: aws-1-sa-east-1.pooler.supabase.com
 
     steps:
-      - name: Fazer consulta autenticada ao PostgREST
+      - name: Conferir configuracao segura
         shell: bash
         run: |
           set -euo pipefail
-          response_file="$(mktemp)"
-          trap 'rm -f "$response_file"' EXIT
+          if [[ -z "$SUPABASE_DB_PASSWORD" || -z "$SUPABASE_PROJECT_REF" ]]; then
+            echo "::error::Cadastre SUPABASE_DB_PASSWORD e SUPABASE_PROJECT_REF nos Secrets do repositorio."
+            exit 1
+          fi
 
-          for query_number in 1 2 3; do
-            http_code="$(curl \
-              --silent \
-              --show-error \
-              --location \
-              --retry 3 \
-              --retry-delay 5 \
-              --retry-all-errors \
-              --connect-timeout 15 \
-              --max-time 45 \
-              --output "$response_file" \
-              --write-out "%{http_code}" \
-              --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
-              --header "Accept: application/json" \
-              "$SUPABASE_URL/rest/v1/exams?select=id&limit=1")"
+      - name: Executar consulta SQL no AllanNet EDU
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          result="$(psql \
+            "host=$SUPABASE_POOLER_HOST port=5432 dbname=postgres user=postgres.$SUPABASE_PROJECT_REF sslmode=require connect_timeout=20" \
+            --no-password \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only \
+            --no-align \
+            --command="select 1;")"
 
-            if [[ "$http_code" != "200" ]]; then
-              echo "Falha na consulta $query_number ao Supabase (HTTP $http_code)."
-              if grep -qi "invalid.*api.*key\|api.*key.*invalid" "$response_file"; then
-                echo "Diagnostico: a chave publicavel foi recusada pelo Supabase."
-              elif grep -qi "invalid.*jwt\|jwt.*invalid" "$response_file"; then
-                echo "Diagnostico: o Supabase tentou validar um JWT invalido."
-              elif grep -qi "paused\|suspended" "$response_file"; then
-                echo "Diagnostico: o projeto Supabase esta pausado ou suspenso."
-              else
-                echo "Diagnostico: autenticacao recusada sem categoria conhecida."
-              fi
-              exit 1
-            fi
+          if [[ "$(echo "$result" | tr -d '[:space:]')" != "1" ]]; then
+            echo "::error::O banco respondeu, mas a consulta de verificacao nao retornou o valor esperado."
+            exit 1
+          fi
 
-            if [[ ! -s "$response_file" ]]; then
-              echo "O Supabase respondeu sem conteudo na consulta $query_number."
-              exit 1
-            fi
-
-            echo "Consulta $query_number de 3 concluida (HTTP 200)."
-            [[ "$query_number" == "3" ]] || sleep 5
-          done
+          echo "Consulta SQL concluida com sucesso. Banco AllanNet EDU ativo."
