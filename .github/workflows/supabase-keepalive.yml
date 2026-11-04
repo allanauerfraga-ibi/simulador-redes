@@ -2,8 +2,8 @@ name: Manter Supabase ativo
 
 on:
   schedule:
-    # 06:17 no horario de Brasilia (09:17 UTC), todos os dias.
-    - cron: "17 9 * * *"
+    # A cada 6 horas. O minuto 17 evita o horario mais congestionado do GitHub Actions.
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 permissions:
