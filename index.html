@@ -472,7 +472,6 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
           <button class="menu-action" id="btn-cellTower" onclick="showCellTowerModal()">📡 Adicionar torre 4G/5G</button>
           <button class="menu-action" id="btn-city-satellite" onclick="showCitySatelliteModal()">🛰️ Adicionar satélite</button>
           <button class="menu-action" id="btn-house" onclick="prepareCityDevice('house')">🏠 Adicionar residência</button>
-          <button class="menu-action" id="btn-city-phone" onclick="prepareCityDevice('phone')">📱 Adicionar celular</button>
           <button class="menu-action" id="btn-person" onclick="prepareCityDevice('person')">🧍 Adicionar pessoa com celular</button>
           <button class="menu-action" id="btn-satellite-tower" onclick="startSatelliteTowerLinkMode()">📡 Conectar satélite às torres</button>
           <button class="menu-action" id="btn-cellular" onclick="startCellularMode()">📶 Distribuir sinal da torre</button>
@@ -676,7 +675,7 @@ const CLASS_ACTIVITIES={
   wifi7:{room:'wifi',level:7,title:'Wi-Fi com Internet via satélite',desc:'Projete uma rede com 6 celulares, Notebook e Computador, 2 roteadores sem fio, firewall, rack com switch de rack, patch panel e servidor de rack, além de servidor torre. Complete o acesso Antena/Terminal → Satélite → Nuvem/Internet e garanta que todos os clientes alcancem o servidor e a Internet.'},
   city1:{room:'city',level:1,title:'Bairro conectado por torre 5G',desc:'Abra o cenário de cidade, instale 1 torre 4G/5G no alto da montanha e distribua Internet residencial para pelo menos 3 casas. Todas as residências devem ficar dentro da cobertura e conectadas à torre.'},
   city2:{room:'city',level:2,title:'Cidade com telefonia e Internet',desc:'Monte uma cidade com 2 torres 4G/5G, 4 residências e 4 pessoas com celular. Distribua os moradores e as casas entre as duas torres, garantindo Internet residencial e telefonia móvel para todos.'},
-  city3:{room:'city',level:3,title:'Cidade inteligente com Internet via satélite',desc:'Crie uma cidade com 2 torres, 1 satélite, 1 provedor de Internet, 4 residências, 4 pessoas com celular e 2 celulares. Ligue o provedor ao satélite, conecte as duas torres ao satélite e ofereça cobertura 4G/5G a todos os assinantes.'},
+  city3:{room:'city',level:3,title:'Cidade inteligente com Internet via satélite',desc:'Crie uma cidade com 2 torres, 1 satélite, 1 provedor de Internet, 4 residências e 6 pessoas com celular. Ligue o provedor ao satélite, conecte as duas torres ao satélite e ofereça cobertura 4G/5G a todos os assinantes.'},
   prova01:{room:'exam',level:'MÉDIO–AVANÇADO 01',title:'LAN híbrida com servidor',desc:'Monte uma rede com 4 computadores, sendo pelo menos um Notebook e um Computador, 2 celulares, 2 switches, 1 roteador sem fio e 1 servidor torre. Use cabo nos computadores, Wi-Fi nos celulares, interligue os switches, configure um enlace central de 1 Gb/s e faça todos alcançarem o servidor.',examRules:{pc:4,phone:2,switch:2,wirelessRouter:1,server:1,mixedComputers:true,towerServer:true,pcToSwitch:true,phonesWifi:true,switchesLinked:true,gigabit:true,allReachServers:true}},
   prova02:{room:'exam',level:'MÉDIO–AVANÇADO 02',title:'LAN segmentada e protegida',desc:'Monte uma rede com 6 computadores, 2 switches, 1 roteador, 1 firewall e 1 servidor torre. Distribua os computadores em duas redes /24, conecte-os aos switches e garanta que todos alcancem o servidor por um caminho protegido pelo firewall.',examRules:{pc:6,switch:2,router:1,firewall:1,server:1,towerServer:true,pcToSwitch:true,routerToSwitch:true,minSubnets:2,allReachServers:true,firewallPath:true}},
   prova03:{room:'exam',level:'MÉDIO–AVANÇADO 03',title:'Duas áreas Wi-Fi integradas',desc:'Monte uma rede com 4 computadores, 4 celulares, 2 switches, 2 roteadores sem fio e 1 servidor torre. Distribua os celulares entre as duas áreas Wi-Fi, ligue os computadores por cabo, interligue a infraestrutura e faça todos alcançarem o servidor usando pelo menos um enlace de 1 Gb/s.',examRules:{pc:4,phone:4,switch:2,wirelessRouter:2,server:1,towerServer:true,pcToSwitch:true,phonesWifi:true,twoWifiAreas:true,wirelessRoutersLinked:true,switchesLinked:true,gigabit:true,allReachServers:true}},
@@ -2748,7 +2747,7 @@ function activityChecks(key){
   ];
   const wifiLinked=phones.filter(p=>connections.some(c=>c.kind==='wifi'&&(c.from===p.id||c.to===p.id)));
   const cityTowers=devices.filter(d=>d.type==='cellTower'),houses=devices.filter(d=>d.type==='house'),people=devices.filter(d=>d.type==='person');
-  const cellularLinks=connections.filter(c=>c.kind==='cellular'),cityClients=[...houses,...people,...phones];
+  const cellularLinks=connections.filter(c=>c.kind==='cellular'),cityClients=[...houses,...people];
   const cellularClients=cityClients.filter(client=>cellularLinks.some(c=>c.from===client.id||c.to===client.id));
   const servingTowerIds=new Set(cellularLinks.flatMap(c=>[c.from,c.to]).filter(id=>cityTowers.some(tower=>tower.id===id)));
   const orbitalTowerIds=new Set(connections.filter(c=>c.kind==='satellite'&&c.towerBackhaul).flatMap(c=>[c.from,c.to]).filter(id=>cityTowers.some(tower=>tower.id===id)));
@@ -2762,7 +2761,7 @@ function activityChecks(key){
     ['Casas e pessoas conectadas por 4G/5G',houses.length>=4&&people.length>=4&&[...houses,...people].every(client=>cellularLinks.some(c=>c.from===client.id||c.to===client.id))],['Assinantes distribuídos entre as duas torres',servingTowerIds.size>=2]
   ];
   if(room==='city')return [
-    ['Cenário de cidade ativado',cityScene.active],['2 torres, 1 satélite e 1 provedor',cityTowers.length>=2&&satellites.length>=1&&clouds.length>=1],['4 residências, 4 pessoas e 2 celulares',houses.length>=4&&people.length>=4&&phones.length>=2],
+    ['Cenário de cidade ativado',cityScene.active],['2 torres, 1 satélite e 1 provedor',cityTowers.length>=2&&satellites.length>=1&&clouds.length>=1],['4 residências e 6 pessoas com celular',houses.length>=4&&people.length>=6],
     ['Provedor conectado ao satélite',satelliteCloudLinked],['As duas torres conectadas ao satélite',orbitalTowerIds.size>=2],['Todos os assinantes com cobertura 4G/5G',cityClients.length>=10&&cellularClients.length===cityClients.length],['Assinantes distribuídos entre as duas torres',servingTowerIds.size>=2]
   ];
   if(activity.examRules){
