@@ -2082,7 +2082,7 @@ function drawDev(d){
   } else if(d.type==='person'){
     // Pessoa realista usando um smartphone, com variações de pele, cabelo e roupa.
     // Escala reduzida e ancorada nos pés para manter proporção coerente com as residências.
-    const personScale=.62,personAnchorY=d.y+33;ctx.save();ctx.translate(d.x,personAnchorY);ctx.scale(personScale,personScale);ctx.translate(-d.x,-personAnchorY);
+    const personScale=.50,personAnchorY=d.y+33;ctx.save();ctx.translate(d.x,personAnchorY);ctx.scale(personScale,personScale);ctx.translate(-d.x,-personAnchorY);
     const variant=d.personVariant??0,skin=d.skinTone||'#c68642',shirt=d.outfitColor||'#2374ab',hair=['#24180f','#3a2417','#161616','#6b4025'][variant%4];
     const headY=d.y-24;
     ctx.shadowBlur=isDown?0:10;ctx.shadowColor=isDown?'transparent':'rgba(0,0,0,.25)';
@@ -2527,7 +2527,7 @@ function getAt(x,y){
     return Math.abs(x-d.x)<=halfW&&Math.abs(y-d.y)<=halfH;
   });
   if(rackHit)return rackHit;
-  return ordered.find(d=>d.type==='cellTower'?(Math.abs(x-d.x)<31&&y>d.y-54&&y<d.y+43):d.type==='house'?(Math.abs(x-d.x)<38&&Math.abs(y-d.y)<42):d.type==='person'?(Math.abs(x-d.x)<22&&y>d.y-28&&y<d.y+36):d.type==='dataCenter'?(Math.abs(x-d.x)<56&&Math.abs(y-d.y)<56):Math.hypot(x-d.x,y-d.y)<32);
+  return ordered.find(d=>d.type==='cellTower'?(Math.abs(x-d.x)<31&&y>d.y-54&&y<d.y+43):d.type==='house'?(Math.abs(x-d.x)<38&&Math.abs(y-d.y)<42):d.type==='person'?(Math.abs(x-d.x)<18&&y>d.y-18&&y<d.y+36):d.type==='dataCenter'?(Math.abs(x-d.x)<56&&Math.abs(y-d.y)<56):Math.hypot(x-d.x,y-d.y)<32);
 }
 
 // =========================================================
