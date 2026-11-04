@@ -1823,6 +1823,8 @@ function drawCitySceneBackground(){
   const treeCount=cityScene.vegetation==='high'?38:cityScene.vegetation==='low'?12:22;for(let i=0;i<treeCount;i++){const x=(i*83+37)%Math.max(1,w),y=ground-5+((i*47)%75);if(x>w*.34&&x<w*.79&&y>h*.72)continue;const s=.55+(i%4)*.13;ctx.fillStyle='#59452c';ctx.fillRect(x-2*s,y,4*s,12*s);ctx.fillStyle=night?(i%3?'#173a2b':'#214a32'):(i%3?'#285d35':'#367244');ctx.beginPath();ctx.arc(x,y-5*s,9*s,0,Math.PI*2);ctx.arc(x-6*s,y,7*s,0,Math.PI*2);ctx.arc(x+6*s,y,7*s,0,Math.PI*2);ctx.fill();}
   // Pequenas construções ao fundo para dar profundidade urbana.
   for(let i=0;i<10;i++){const x=w*.39+i*w*.055,y=ground+12+(i%2)*8,ww=22+(i%3)*5,hh=18+(i%4)*4;ctx.fillStyle=night?'#27343b':['#e6d8bf','#d3e0e8','#e4c4b8'][i%3];ctx.fillRect(x,y-hh,ww,hh);ctx.fillStyle=night?'#19272d':['#8b4b3e','#536d7a','#76604d'][i%3];ctx.beginPath();ctx.moveTo(x-3,y-hh);ctx.lineTo(x+ww/2,y-hh-10);ctx.lineTo(x+ww+3,y-hh);ctx.closePath();ctx.fill();ctx.fillStyle=night&&i%3!==0?'#ffd36b':'#8fc7e5';ctx.fillRect(x+5,y-hh+6,5,6);ctx.fillRect(x+ww-10,y-hh+6,5,6);}
+  // Chuva animada no modo nublado, com gotas sobre a cidade e pequenos respingos no solo.
+  if(cloudy){const rainPhase=performance.now()*.34;ctx.lineCap='round';for(let i=0;i<115;i++){const x=(i*97+31)%Math.max(1,w),speed=1+(i%4)*.14,y=(i*61+rainPhase*speed)%(h+90)-45,len=7+(i%5)*2;ctx.strokeStyle=night?'rgba(170,210,245,.48)':'rgba(70,145,190,.43)';ctx.lineWidth=i%7===0?1.45:.85;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-3,y+len);ctx.stroke();if(y>ground&&y<h-8&&i%8===0){ctx.strokeStyle=night?'rgba(185,220,250,.32)':'rgba(90,160,200,.34)';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(x-7,y+len+2);ctx.quadraticCurveTo(x,y+len-1,x+7,y+len+2);ctx.stroke();}}ctx.lineCap='butt';}
   // Identificação discreta da sala.
   if(cityScene.showLabels){ctx.fillStyle='rgba(10,35,45,.82)';ctx.beginPath();ctx.roundRect?.(14,14,Math.min(350,w-28),53,9);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 15px "Segoe UI",sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(`🏙️ ${cityScene.name||'Cidade Conectada'}`,28,23);ctx.font='9px "Segoe UI",sans-serif';ctx.fillStyle='#d7f4ff';const timeLabel=night?'Noite':sunset?'Entardecer':'Dia',weatherLabel=cloudy?'nublado':'céu limpo';ctx.fillText(`${timeLabel} • ${weatherLabel} • bairro conectado • 4G/5G`,28,46);}
   ctx.restore();
@@ -2079,6 +2081,8 @@ function drawDev(d){
 
   } else if(d.type==='person'){
     // Pessoa realista usando um smartphone, com variações de pele, cabelo e roupa.
+    // Escala reduzida e ancorada nos pés para manter proporção coerente com as residências.
+    const personScale=.62,personAnchorY=d.y+33;ctx.save();ctx.translate(d.x,personAnchorY);ctx.scale(personScale,personScale);ctx.translate(-d.x,-personAnchorY);
     const variant=d.personVariant??0,skin=d.skinTone||'#c68642',shirt=d.outfitColor||'#2374ab',hair=['#24180f','#3a2417','#161616','#6b4025'][variant%4];
     const headY=d.y-24;
     ctx.shadowBlur=isDown?0:10;ctx.shadowColor=isDown?'transparent':'rgba(0,0,0,.25)';
@@ -2099,7 +2103,7 @@ function drawDev(d){
     ctx.fillStyle=isDown?'#252525':hair;ctx.beginPath();ctx.arc(d.x,headY-2,12.2,Math.PI,Math.PI*2);ctx.lineTo(d.x+10,headY+1);ctx.quadraticCurveTo(d.x+4,headY-9,d.x-8,headY-3);ctx.lineTo(d.x-11,headY+2);ctx.closePath();ctx.fill();
     // Olhos, sobrancelhas e sorriso.
     ctx.strokeStyle=isDown?'#222':'#3a2418';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(d.x-7,headY-1);ctx.lineTo(d.x-3,headY-2);ctx.moveTo(d.x+3,headY-2);ctx.lineTo(d.x+7,headY-1);ctx.stroke();
-    ctx.fillStyle=isDown?'#222':'#1d2630';ctx.beginPath();ctx.arc(d.x-5,headY+1,1,0,Math.PI*2);ctx.arc(d.x+5,headY+1,1,0,Math.PI*2);ctx.fill();ctx.strokeStyle=isDown?'#222':'#8b3c39';ctx.beginPath();ctx.arc(d.x,headY+5,4,.2,Math.PI-.2);ctx.stroke();ctx.shadowBlur=0;
+    ctx.fillStyle=isDown?'#222':'#1d2630';ctx.beginPath();ctx.arc(d.x-5,headY+1,1,0,Math.PI*2);ctx.arc(d.x+5,headY+1,1,0,Math.PI*2);ctx.fill();ctx.strokeStyle=isDown?'#222':'#8b3c39';ctx.beginPath();ctx.arc(d.x,headY+5,4,.2,Math.PI-.2);ctx.stroke();ctx.shadowBlur=0;ctx.restore();
 
   } else if(d.type==='cellTower'){
     // Torre treliçada de telecomunicações com três setores de antena.
@@ -2523,7 +2527,7 @@ function getAt(x,y){
     return Math.abs(x-d.x)<=halfW&&Math.abs(y-d.y)<=halfH;
   });
   if(rackHit)return rackHit;
-  return ordered.find(d=>d.type==='cellTower'?(Math.abs(x-d.x)<31&&y>d.y-54&&y<d.y+43):d.type==='house'?(Math.abs(x-d.x)<38&&Math.abs(y-d.y)<42):d.type==='person'?(Math.abs(x-d.x)<30&&y>d.y-42&&y<d.y+42):d.type==='dataCenter'?(Math.abs(x-d.x)<56&&Math.abs(y-d.y)<56):Math.hypot(x-d.x,y-d.y)<32);
+  return ordered.find(d=>d.type==='cellTower'?(Math.abs(x-d.x)<31&&y>d.y-54&&y<d.y+43):d.type==='house'?(Math.abs(x-d.x)<38&&Math.abs(y-d.y)<42):d.type==='person'?(Math.abs(x-d.x)<22&&y>d.y-28&&y<d.y+36):d.type==='dataCenter'?(Math.abs(x-d.x)<56&&Math.abs(y-d.y)<56):Math.hypot(x-d.x,y-d.y)<32);
 }
 
 // =========================================================
