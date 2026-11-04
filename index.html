@@ -469,6 +469,8 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         <div class="menu-title">Cidade conectada — 4G/5G e Internet residencial</div>
         <div class="menu-grid one">
           <button class="menu-action green" onclick="showCityBuilderModal()">🌄 Abrir cenário de cidade</button>
+          <button class="menu-action" onclick="showCityLandscapeModal()">🎨 Configurar paisagem</button>
+          <button class="menu-action" onclick="buildCityNeighborhood()">🏘️ Montar bairro automaticamente</button>
           <button class="menu-action" id="btn-cellTower" onclick="showCellTowerModal()">📡 Adicionar torre 4G/5G</button>
           <button class="menu-action" id="btn-city-satellite" onclick="showCitySatelliteModal()">🛰️ Adicionar satélite</button>
           <button class="menu-action" id="btn-data-center" onclick="prepareCityDevice('dataCenter')">🏢 Adicionar Data Center</button>
@@ -477,6 +479,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
           <button class="menu-action" id="btn-satellite-tower" onclick="startSatelliteTowerLinkMode()">📡 Conectar Data Center e torres ao satélite</button>
           <button class="menu-action" id="btn-cellular" onclick="startCellularMode()">📶 Distribuir sinal da torre</button>
           <button class="menu-action" onclick="runCityCoverageTest()">✅ Testar Internet e telefonia</button>
+          <button class="menu-action" onclick="toggleCityCoverage()">📶 Mostrar/ocultar cobertura</button>
           <button class="menu-action" onclick="toggleCityScene()">🗺️ Mostrar/ocultar paisagem</button>
         </div>
       </div>
@@ -537,6 +540,7 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         <div>☁️ <b>Cloud</b> — Internet/WAN</div>
         <div>📡 <b>Antena satelital</b> — Terminal do assinante</div>
         <div>🛰️ <b>Satélite</b> — Provedor orbital LEO/GEO</div>
+        <div>🏢 <b>Data Center</b> — Origem dos serviços da cidade</div>
         <div>📡 <b>Torre 4G/5G</b> — Internet e telefonia móvel</div>
         <div>🏠 <b>Residência</b> — Cliente de Internet fixa sem fio</div>
         <div>🧍 <b>Pessoa com celular</b> — Cliente móvel 4G/5G</div>
@@ -647,7 +651,7 @@ let nextRackId=1,pendingRackSize=24;
 let cliHist=[],cliHistIdx=-1;
 let arpTable={},macTable={};
 let history=[];// undo stack [{devices, connections}]
-let cityScene={active:false,name:'Cidade Conectada',terrain:'mountains',time:'day'};
+let cityScene={active:false,name:'Cidade Conectada',terrain:'mountains',time:'day',weather:'clear',vegetation:'medium',showCoverage:true,showLabels:true};
 let classroom={role:'student',studentName:'',activity:null,subnetColors:false,lastScore:null,faults:[],faultSnapshot:null};
 let teacherExamSession=null;
 const EMPTY_EXAM_STATE=Object.freeze({active:false,locked:false,attemptToken:'',examId:'',title:'',activity:'',assessmentType:'prova',customPrompt:'',knowledgeLevel:'',studentName:'',studentGrade:'',studentClass:'',studentSchool:'',deadline:'',maxScore:10});
@@ -947,10 +951,40 @@ function showCityBuilderModal(){
     <label>Nome do município ou cenário</label><input id="city-name" value="${escapeReport(cityScene.name||'Cidade Conectada')}" maxlength="60">
     <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button onclick="activateCityScene(false)">Abrir cidade vazia</button><button class="green" onclick="activateCityScene(true)">✨ Montar exemplo completo</button></div>`);
 }
+function citySceneDefaults(scene={}){
+  return {active:!!scene.active,name:String(scene.name||'Cidade Conectada').slice(0,60),terrain:'mountains',time:['day','sunset','night'].includes(scene.time)?scene.time:'day',weather:['clear','cloudy'].includes(scene.weather)?scene.weather:'clear',vegetation:['low','medium','high'].includes(scene.vegetation)?scene.vegetation:'medium',showCoverage:scene.showCoverage!==false,showLabels:scene.showLabels!==false};
+}
+function showCityLandscapeModal(){
+  cityScene=citySceneDefaults(cityScene);
+  showModal(`<h3>🎨 Paisagem da Sala Cidade</h3>
+    <div class="edu-note">Personalize o ambiente sem apagar equipamentos ou conexões. As opções ajudam a representar diferentes condições de operação de uma cidade conectada.</div>
+    <label>Horário</label><select id="city-time"><option value="day" ${cityScene.time==='day'?'selected':''}>☀️ Dia</option><option value="sunset" ${cityScene.time==='sunset'?'selected':''}>🌇 Entardecer</option><option value="night" ${cityScene.time==='night'?'selected':''}>🌙 Noite</option></select>
+    <label>Condição do céu</label><select id="city-weather"><option value="clear" ${cityScene.weather==='clear'?'selected':''}>Céu limpo</option><option value="cloudy" ${cityScene.weather==='cloudy'?'selected':''}>Nublado</option></select>
+    <label>Vegetação</label><select id="city-vegetation"><option value="low" ${cityScene.vegetation==='low'?'selected':''}>Pouca</option><option value="medium" ${cityScene.vegetation==='medium'?'selected':''}>Média</option><option value="high" ${cityScene.vegetation==='high'?'selected':''}>Densa</option></select>
+    <label><input type="checkbox" id="city-show-coverage" ${cityScene.showCoverage?'checked':''}> Exibir áreas de cobertura 4G/5G</label>
+    <label><input type="checkbox" id="city-show-labels" ${cityScene.showLabels?'checked':''}> Exibir identificação do cenário</label>
+    <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="applyCityLandscape()">✅ Aplicar paisagem</button></div>`);
+}
+function applyCityLandscape(){
+  saveHistory();cityScene=citySceneDefaults({...cityScene,active:true,time:document.getElementById('city-time')?.value,weather:document.getElementById('city-weather')?.value,vegetation:document.getElementById('city-vegetation')?.value,showCoverage:!!document.getElementById('city-show-coverage')?.checked,showLabels:!!document.getElementById('city-show-labels')?.checked});
+  closeModal();draw();rackNotice('Paisagem atualizada','Horário, céu, vegetação e visualização da cobertura foram aplicados.','ok');
+}
+function toggleCityCoverage(){
+  saveHistory();cityScene=citySceneDefaults({...cityScene,active:true,showCoverage:cityScene.showCoverage===false});draw();
+  rackNotice(cityScene.showCoverage?'Cobertura exibida':'Cobertura recolhida',cityScene.showCoverage?'Os raios 4G/5G voltaram a aparecer.':'Os enlaces continuam funcionando; apenas os círculos de cobertura foram ocultados.','ok');
+}
+function buildCityNeighborhood(){
+  if(!cityScene.active)cityScene=citySceneDefaults({...cityScene,active:true});
+  const historyBefore=history.slice(),neighborhoodSnapshot={devices:JSON.parse(JSON.stringify(devices)),connections:JSON.parse(JSON.stringify(connections)),racks:JSON.parse(JSON.stringify(racks)),cityScene:JSON.parse(JSON.stringify(cityScene))},w=Math.max(canvas.width,780),h=Math.max(canvas.height,430),spots=[[.59,.68],[.69,.63],[.79,.69],[.89,.63]];
+  spots.forEach(([px,py])=>addDevice(w*px,h*py,'house'));
+  [[.55,.55],[.66,.52],[.76,.55],[.86,.52]].forEach(([px,py])=>addDevice(w*px,h*py,'person'));
+  history=historyBefore;history.push(neighborhoodSnapshot);if(history.length>50)history.shift();document.querySelectorAll('#btn-undo,#btn-undo-quick').forEach(btn=>btn.disabled=false);
+  setMode('select');updateAll();rackNotice('Bairro montado','Foram adicionadas 4 residências e 4 pessoas com celular. Agora conecte os assinantes às torres.','ok');
+}
 function activateCityScene(withExample){
   const name=(document.getElementById('city-name')?.value||'Cidade Conectada').trim().slice(0,60);
   if(withExample&&(devices.length||connections.length||racks.length)&&!confirm('Montar o exemplo completo apagará a topologia atual. Deseja continuar?'))return;
-  saveHistory();cityScene={active:true,name,terrain:'mountains',time:'day'};closeModal();
+  saveHistory();cityScene=citySceneDefaults({...cityScene,active:true,name});closeModal();
   if(withExample)buildCityExample();
   setMode('select');draw();
   rackNotice('Cenário de cidade aberto',withExample?'O exemplo foi montado. Você pode mover, excluir ou acrescentar equipamentos.':'Use a aba Cidade para adicionar torres, residências e celulares.','ok');
@@ -1760,33 +1794,41 @@ function draw(){
 function drawCitySceneBackground(){
   const w=canvas.width,h=canvas.height,ground=h*.60;
   ctx.save();
-  const sky=ctx.createLinearGradient(0,0,0,ground);sky.addColorStop(0,'#68b8ec');sky.addColorStop(.55,'#a8d8ee');sky.addColorStop(1,'#e9f3e6');ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
+  cityScene=citySceneDefaults(cityScene);const night=cityScene.time==='night',sunset=cityScene.time==='sunset',cloudy=cityScene.weather==='cloudy';
+  const sky=ctx.createLinearGradient(0,0,0,ground);sky.addColorStop(0,night?'#07152d':sunset?'#5b4b82':cloudy?'#7893a6':'#68b8ec');sky.addColorStop(.55,night?'#183658':sunset?'#e68a72':cloudy?'#aab8c0':'#a8d8ee');sky.addColorStop(1,night?'#355168':sunset?'#ffd09b':cloudy?'#d8dddd':'#e9f3e6');ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
+  if(night){for(let i=0;i<55;i++){const x=(i*137+41)%w,y=(i*61+17)%Math.max(80,ground*.72),r=i%9===0?1.5:.65;ctx.fillStyle=i%7===0?'#bfe4ff':'rgba(255,255,235,.82)';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();}}
   // Sol e névoa atmosférica.
-  const sunX=w*.82,sunY=h*.14,sun=ctx.createRadialGradient(sunX,sunY,4,sunX,sunY,55);sun.addColorStop(0,'rgba(255,250,210,.98)');sun.addColorStop(.35,'rgba(255,220,120,.55)');sun.addColorStop(1,'rgba(255,220,120,0)');ctx.fillStyle=sun;ctx.beginPath();ctx.arc(sunX,sunY,55,0,Math.PI*2);ctx.fill();
+  const sunX=w*.82,sunY=h*(sunset ? .29 : .14),sun=ctx.createRadialGradient(sunX,sunY,4,sunX,sunY,55);sun.addColorStop(0,night?'rgba(235,245,255,.96)':'rgba(255,250,210,.98)');sun.addColorStop(.35,night?'rgba(190,220,255,.24)':sunset?'rgba(255,145,80,.58)':'rgba(255,220,120,.55)');sun.addColorStop(1,'rgba(255,220,120,0)');ctx.fillStyle=sun;ctx.beginPath();ctx.arc(sunX,sunY,night?20:55,0,Math.PI*2);ctx.fill();
   // Nuvens suaves.
-  [[w*.52,h*.13,1],[w*.9,h*.26,.75],[w*.12,h*.12,.65]].forEach(([x,y,s])=>{ctx.fillStyle='rgba(255,255,255,.72)';[[0,0,28],[28,4,22],[-25,7,19],[4,-12,23]].forEach(([dx,dy,r])=>{ctx.beginPath();ctx.arc(x+dx*s,y+dy*s,r*s,0,Math.PI*2);ctx.fill();});});
+  const clouds=cloudy?[[.12,.13,1.2],[.35,.18,1],[.58,.11,1.35],[.78,.23,1.1],[.94,.13,.9]]:[[.52,.13,1],[.9,.26,.75],[.12,.12,.65]];clouds.forEach(([px,py,s])=>{const x=w*px,y=h*py;ctx.fillStyle=night?'rgba(155,175,195,.34)':cloudy?'rgba(230,235,238,.78)':'rgba(255,255,255,.72)';[[0,0,28],[28,4,22],[-25,7,19],[4,-12,23]].forEach(([dx,dy,r])=>{ctx.beginPath();ctx.arc(x+dx*s,y+dy*s,r*s,0,Math.PI*2);ctx.fill();});});
   function mountain(points,top,bottom){const g=ctx.createLinearGradient(0,h*.18,0,ground);g.addColorStop(0,top);g.addColorStop(1,bottom);ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(0,ground);points.forEach(p=>ctx.lineTo(p[0]*w,p[1]*h));ctx.lineTo(w,ground);ctx.closePath();ctx.fill();}
-  mountain([[0,.46],[.12,.25],[.22,.43],[.34,.19],[.47,.45],[.61,.28],[.74,.46],[.88,.24],[1,.43]],'#6c8d8e','#42645b');
+  mountain([[0,.46],[.12,.25],[.22,.43],[.34,.19],[.47,.45],[.61,.28],[.74,.46],[.88,.24],[1,.43]],night?'#314a57':sunset?'#746f72':'#6c8d8e',night?'#20353a':sunset?'#4f5348':'#42645b');
   // Penhascos iluminados e cumes verdes em primeiro plano.
-  mountain([[0,.56],[.11,.34],[.23,.25],[.34,.52],[.47,.39],[.6,.48],[.74,.35],[.86,.49],[1,.38]],'#4d7959','#274d38');
+  mountain([[0,.56],[.11,.34],[.23,.25],[.34,.52],[.47,.39],[.6,.48],[.74,.35],[.86,.49],[1,.38]],night?'#29483e':sunset?'#526b4d':'#4d7959',night?'#152d26':'#274d38');
   ctx.fillStyle='rgba(225,238,223,.72)';ctx.beginPath();ctx.moveTo(w*.17,h*.31);ctx.lineTo(w*.23,h*.25);ctx.lineTo(w*.285,h*.36);ctx.lineTo(w*.235,h*.32);ctx.closePath();ctx.fill();
   // Área urbana no vale.
-  const grass=ctx.createLinearGradient(0,ground,0,h);grass.addColorStop(0,'#71935d');grass.addColorStop(1,'#33513c');ctx.fillStyle=grass;ctx.fillRect(0,ground,w,h-ground);
+  const grass=ctx.createLinearGradient(0,ground,0,h);grass.addColorStop(0,night?'#365548':sunset?'#697c50':'#71935d');grass.addColorStop(1,night?'#172d28':'#33513c');ctx.fillStyle=grass;ctx.fillRect(0,ground,w,h-ground);
   // Rio ao fundo.
   ctx.strokeStyle='rgba(102,190,220,.7)';ctx.lineWidth=18;ctx.beginPath();ctx.moveTo(-20,h*.69);ctx.bezierCurveTo(w*.28,h*.62,w*.53,h*.77,w+20,h*.66);ctx.stroke();ctx.strokeStyle='rgba(220,248,255,.55)';ctx.lineWidth=2;ctx.stroke();
   // Estrada principal com perspectiva e faixa central.
   ctx.fillStyle='#4d5457';ctx.beginPath();ctx.moveTo(w*.35,h);ctx.lineTo(w*.47,ground);ctx.lineTo(w*.57,ground);ctx.lineTo(w*.78,h);ctx.closePath();ctx.fill();
   ctx.strokeStyle='#e7d98b';ctx.lineWidth=3;ctx.setLineDash([18,15]);ctx.beginPath();ctx.moveTo(w*.565,h);ctx.lineTo(w*.52,ground);ctx.stroke();ctx.setLineDash([]);
   ctx.strokeStyle='#c9d0d1';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(w*.35,h);ctx.lineTo(w*.47,ground);ctx.moveTo(w*.78,h);ctx.lineTo(w*.57,ground);ctx.stroke();
+  // Calçadas, faixa de pedestres, sinalização, veículos e iluminação urbana.
+  ctx.strokeStyle=night?'#6e7b80':'#c9c5b9';ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(w*.337,h);ctx.lineTo(w*.462,ground);ctx.moveTo(w*.793,h);ctx.lineTo(w*.578,ground);ctx.stroke();
+  for(let i=0;i<5;i++){const yy=ground+24+i*7,x1=w*.47-(yy-ground)*.16,x2=w*.57+(yy-ground)*.28;ctx.strokeStyle='rgba(245,245,238,.82)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x1,yy);ctx.lineTo(x2,yy);ctx.stroke();}
+  [[.47,.78,'#d94b45'],[.64,.87,'#2f80c5']].forEach(([px,py,color])=>{const x=w*px,y=h*py;ctx.fillStyle=color;ctx.strokeStyle='#17212b';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?.(x-15,y-7,30,14,4);ctx.fill();ctx.stroke();ctx.fillStyle='#9fd5ed';ctx.fillRect(x-8,y-6,15,5);ctx.fillStyle='#111';[-9,9].forEach(dx=>{ctx.beginPath();ctx.arc(x+dx,y+8,3,0,Math.PI*2);ctx.fill();});});
+  const lampPoints=[[.18,.66],[.31,.7],[.84,.68],[.94,.72]];ctx.strokeStyle=night?'#687982':'#5c666b';ctx.lineWidth=2;lampPoints.forEach(([px,py],i)=>{const x=w*px,y=h*py;ctx.beginPath();ctx.moveTo(x,y+34);ctx.lineTo(x,y);ctx.lineTo(x+9,y);ctx.stroke();ctx.fillStyle=night||sunset?'#fff3a6':'#d6dde0';ctx.beginPath();ctx.arc(x+11,y,3.5,0,Math.PI*2);ctx.fill();if(night||sunset){const lg=ctx.createRadialGradient(x+11,y,2,x+11,y,32);lg.addColorStop(0,'rgba(255,238,140,.34)');lg.addColorStop(1,'rgba(255,238,140,0)');ctx.fillStyle=lg;ctx.beginPath();ctx.arc(x+11,y,32,0,Math.PI*2);ctx.fill();}if(i<lampPoints.length-1){const nx=w*lampPoints[i+1][0],ny=h*lampPoints[i+1][1];ctx.strokeStyle='rgba(45,55,62,.7)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y+4);ctx.quadraticCurveTo((x+nx)/2,(y+ny)/2+12,nx,ny+4);ctx.stroke();}});
   // Árvores distribuídas nas encostas e no bairro.
-  for(let i=0;i<22;i++){const x=(i*83+37)%Math.max(1,w),y=ground-5+((i*47)%75);if(x>w*.34&&x<w*.79&&y>h*.72)continue;const s=.55+(i%4)*.13;ctx.fillStyle='#59452c';ctx.fillRect(x-2*s,y,4*s,12*s);ctx.fillStyle=i%3?'#285d35':'#367244';ctx.beginPath();ctx.arc(x,y-5*s,9*s,0,Math.PI*2);ctx.arc(x-6*s,y,7*s,0,Math.PI*2);ctx.arc(x+6*s,y,7*s,0,Math.PI*2);ctx.fill();}
+  const treeCount=cityScene.vegetation==='high'?38:cityScene.vegetation==='low'?12:22;for(let i=0;i<treeCount;i++){const x=(i*83+37)%Math.max(1,w),y=ground-5+((i*47)%75);if(x>w*.34&&x<w*.79&&y>h*.72)continue;const s=.55+(i%4)*.13;ctx.fillStyle='#59452c';ctx.fillRect(x-2*s,y,4*s,12*s);ctx.fillStyle=night?(i%3?'#173a2b':'#214a32'):(i%3?'#285d35':'#367244');ctx.beginPath();ctx.arc(x,y-5*s,9*s,0,Math.PI*2);ctx.arc(x-6*s,y,7*s,0,Math.PI*2);ctx.arc(x+6*s,y,7*s,0,Math.PI*2);ctx.fill();}
   // Pequenas construções ao fundo para dar profundidade urbana.
-  for(let i=0;i<10;i++){const x=w*.39+i*w*.055,y=ground+12+(i%2)*8,ww=22+(i%3)*5,hh=18+(i%4)*4;ctx.fillStyle=['#e6d8bf','#d3e0e8','#e4c4b8'][i%3];ctx.fillRect(x,y-hh,ww,hh);ctx.fillStyle=['#8b4b3e','#536d7a','#76604d'][i%3];ctx.beginPath();ctx.moveTo(x-3,y-hh);ctx.lineTo(x+ww/2,y-hh-10);ctx.lineTo(x+ww+3,y-hh);ctx.closePath();ctx.fill();ctx.fillStyle='#8fc7e5';ctx.fillRect(x+5,y-hh+6,5,6);ctx.fillRect(x+ww-10,y-hh+6,5,6);}
+  for(let i=0;i<10;i++){const x=w*.39+i*w*.055,y=ground+12+(i%2)*8,ww=22+(i%3)*5,hh=18+(i%4)*4;ctx.fillStyle=night?'#27343b':['#e6d8bf','#d3e0e8','#e4c4b8'][i%3];ctx.fillRect(x,y-hh,ww,hh);ctx.fillStyle=night?'#19272d':['#8b4b3e','#536d7a','#76604d'][i%3];ctx.beginPath();ctx.moveTo(x-3,y-hh);ctx.lineTo(x+ww/2,y-hh-10);ctx.lineTo(x+ww+3,y-hh);ctx.closePath();ctx.fill();ctx.fillStyle=night&&i%3!==0?'#ffd36b':'#8fc7e5';ctx.fillRect(x+5,y-hh+6,5,6);ctx.fillRect(x+ww-10,y-hh+6,5,6);}
   // Identificação discreta da sala.
-  ctx.fillStyle='rgba(10,35,45,.76)';ctx.beginPath();ctx.roundRect?.(14,14,Math.min(310,w-28),48,9);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 15px "Segoe UI",sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(`🏙️ ${cityScene.name||'Cidade Conectada'}`,28,24);ctx.font='9px "Segoe UI",sans-serif';ctx.fillStyle='#d7f4ff';ctx.fillText('Montanhas • bairro residencial • cobertura 4G/5G',28,45);
+  if(cityScene.showLabels){ctx.fillStyle='rgba(10,35,45,.82)';ctx.beginPath();ctx.roundRect?.(14,14,Math.min(350,w-28),53,9);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 15px "Segoe UI",sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(`🏙️ ${cityScene.name||'Cidade Conectada'}`,28,23);ctx.font='9px "Segoe UI",sans-serif';ctx.fillStyle='#d7f4ff';const timeLabel=night?'Noite':sunset?'Entardecer':'Dia',weatherLabel=cloudy?'nublado':'céu limpo';ctx.fillText(`${timeLabel} • ${weatherLabel} • bairro conectado • 4G/5G`,28,46);}
   ctx.restore();
 }
 function drawCityCoverage(){
+  if(cityScene.showCoverage===false)return;
   const pulse=(Math.sin(performance.now()/650)+1)/2;
   devices.filter(d=>d.type==='cellTower'&&d.status==='up').forEach(tower=>{
     const radius=Math.min(tower.coverageRadius||560,Math.max(canvas.width,canvas.height)),color=tower.towerTechnology?.includes('5G')?'#ff3d8d':'#3b82f6';
@@ -2092,15 +2134,19 @@ function drawDev(d){
     ctx.shadowBlur=isDown?3:18;ctx.shadowColor=isDown?'#000':'rgba(14,165,233,.38)';
     const facade=ctx.createLinearGradient(left,top,left+bw,top+bh);facade.addColorStop(0,isDown?'#292929':'#263746');facade.addColorStop(.48,isDown?'#181818':'#132536');facade.addColorStop(1,isDown?'#0c0c0c':'#07131e');
     ctx.fillStyle=facade;ctx.strokeStyle=isSel?'#f78166':(isConn?'#ffd166':col);ctx.lineWidth=isSel||isConn?3:1.6;rr2(left,top,bw,bh,5);ctx.fill();ctx.stroke();ctx.shadowBlur=0;
+    // Cobertura técnica e volume lateral em perspectiva.
     ctx.fillStyle=isDown?'#333':'#38536a';ctx.beginPath();ctx.moveTo(left,top);ctx.lineTo(left+10,top-9);ctx.lineTo(left+bw+10,top-9);ctx.lineTo(left+bw,top);ctx.closePath();ctx.fill();
     ctx.fillStyle=isDown?'#111':'#0b1c2a';ctx.beginPath();ctx.moveTo(left+bw,top);ctx.lineTo(left+bw+10,top-9);ctx.lineTo(left+bw+10,top+bh-9);ctx.lineTo(left+bw,top+bh);ctx.closePath();ctx.fill();
+    // Janelas técnicas iluminadas em três andares.
     for(let row=0;row<3;row++)for(let column=0;column<6;column++){
       const wx=left+8+column*13,wy=top+13+row*17;
       ctx.fillStyle=isDown?'#151515':((row+column)%3===0?'#7dd3fc':'#1d4f70');ctx.strokeStyle='rgba(125,211,252,.35)';ctx.lineWidth=.6;rr2(wx,wy,9,9,1);ctx.fill();ctx.stroke();
     }
+    // Entrada segura e placa de identificação.
     ctx.fillStyle=isDown?'#111':'#071018';ctx.strokeStyle=col;rr2(d.x-11,top+bh-23,22,23,2);ctx.fill();ctx.stroke();
     ctx.fillStyle=isDown?'#444':'#d9f4ff';ctx.font='bold 8px "Segoe UI",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('DATA CENTER',d.x,top+7);
     ctx.fillStyle=isDown?'#333':'#3fb950';ctx.shadowBlur=isDown?0:7;ctx.shadowColor='#3fb950';ctx.beginPath();ctx.arc(d.x+7,top+bh-12,2,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    // Antena no topo mostrando o enlace com o satélite.
     ctx.strokeStyle=isDown?'#444':'#9fb7c6';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(d.x+27,top-8);ctx.lineTo(d.x+27,top-24);ctx.stroke();
     ctx.save();ctx.translate(d.x+27,top-27);ctx.rotate(-.35);ctx.fillStyle=isDown?'#333':'#e8f2f7';ctx.strokeStyle=col;ctx.beginPath();ctx.ellipse(0,0,10,5,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore();
     if(!isDown){ctx.strokeStyle=col+'88';ctx.lineWidth=1.2;[10,17,24].forEach(rad=>{ctx.beginPath();ctx.arc(d.x+31,top-33,rad,Math.PI+.2,-.55);ctx.stroke();});}
@@ -2548,7 +2594,7 @@ function clearAll(){
   devices=[];connections=[];packets=[];racks=[];arpTable={};macTable={};selected=null;
   connectFirst=null;backboneFirst=null;backboneSecond=null;wifiFirst=null;cellularFirst=null;ispFiberFirst=null;satelliteLinkFirst=null;
   dragging=null;draggingRack=null;sTx=0;sRx=0;sDrop=0;classroom.lastScore=null;classroom.faults=[];classroom.faultSnapshot=null;
-  cityScene={active:false,name:'Cidade Conectada',terrain:'mountains',time:'day'};
+  cityScene=citySceneDefaults();
   closeModal();setMode('select');updateProp(null);updateAll();
   rackNotice('Rede limpa','Todos os dispositivos, racks e conexões foram removidos. Use Desfazer para restaurar a topologia.','ok');
   sysLog('Topologia limpa. A ação pode ser desfeita.','lwarn');
@@ -2603,7 +2649,7 @@ function validateImportedTopology(raw){
   clean.connections=clean.connections.filter(link=>link&&ids.has(Number(link.from))&&ids.has(Number(link.to))&&Number(link.from)!==Number(link.to)).map(link=>({...link,id:Number(link.id)||0,from:Number(link.from),to:Number(link.to),bw:Math.max(1,Math.min(100000,Number(link.bw)||100)),lat:Math.max(0,Math.min(10000,Number(link.lat)||1))}));
   clean.racks=Array.isArray(clean.racks)?clean.racks.slice(0,30).map((rack,index)=>({...rack,id:Number(rack.id)||index+1,name:sanitizeImportedText(rack.name||`Rack ${index+1}`,80)})):[];
   clean.classroom={studentName:sanitizeImportedText(clean.classroom?.studentName,100),activity:sanitizeImportedText(clean.classroom?.activity,40),subnetColors:!!clean.classroom?.subnetColors,lastScore:null};
-  clean.cityScene={active:!!clean.cityScene?.active,name:sanitizeImportedText(clean.cityScene?.name||'Cidade Conectada',60),terrain:'mountains',time:'day'};
+  clean.cityScene=citySceneDefaults({...clean.cityScene,name:sanitizeImportedText(clean.cityScene?.name||'Cidade Conectada',60)});
   clean.nextId=Math.max(...clean.devices.map(d=>d.id),0)+1;clean.nextRackId=Math.max(...clean.racks.map(r=>Number(r.id)||0),0)+1;
   return clean;
 }
@@ -2624,7 +2670,7 @@ function loadTopology(){
       try{
       const dt=validateImportedTopology(JSON.parse(ev.target.result));
       devices=dt.devices||[];connections=dt.connections||[];racks=dt.racks||[];nextId=dt.nextId||100;nextRackId=dt.nextRackId||1;
-      cityScene=dt.cityScene||{active:false,name:'Cidade Conectada',terrain:'mountains',time:'day'};
+      cityScene=citySceneDefaults(dt.cityScene);
       devices.forEach(d=>{if(d.type==='server'&&!d.serverType)d.serverType='rack';if(d.type==='switch'&&!d.switchForm)d.switchForm='rack';});
       devices.forEach(ensureInterfaceMetadata);
       racks.forEach(organizeRackAssets);
@@ -5106,7 +5152,7 @@ canvas.addEventListener('dblclick',function(e){
 <script>
 // ── 3D RENDERER ───────────────────────────────────────────
 const DEV_COLORS_3D = {pc:'#4dabf7',phone:'#70e1ff',router:'#ff8c00',switch:'#3fb950',patchPanel:'#d29922',server:'#f85149',firewall:'#ff6b9d',cloud:'#c4b5fd',satDish:'#00a6c7',satellite:'#f0a91f',dataCenter:'#0ea5e9'};
-const DEV_SHAPES = {pc:'pc',phone:'phone',router:'router',switch:'switch',patchPanel:'patchPanel',server:'serverRack',firewall:'firewall',cloud:'cloud',satDish:'satDish',satellite:'satellite',dataCenter:'serverTower'};
+const DEV_SHAPES = {pc:'pc',phone:'phone',router:'router',switch:'switch',patchPanel:'patchPanel',server:'serverRack',firewall:'firewall',cloud:'cloud',satDish:'satDish',satellite:'satellite',dataCenter:'dataCenter'};
 
 let _3d = {
   running:false, animating:true, showLabels:true,
@@ -5590,6 +5636,21 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha, node) {
     ctx.strokeStyle='#708690';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y+r*.55);ctx.lineTo(x,y+r*1.15);ctx.stroke();ctx.fillStyle='#dbe4e8';ctx.strokeStyle=pc;ctx.beginPath();ctx.ellipse(x,y+r*1.15,r*.55,r*.2,0,0,Math.PI*2);ctx.fill();ctx.stroke();
     ctx.shadowBlur=0;ctx.strokeStyle=pc+'66';ctx.setLineDash([4,5]);ctx.beginPath();ctx.ellipse(x,y,r*2.6,r*1.1,-.18,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
     ctx.fillStyle=pc;ctx.font=`bold ${Math.max(6,r*.32)}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.orbit,x,y+r*.2);
+
+  } else if (shape === 'dataCenter') {
+    const bw=s*1.75,bh=s*1.35,bx=x-bw/2,by=y-bh/2;
+    const bg=ctx.createLinearGradient(bx,by,bx+bw,by+bh);bg.addColorStop(0,'#334b5f');bg.addColorStop(.5,'#14293a');bg.addColorStop(1,'#07131e');
+    ctx.shadowBlur=24;ctx.shadowColor=color+'66';iso3D(bx,by,bw,bh,10,'#45677f','#0a1c2a',bg);ctx.shadowBlur=0;
+    ctx.strokeStyle=color+'cc';ctx.lineWidth=1.6;rr(bx,by,bw,bh,5);ctx.stroke();
+    for(let row=0;row<3;row++)for(let column=0;column<6;column++){
+      const ww=bw*.1,wh=bh*.11,wx=bx+bw*.08+column*bw*.145,wy=by+bh*.18+row*bh*.2;
+      ctx.fillStyle=(row+column)%3===0?'#7dd3fc':'#1d4f70';rr(wx,wy,ww,wh,1);ctx.fill();
+    }
+    ctx.fillStyle='#071018';ctx.strokeStyle=color;rr(x-bw*.12,by+bh*.72,bw*.24,bh*.28,2);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#d9f4ff';ctx.font=`bold ${Math.max(6,r*.28)}px Arial`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('DATA CENTER',x,by+bh*.09);
+    ctx.strokeStyle='#a8c2d2';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+bw*.28,by-8);ctx.lineTo(x+bw*.28,by-25);ctx.stroke();
+    ctx.fillStyle='#e8f2f7';ctx.strokeStyle=color;ctx.beginPath();ctx.ellipse(x+bw*.28,by-27,11,5,-.35,0,Math.PI*2);ctx.fill();ctx.stroke();
+    [12,20].forEach(rad=>{ctx.strokeStyle=color+'66';ctx.beginPath();ctx.arc(x+bw*.31,by-34,rad,Math.PI+.2,-.55);ctx.stroke();});
 
   } else if (shape === 'cloud') {
     // ── GLOBO ISP/CLOUD REALISTA HD ───────────
