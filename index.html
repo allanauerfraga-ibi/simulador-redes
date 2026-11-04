@@ -469,7 +469,6 @@ body.light-theme .ping-grid,body.light-theme .ping-check{background:#f7f9fc;bord
         <div class="menu-title">Cidade conectada — 4G/5G e Internet residencial</div>
         <div class="menu-grid one">
           <button class="menu-action green" onclick="showCityBuilderModal()">🌄 Abrir cenário de cidade</button>
-          <button class="menu-action" onclick="showCityLandscapeModal()">🎨 Configurar paisagem</button>
           <button class="menu-action" onclick="buildCityNeighborhood()">🏘️ Montar bairro automaticamente</button>
           <button class="menu-action" id="btn-cellTower" onclick="showCellTowerModal()">📡 Adicionar torre 4G/5G</button>
           <button class="menu-action" id="btn-city-satellite" onclick="showCitySatelliteModal()">🛰️ Adicionar satélite</button>
@@ -939,6 +938,7 @@ function prepareSatellitePlacement(){
 // CIDADE CONECTADA — CENÁRIO, TORRES E ASSINANTES
 // =========================================================
 function showCityBuilderModal(){
+  cityScene=citySceneDefaults(cityScene);
   showModal(`<h3>🏙️ Cidade Conectada</h3>
     <div class="edu-note">Monte uma cidade realista entre montanhas. Posicione torres em pontos altos, insira um satélite no céu e crie o enlace de backhaul Satélite ↔ Torre. Depois, distribua sinal 4G/5G para residências e pessoas usando celulares.</div>
     <div class="cfg-sec"><h5>O cenário inclui</h5>
@@ -949,6 +949,13 @@ function showCityBuilderModal(){
       <div class="edu-check">☎️ Teste animado de Internet e telefonia para cada assinante</div>
     </div>
     <label>Nome do município ou cenário</label><input id="city-name" value="${escapeReport(cityScene.name||'Cidade Conectada')}" maxlength="60">
+    <div class="cfg-sec"><h5>Configuração do cenário</h5>
+      <label>Horário</label><select id="city-time"><option value="day" ${cityScene.time==='day'?'selected':''}>☀️ Dia</option><option value="sunset" ${cityScene.time==='sunset'?'selected':''}>🌇 Entardecer</option><option value="night" ${cityScene.time==='night'?'selected':''}>🌙 Noite</option></select>
+      <label>Condição do céu</label><select id="city-weather"><option value="clear" ${cityScene.weather==='clear'?'selected':''}>Céu limpo</option><option value="cloudy" ${cityScene.weather==='cloudy'?'selected':''}>Nublado com chuva</option></select>
+      <label>Vegetação</label><select id="city-vegetation"><option value="low" ${cityScene.vegetation==='low'?'selected':''}>Pouca</option><option value="medium" ${cityScene.vegetation==='medium'?'selected':''}>Média</option><option value="high" ${cityScene.vegetation==='high'?'selected':''}>Densa</option></select>
+      <label><input type="checkbox" id="city-show-coverage" ${cityScene.showCoverage?'checked':''}> Exibir áreas de cobertura 4G/5G</label>
+      <label><input type="checkbox" id="city-show-labels" ${cityScene.showLabels?'checked':''}> Exibir identificação do cenário</label>
+    </div>
     <div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button onclick="activateCityScene(false)">Abrir cidade vazia</button><button class="green" onclick="activateCityScene(true)">✨ Montar exemplo completo</button></div>`);
 }
 function citySceneDefaults(scene={}){
@@ -984,7 +991,7 @@ function buildCityNeighborhood(){
 function activateCityScene(withExample){
   const name=(document.getElementById('city-name')?.value||'Cidade Conectada').trim().slice(0,60);
   if(withExample&&(devices.length||connections.length||racks.length)&&!confirm('Montar o exemplo completo apagará a topologia atual. Deseja continuar?'))return;
-  saveHistory();cityScene=citySceneDefaults({...cityScene,active:true,name});closeModal();
+  saveHistory();cityScene=citySceneDefaults({...cityScene,active:true,name,time:document.getElementById('city-time')?.value,weather:document.getElementById('city-weather')?.value,vegetation:document.getElementById('city-vegetation')?.value,showCoverage:!!document.getElementById('city-show-coverage')?.checked,showLabels:!!document.getElementById('city-show-labels')?.checked});closeModal();
   if(withExample)buildCityExample();
   setMode('select');draw();
   rackNotice('Cenário de cidade aberto',withExample?'O exemplo foi montado. Você pode mover, excluir ou acrescentar equipamentos.':'Use a aba Cidade para adicionar torres, residências e celulares.','ok');
