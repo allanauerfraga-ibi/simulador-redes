@@ -982,9 +982,9 @@ function toggleCityCoverage(){
 }
 function buildCityNeighborhood(){
   if(!cityScene.active)cityScene=citySceneDefaults({...cityScene,active:true});
-  const historyBefore=history.slice(),neighborhoodSnapshot={devices:JSON.parse(JSON.stringify(devices)),connections:JSON.parse(JSON.stringify(connections)),racks:JSON.parse(JSON.stringify(racks)),cityScene:JSON.parse(JSON.stringify(cityScene))},w=Math.max(canvas.width,780),h=Math.max(canvas.height,430),spots=[[.59,.68],[.69,.63],[.79,.69],[.89,.63]];
+  const historyBefore=history.slice(),neighborhoodSnapshot={devices:JSON.parse(JSON.stringify(devices)),connections:JSON.parse(JSON.stringify(connections)),racks:JSON.parse(JSON.stringify(racks)),cityScene:JSON.parse(JSON.stringify(cityScene))},w=Math.max(canvas.width,780),h=Math.max(canvas.height,430),spots=[[.18,.68],[.30,.80],[.70,.68],[.86,.79]];
   spots.forEach(([px,py])=>addDevice(w*px,h*py,'house'));
-  [[.55,.55],[.66,.52],[.76,.55],[.86,.52]].forEach(([px,py])=>addDevice(w*px,h*py,'person'));
+  [[.39,.72],[.29,.88],[.66,.72],[.82,.88]].forEach(([px,py])=>addDevice(w*px,h*py,'person'));
   history=historyBefore;history.push(neighborhoodSnapshot);if(history.length>50)history.shift();document.querySelectorAll('#btn-undo,#btn-undo-quick').forEach(btn=>btn.disabled=false);
   setMode('select');updateAll();rackNotice('Bairro montado','Foram adicionadas 4 residências e 4 pessoas com celular. Agora conecte os assinantes às torres.','ok');
 }
@@ -1045,11 +1045,11 @@ function buildCityExample(){
   const w=Math.max(canvas.width,780),h=Math.max(canvas.height,430);
   pendingTowerTechnology='4G/5G';pendingTowerOperator='AllanNet Mobile';pendingTowerRange=850;
   const tower=addDevice(w*.24,h*.25,'cellTower');
-  const dataCenter=addDevice(w*.12,h*.62,'dataCenter');
+  const dataCenter=addDevice(w*.12,h*.64,'dataCenter');
   pendingSatelliteProvider='starlink';
   const satellite=addDevice(w*.48,h*.12,'satellite');
-  const house1=addDevice(w*.57,h*.69,'house'),house2=addDevice(w*.70,h*.64,'house'),house3=addDevice(w*.80,h*.72,'house');
-  const person1=addDevice(w*.48,h*.52,'person'),person2=addDevice(w*.64,h*.47,'person'),person3=addDevice(w*.75,h*.52,'person');
+  const house1=addDevice(w*.29,h*.75,'house'),house2=addDevice(w*.70,h*.68,'house'),house3=addDevice(w*.85,h*.79,'house');
+  const person1=addDevice(w*.39,h*.73,'person'),person2=addDevice(w*.66,h*.73,'person'),person3=addDevice(w*.81,h*.88,'person');
   connectSatelliteDevices(dataCenter,satellite,true);
   connectSatelliteDevices(satellite,tower,true);
   [house1,house2,house3,person1,person2,person3].forEach(client=>connectCellularDevices(tower,client,true));
@@ -1815,21 +1815,28 @@ function drawCitySceneBackground(){
   ctx.fillStyle='rgba(225,238,223,.72)';ctx.beginPath();ctx.moveTo(w*.17,h*.31);ctx.lineTo(w*.23,h*.25);ctx.lineTo(w*.285,h*.36);ctx.lineTo(w*.235,h*.32);ctx.closePath();ctx.fill();
   // Área urbana no vale.
   const grass=ctx.createLinearGradient(0,ground,0,h);grass.addColorStop(0,night?'#365548':sunset?'#697c50':'#71935d');grass.addColorStop(1,night?'#172d28':'#33513c');ctx.fillStyle=grass;ctx.fillRect(0,ground,w,h-ground);
-  // Rio ao fundo.
-  ctx.strokeStyle='rgba(102,190,220,.7)';ctx.lineWidth=18;ctx.beginPath();ctx.moveTo(-20,h*.69);ctx.bezierCurveTo(w*.28,h*.62,w*.53,h*.77,w+20,h*.66);ctx.stroke();ctx.strokeStyle='rgba(220,248,255,.55)';ctx.lineWidth=2;ctx.stroke();
-  // Estrada principal com perspectiva e faixa central.
+  // Bairro seco e urbanizado: lotes gramados, sem rio atravessando as residências.
+  const lotColor=night?'rgba(42,70,57,.62)':sunset?'rgba(120,130,78,.52)':'rgba(134,166,102,.55)';
+  ctx.fillStyle=lotColor;[[.035,.64,.28,.32],[.72,.64,.245,.32]].forEach(([x,y,lw,lh])=>ctx.fillRect(w*x,h*y,w*lw,h*lh));
+  ctx.strokeStyle=night?'rgba(108,132,118,.38)':'rgba(220,226,190,.58)';ctx.lineWidth=1;
+  [[.15,.64,.15,.96],[.27,.64,.27,.96],[.75,.64,.75,.96],[.87,.64,.87,.96]].forEach(([x1,y1,x2,y2])=>{ctx.beginPath();ctx.moveTo(w*x1,h*y1);ctx.lineTo(w*x2,h*y2);ctx.stroke();});
+  // Estrada principal asfaltada com perspectiva, acostamento e faixa central.
   ctx.fillStyle='#4d5457';ctx.beginPath();ctx.moveTo(w*.35,h);ctx.lineTo(w*.47,ground);ctx.lineTo(w*.57,ground);ctx.lineTo(w*.78,h);ctx.closePath();ctx.fill();
+  const asphalt=ctx.createLinearGradient(0,ground,0,h);asphalt.addColorStop(0,night?'#343b40':'#60686c');asphalt.addColorStop(1,night?'#20272b':'#3e4549');ctx.fillStyle=asphalt;ctx.beginPath();ctx.moveTo(w*.36,h);ctx.lineTo(w*.472,ground);ctx.lineTo(w*.568,ground);ctx.lineTo(w*.77,h);ctx.closePath();ctx.fill();
   ctx.strokeStyle='#e7d98b';ctx.lineWidth=3;ctx.setLineDash([18,15]);ctx.beginPath();ctx.moveTo(w*.565,h);ctx.lineTo(w*.52,ground);ctx.stroke();ctx.setLineDash([]);
   ctx.strokeStyle='#c9d0d1';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(w*.35,h);ctx.lineTo(w*.47,ground);ctx.moveTo(w*.78,h);ctx.lineTo(w*.57,ground);ctx.stroke();
-  // Calçadas, faixa de pedestres, sinalização, veículos e iluminação urbana.
-  ctx.strokeStyle=night?'#6e7b80':'#c9c5b9';ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(w*.337,h);ctx.lineTo(w*.462,ground);ctx.moveTo(w*.793,h);ctx.lineTo(w*.578,ground);ctx.stroke();
+  // Calçadas, meio-fio, entradas de garagem, faixa de pedestres e iluminação urbana.
+  ctx.strokeStyle=night?'#6e7b80':'#d6d0c2';ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(w*.337,h);ctx.lineTo(w*.462,ground);ctx.moveTo(w*.793,h);ctx.lineTo(w*.578,ground);ctx.stroke();
+  ctx.strokeStyle=night?'#a4adb0':'#f0ece4';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(w*.347,h);ctx.lineTo(w*.467,ground);ctx.moveTo(w*.783,h);ctx.lineTo(w*.573,ground);ctx.stroke();
+  [[.23,.78,.36,.80],[.70,.72,.77,.73],[.84,.84,.79,.85]].forEach(([x1,y1,x2,y2])=>{ctx.strokeStyle=night?'#666d70':'#bbb6aa';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(w*x1,h*y1);ctx.lineTo(w*x2,h*y2);ctx.stroke();});
   for(let i=0;i<5;i++){const yy=ground+24+i*7,x1=w*.47-(yy-ground)*.16,x2=w*.57+(yy-ground)*.28;ctx.strokeStyle='rgba(245,245,238,.82)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x1,yy);ctx.lineTo(x2,yy);ctx.stroke();}
   [[.47,.78,'#d94b45'],[.64,.87,'#2f80c5']].forEach(([px,py,color])=>{const x=w*px,y=h*py;ctx.fillStyle=color;ctx.strokeStyle='#17212b';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?.(x-15,y-7,30,14,4);ctx.fill();ctx.stroke();ctx.fillStyle='#9fd5ed';ctx.fillRect(x-8,y-6,15,5);ctx.fillStyle='#111';[-9,9].forEach(dx=>{ctx.beginPath();ctx.arc(x+dx,y+8,3,0,Math.PI*2);ctx.fill();});});
-  const lampPoints=[[.18,.66],[.31,.7],[.84,.68],[.94,.72]];ctx.strokeStyle=night?'#687982':'#5c666b';ctx.lineWidth=2;lampPoints.forEach(([px,py],i)=>{const x=w*px,y=h*py;ctx.beginPath();ctx.moveTo(x,y+34);ctx.lineTo(x,y);ctx.lineTo(x+9,y);ctx.stroke();ctx.fillStyle=night||sunset?'#fff3a6':'#d6dde0';ctx.beginPath();ctx.arc(x+11,y,3.5,0,Math.PI*2);ctx.fill();if(night||sunset){const lg=ctx.createRadialGradient(x+11,y,2,x+11,y,32);lg.addColorStop(0,'rgba(255,238,140,.34)');lg.addColorStop(1,'rgba(255,238,140,0)');ctx.fillStyle=lg;ctx.beginPath();ctx.arc(x+11,y,32,0,Math.PI*2);ctx.fill();}if(i<lampPoints.length-1){const nx=w*lampPoints[i+1][0],ny=h*lampPoints[i+1][1];ctx.strokeStyle='rgba(45,55,62,.7)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y+4);ctx.quadraticCurveTo((x+nx)/2,(y+ny)/2+12,nx,ny+4);ctx.stroke();}});
+  const lampPoints=[[.18,.66],[.32,.72],[.70,.68],[.86,.74],[.94,.82]];ctx.strokeStyle=night?'#687982':'#5c666b';ctx.lineWidth=2;lampPoints.forEach(([px,py],i)=>{const x=w*px,y=h*py;ctx.beginPath();ctx.moveTo(x,y+34);ctx.lineTo(x,y);ctx.lineTo(x+9,y);ctx.stroke();ctx.fillStyle=night||sunset?'#fff3a6':'#d6dde0';ctx.beginPath();ctx.arc(x+11,y,3.5,0,Math.PI*2);ctx.fill();if(night||sunset){const lg=ctx.createRadialGradient(x+11,y,2,x+11,y,32);lg.addColorStop(0,'rgba(255,238,140,.34)');lg.addColorStop(1,'rgba(255,238,140,0)');ctx.fillStyle=lg;ctx.beginPath();ctx.arc(x+11,y,32,0,Math.PI*2);ctx.fill();}if(i<lampPoints.length-1){const nx=w*lampPoints[i+1][0],ny=h*lampPoints[i+1][1];ctx.strokeStyle='rgba(45,55,62,.7)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y+4);ctx.quadraticCurveTo((x+nx)/2,(y+ny)/2+12,nx,ny+4);ctx.stroke();}});
   // Árvores distribuídas nas encostas e no bairro.
   const treeCount=cityScene.vegetation==='high'?38:cityScene.vegetation==='low'?12:22;for(let i=0;i<treeCount;i++){const x=(i*83+37)%Math.max(1,w),y=ground-5+((i*47)%75);if(x>w*.34&&x<w*.79&&y>h*.72)continue;const s=.55+(i%4)*.13;ctx.fillStyle='#59452c';ctx.fillRect(x-2*s,y,4*s,12*s);ctx.fillStyle=night?(i%3?'#173a2b':'#214a32'):(i%3?'#285d35':'#367244');ctx.beginPath();ctx.arc(x,y-5*s,9*s,0,Math.PI*2);ctx.arc(x-6*s,y,7*s,0,Math.PI*2);ctx.arc(x+6*s,y,7*s,0,Math.PI*2);ctx.fill();}
-  // Pequenas construções ao fundo para dar profundidade urbana.
-  for(let i=0;i<10;i++){const x=w*.39+i*w*.055,y=ground+12+(i%2)*8,ww=22+(i%3)*5,hh=18+(i%4)*4;ctx.fillStyle=night?'#27343b':['#e6d8bf','#d3e0e8','#e4c4b8'][i%3];ctx.fillRect(x,y-hh,ww,hh);ctx.fillStyle=night?'#19272d':['#8b4b3e','#536d7a','#76604d'][i%3];ctx.beginPath();ctx.moveTo(x-3,y-hh);ctx.lineTo(x+ww/2,y-hh-10);ctx.lineTo(x+ww+3,y-hh);ctx.closePath();ctx.fill();ctx.fillStyle=night&&i%3!==0?'#ffd36b':'#8fc7e5';ctx.fillRect(x+5,y-hh+6,5,6);ctx.fillRect(x+ww-10,y-hh+6,5,6);}
+  // Construções distantes permanecem nos bairros laterais, nunca sobre o asfalto.
+  const distantHomes=[.05,.11,.18,.25,.32,.68,.75,.82,.89,.95];
+  distantHomes.forEach((px,i)=>{const x=w*px,y=ground+10+(i%2)*7,ww=22+(i%3)*5,hh=18+(i%4)*4;ctx.fillStyle=night?'#27343b':['#e6d8bf','#d3e0e8','#e4c4b8'][i%3];ctx.fillRect(x-ww/2,y-hh,ww,hh);ctx.fillStyle=night?'#19272d':['#8b4b3e','#536d7a','#76604d'][i%3];ctx.beginPath();ctx.moveTo(x-ww/2-3,y-hh);ctx.lineTo(x,y-hh-10);ctx.lineTo(x+ww/2+3,y-hh);ctx.closePath();ctx.fill();ctx.fillStyle=night&&i%3!==0?'#ffd36b':'#8fc7e5';ctx.fillRect(x-ww/2+5,y-hh+6,5,6);ctx.fillRect(x+ww/2-10,y-hh+6,5,6);});
   // Chuva animada no modo nublado, com gotas sobre a cidade e pequenos respingos no solo.
   if(cloudy){const rainPhase=performance.now()*.34;ctx.lineCap='round';for(let i=0;i<115;i++){const x=(i*97+31)%Math.max(1,w),speed=1+(i%4)*.14,y=(i*61+rainPhase*speed)%(h+90)-45,len=7+(i%5)*2;ctx.strokeStyle=night?'rgba(170,210,245,.48)':'rgba(70,145,190,.43)';ctx.lineWidth=i%7===0?1.45:.85;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-3,y+len);ctx.stroke();if(y>ground&&y<h-8&&i%8===0){ctx.strokeStyle=night?'rgba(185,220,250,.32)':'rgba(90,160,200,.34)';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(x-7,y+len+2);ctx.quadraticCurveTo(x,y+len-1,x+7,y+len+2);ctx.stroke();}}ctx.lineCap='butt';}
   // Identificação discreta da sala.
@@ -2486,13 +2493,22 @@ animate();
 // =========================================================
 // CANVAS EVENTS
 // =========================================================
+function cityHouseLotPosition(x,y){
+  if(!cityScene.active)return{x,y};
+  const w=canvas.width,h=canvas.height,ground=h*.60;
+  y=Math.max(ground+38,Math.min(h-58,y));x=Math.max(52,Math.min(w-52,x));
+  const progress=Math.max(0,Math.min(1,(y-ground)/Math.max(1,h-ground)));
+  const roadLeft=w*(.47-.12*progress),roadRight=w*(.57+.21*progress),safeMargin=58;
+  if(x>roadLeft-safeMargin&&x<roadRight+safeMargin)x=Math.abs(x-roadLeft)<Math.abs(x-roadRight)?roadLeft-safeMargin:roadRight+safeMargin;
+  return{x:Math.max(52,Math.min(w-52,x)),y};
+}
 canvas.addEventListener('mousedown',e=>{
   if(examState.active&&examState.locked){rackNotice('Prova já entregue','A topologia foi bloqueada após o envio ao professor.');return;}
   const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
   const dev=getAt(x,y);
   const rack=getRackAt(x,y);
   if(mode==='addRack'){addRack(x,y,pendingRackSize,document.getElementById('btn-rack').dataset.rackName);return;}
-  if(mode==='add'){addDevice(x,y,addType);return;}
+  if(mode==='add'){const point=addType==='house'?cityHouseLotPosition(x,y):{x,y};addDevice(point.x,point.y,addType);return;}
   if(mode==='deleteLink'){deleteConnectionAt(x,y);return;}
   if(mode==='wifi'){selectWiFiDevice(dev);return;}
   if(mode==='cellular'){selectCellularDevice(dev);return;}
@@ -2524,7 +2540,7 @@ canvas.addEventListener('mousemove',e=>{
     tip.innerHTML=`<b>${ICONS[dev.type]} ${dev.name}</b>${dev.type==='server'?`<br>Formato: <b style="color:#bc8cff">${serverFormatLabel(dev)}</b>`:dev.type==='switch'?`<br>Formato: <b style="color:#56d364">${switchFormatLabel(dev)}</b>`:dev.type==='patchPanel'?`<br>Tipo: <b style="color:#f2cc60">Passivo · 1U · ${dev.portCount||24} portas</b>`:dev.type==='cellTower'?`<br>Operadora: <b style="color:#ff79b0">${dev.operatorName||'AllanNet Mobile'}</b><br>Tecnologia: ${dev.towerTechnology||'4G/5G'} · alcance ${towerRangeKm(dev.coverageRadius)} km<br>Backhaul orbital: <b style="color:${dev.satelliteId?'#ffd166':'#8b949e'}">${dev.satelliteId?(devices.find(s=>s.id===dev.satelliteId)?.name||'conectado'):'não conectado'}</b>`:dev.type==='house'?`<br>Serviço: <b style="color:#ffd166">Internet residencial FWA</b><br>Torre: ${devices.find(t=>t.id===dev.cellTowerId)?.name||'não conectada'}`:dev.type==='person'?`<br>Dispositivo: <b style="color:#5ee6b3">Smartphone 4G/5G</b><br>Operadora: ${dev.mobileOperator||'não conectada'}<br>Torre: ${devices.find(t=>t.id===dev.cellTowerId)?.name||'sem sinal'}`:dev.type==='dataCenter'?`<br>Infraestrutura: <b style="color:#7dd3fc">Prédio de processamento e serviços</b><br>Capacidade: ${dev.capacityGbps||100} Gb/s<br>Enlace orbital: <b style="color:${dev.satelliteId?'#ffd166':'#8b949e'}">${dev.satelliteId?(devices.find(s=>s.id===dev.satelliteId)?.name||'conectado'):'não conectado'}</b>`:['satDish','satellite'].includes(dev.type)?`<br>Provedor: <b style="color:${SATELLITE_PROVIDERS[dev.satelliteProvider]?.color||'#70e1ff'}">${dev.providerName||'Satelital'} · ${dev.orbit||'-'}</b><br>Banda: ${formatBandwidth(dev.satelliteBW||100)} · Latência: ~${dev.satelliteLatency||'-'} ms`:''}${dev.rackId?`<br>Posição no rack: <b style="color:#58a6ff">U${(dev.rackSlotU||0)+1}</b>`:''}${dev.type==='patchPanel'?'':`<br>IP: <code>${dev.ip}</code><br>MAC: <code style="font-size:9px">${dev.mac}</code>`}<br>Status: <b style="color:${dev.status==='up'?'#3fb950':'#f85149'}">${dev.status.toUpperCase()}</b>`;
   }else{tip.style.display='none';}
 });
-canvas.addEventListener('mouseup',()=>{const moved=dragging;if(moved)assignRack(moved);dragging=null;draggingRack=null;updateAll();if(moved)updateProp(moved);});
+canvas.addEventListener('mouseup',()=>{const moved=dragging;if(moved?.type==='house'&&cityScene.active)Object.assign(moved,cityHouseLotPosition(moved.x,moved.y));if(moved)assignRack(moved);dragging=null;draggingRack=null;updateAll();if(moved)updateProp(moved);});
 canvas.addEventListener('contextmenu',e=>{e.preventDefault();deleteSelected();});
 function getAt(x,y){
   const ordered=devices.slice().reverse();
