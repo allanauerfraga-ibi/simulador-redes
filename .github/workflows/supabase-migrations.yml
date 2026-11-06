@@ -48,4 +48,4 @@ jobs:
           PY
           )"
           DB_URL="postgresql://postgres.${SUPABASE_PROJECT_ID}:${ENCODED_PASSWORD}@${SUPABASE_POOLER_HOST}:5432/postgres"
-          supabase db push --db-url "$DB_URL"
+          supabase db push --db-url "$DB_URL" --yes
