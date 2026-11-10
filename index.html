@@ -710,9 +710,56 @@ const CLASS_ACTIVITIES={
   vlan6:{room:'vlan',level:6,title:'Segmentação híbrida',desc:'Distribua pelo menos 10 clientes e servidores em 4 VLANs. Inclua Notebook, Computador, celulares por Wi-Fi, switch de mesa e switch de rack, roteador, firewall, servidor de rack e servidor torre. Organize o núcleo no rack e garanta comunicação entre as VLANs.'},
   vlan7:{room:'vlan',level:7,title:'Segmentação com Internet redundante',desc:'Monte 5 VLANs para pelo menos 12 clientes e servidores, usando 3 switches — incluindo um modelo de 24 portas no rack —, patch panel, roteador, firewall e servidores rack/torre. Acrescente dois provedores ligados por fibra e acesso via satélite, mantendo comunicação entre as VLANs e saída para a Internet.'}
 };
+
+// Matriz equilibrada das 15 versões: todas exigem exatamente a mesma carga de
+// trabalho e usam a mesma quantidade de critérios na correção automática.
+// O contexto muda para evitar provas idênticas, mas o nível não aumenta conforme
+// o número da versão.
+const BALANCED_PRACTICAL_CONTEXTS=[
+  ['Rede administrativa escolar','Organize a rede da secretaria, da coordenação e do laboratório.'],
+  ['Rede de biblioteca e laboratório','Integre a biblioteca, o laboratório e a sala dos professores.'],
+  ['Rede de centro de formação','Atenda recepção, salas de curso e setor administrativo.'],
+  ['Rede de unidade de saúde','Conecte recepção, consultórios e administração.'],
+  ['Rede de empresa de tecnologia','Integre desenvolvimento, suporte e administração.'],
+  ['Rede de escola técnica','Atenda laboratórios, secretaria e sala docente.'],
+  ['Rede de centro cultural','Conecte recepção, auditório e setor de produção.'],
+  ['Rede de cooperativa','Integre atendimento, operações e administração.'],
+  ['Rede de hotel','Atenda recepção, administração e área de hóspedes.'],
+  ['Rede de centro esportivo','Conecte recepção, administração e área técnica.'],
+  ['Rede de pequeno campus','Integre bloco acadêmico, biblioteca e administração.'],
+  ['Rede de empresa comercial','Atenda vendas, estoque e administração.'],
+  ['Rede de polo educacional','Conecte atendimento, laboratórios e coordenação.'],
+  ['Rede de serviços municipais','Integre atendimento, setor técnico e administração.'],
+  ['Rede de centro comunitário','Atenda recepção, salas de atividades e administração.']
+];
+const BALANCED_CITY_CONTEXTS=[
+  'bairro escolar','bairro residencial','distrito rural','centro urbano','bairro industrial',
+  'comunidade litorânea','região serrana','bairro turístico','comunidade agrícola','novo loteamento',
+  'bairro universitário','distrito comercial','comunidade afastada','cidade de pequeno porte','região metropolitana'
+];
+const BALANCED_PRACTICAL_RULES=Object.freeze({
+  pc:4,phone:4,switch:2,wirelessRouter:2,firewall:1,server:2,patchPanel:1,rack:1,
+  mixedComputers:true,towerServer:true,rackServer:true,rackSwitch:true,rackPatchLinked:true,
+  pcToSwitch:true,phonesWifi:true,twoWifiAreas:true,minSubnets:2,minBackbones:2,
+  gigabit:true,allReachServers:true
+});
+BALANCED_PRACTICAL_CONTEXTS.forEach(([title,context],index)=>{
+  const key=`prova${String(index+1).padStart(2,'0')}`;
+  CLASS_ACTIVITIES[key]={
+    room:'exam',level:'MÉDIO–AVANÇADO',title,
+    desc:`${context} Use 4 computadores (incluindo Notebook e Computador), 4 celulares, 2 switches, 2 roteadores sem fio, 1 firewall e 2 servidores (rack e torre). Organize switch de rack e patch panel no rack, distribua os computadores em 2 redes /24, os celulares em 2 áreas Wi-Fi, crie 2 enlaces de backbone, configure um enlace central de 1 Gb/s e faça todos os clientes alcançarem os dois servidores.`,
+    examRules:{...BALANCED_PRACTICAL_RULES}
+  };
+  const cityKey=`provaCidade${String(index+1).padStart(2,'0')}`;
+  CLASS_ACTIVITIES[cityKey]={
+    room:'city',level:3,title:`Cidade conectada — ${BALANCED_CITY_CONTEXTS[index]}`,
+    desc:`Construa um cenário para um ${BALANCED_CITY_CONTEXTS[index]} com 1 Data Center, 2 torres 4G/5G, 1 satélite, 4 residências e 6 pessoas com celular. Conecte o Data Center e as duas torres ao satélite, ofereça cobertura 4G/5G a todos e distribua os assinantes entre as duas torres.`
+  };
+});
 const PRACTICAL_EXAM_KEYS=Array.from({length:15},(_,index)=>`prova${String(index+1).padStart(2,'0')}`);
-// A segunda etapa usa 15 atividades diferentes e percorre todas as salas já trabalhadas.
-const PRACTICAL_EXAM_STAGE2_KEYS=['lan6','wifi6','backbone4','vlan4','city1','lan7','wifi7','backbone5','vlan5','city2','backbone6','vlan6','city3','backbone7','vlan7'];
+// A segunda etapa também possui 15 contextos diferentes, todos com os mesmos
+// sete critérios avançados da Sala Cidade.
+const PRACTICAL_EXAM_STAGE2_KEYS=Array.from({length:15},(_,index)=>`provaCidade${String(index+1).padStart(2,'0')}`);
 
 const COLORS={pc:'#1f6feb',phone:'#00b8d9',router:'#e05c2a',switch:'#1a7f37',patchPanel:'#d29922',server:'#8250df',firewall:'#cf222e',cloud:'#0969da',satDish:'#00a6c7',satellite:'#f0a91f',cellTower:'#ff3d8d',house:'#f59e0b',person:'#19a974',dataCenter:'#0ea5e9'};
 const GLOW={pc:'#58a6ff',phone:'#70e1ff',router:'#ff8a50',switch:'#56d364',patchPanel:'#f2cc60',server:'#bc8cff',firewall:'#ff6166',cloud:'#4dabf7',satDish:'#70e1ff',satellite:'#ffd166',cellTower:'#ff79b0',house:'#ffd166',person:'#5ee6b3',dataCenter:'#7dd3fc'};
@@ -5421,4 +5468,582 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha, node) {
     if(notebook){
       // Notebook 3D aberto, com tela fina e base em perspectiva.
       const lw=s*1.22,lh=s*.76,lx=x-lw/2,ly=y-lh*.7;
-      ctx.shado
+      ctx.shadowBlur=24;ctx.shadowColor='#4dabf766';
+      const lf=ctx.createLinearGradient(lx,ly,lx+lw,ly+lh);lf.addColorStop(0,'#536a78');lf.addColorStop(.18,'#263742');lf.addColorStop(1,'#070d12');
+      iso3D(lx,ly,lw,lh,6,'#617986','#16242c',lf);ctx.shadowBlur=0;
+      ctx.strokeStyle='#4dabf7cc';ctx.lineWidth=1.2;rr(lx,ly,lw,lh,4);ctx.stroke();
+      const sx=lx+5,sy=ly+5,sw=lw-10,sh=lh-10,sg=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);sg.addColorStop(0,'#17628a');sg.addColorStop(.5,'#12365d');sg.addColorStop(1,'#4a246d');ctx.fillStyle=sg;rr(sx,sy,sw,sh,2);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.moveTo(sx+2,sy+2);ctx.lineTo(sx+sw*.35,sy+2);ctx.lineTo(sx+sw*.12,sy+sh-2);ctx.lineTo(sx+2,sy+sh-2);ctx.closePath();ctx.fill();
+      ctx.fillStyle='rgba(4,11,20,.74)';rr(sx+8,sy+8,sw-17,sh-18,2);ctx.fill();ctx.fillStyle='#256b9c';ctx.fillRect(sx+8,sy+8,sw-17,5);
+      ['#ff7b72','#f2cc60','#56d364'].forEach((c,i)=>led(sx+12+i*7,sy+10.5,1.6,c,0));
+      ctx.fillStyle='rgba(88,166,255,.36)';for(let i=0;i<3;i++)ctx.fillRect(sx+12,sy+19+i*6,(sw-27)*(1-i*.16),2);
+      led(x,ly+3,1.8,'#4dabf7',5);
+      const bw=lw*1.08,bh=s*.32,bx=x-bw/2,by=ly+lh+s*.08,bg=ctx.createLinearGradient(bx,by,bx,by+bh);bg.addColorStop(0,'#607581');bg.addColorStop(.3,'#344650');bg.addColorStop(1,'#111a20');
+      iso3D(bx,by,bw,bh,8,'#718792','#17232a',bg);
+      // Teclas individuais e touchpad.
+      const keyW=bw*.075,keyH=bh*.16,startX=bx+bw*.12,startY=by+bh*.12;
+      for(let row=0;row<3;row++)for(let key=0;key<9;key++){ctx.fillStyle='#101820';rr(startX+key*(keyW+2)+(row===2?keyW/2:0),startY+row*(keyH+2),keyW,keyH,1);ctx.fill();ctx.strokeStyle='rgba(180,210,225,.23)';ctx.lineWidth=.4;ctx.stroke();}
+      ctx.fillStyle='#1b2830';ctx.strokeStyle='#607681';rr(x-bw*.13,by+bh*.67,bw*.26,bh*.22,2);ctx.fill();ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,.28)';rr(x-bw*.22,by+bh-2,bw*.44,1.5,.7);ctx.fill();
+    }else{
+      // Computador 3D: monitor, teclado, gabinete e mouse.
+      const mw=s*1.02,mh=s*.72,mx=x-s*.12;
+      const fg=ctx.createLinearGradient(mx-mw/2,y-mh/2,mx+mw/2,y+mh/2);fg.addColorStop(0,'#405564');fg.addColorStop(1,'#0c1820');iso3D(mx-mw/2,y-mh/2,mw,mh,6,'#526a78','#172832',fg);
+      ctx.fillStyle='#07101a';rr(mx-mw/2+5,y-mh/2+5,mw-10,mh-16,2);ctx.fill();const sg=ctx.createLinearGradient(mx-mw/2+6,y-mh/2+6,mx+mw/2-6,y+mh/2-17);sg.addColorStop(0,'#17628a');sg.addColorStop(1,'#351b59');ctx.fillStyle=sg;rr(mx-mw/2+6,y-mh/2+6,mw-12,mh-18,2);ctx.fill();led(mx,y-mh/2+3,1.5,'#4dabf7',4);
+      ctx.fillStyle='#253640';ctx.fillRect(mx-4,y+mh/2-1,8,s*.18);rr(mx-mw*.25,y+mh/2+s*.16,mw*.5,s*.07,3);ctx.fill();
+      const kw=mw*.78,kh=s*.13,kx=mx-kw/2,ky=y+mh/2+s*.29,kg=ctx.createLinearGradient(kx,ky,kx,ky+kh);kg.addColorStop(0,'#465b68');kg.addColorStop(1,'#111a20');iso3D(kx,ky,kw,kh,3,'#566c78','#142029',kg);
+      const tw=s*.31,th=s*.88,tx=x+mw/2+s*.08,ty=y-mh/2+s*.02,tg=ctx.createLinearGradient(tx,ty,tx+tw,ty+th);tg.addColorStop(0,'#354955');tg.addColorStop(1,'#070c10');iso3D(tx,ty,tw,th,5,'#4c626f','#101b22',tg);ctx.fillStyle='#05090c';rr(tx+3,ty+5,tw-6,s*.12,2);ctx.fill();led(tx+tw/2,ty+th-s*.13,s*.045,'#4dabf7',9);
+      ctx.fillStyle='#263640';rr(mx+kw*.5,ky,s*.13,s*.2,s*.06);ctx.fill();ctx.strokeStyle='#526673';ctx.stroke();
+    }
+
+  } else if (shape === 'phone') {
+    const pw=s*.76,ph=s*1.28,left=x-pw/2,top=y-ph/2;
+    ctx.shadowBlur=24;ctx.shadowColor='#70e1ff66';
+    const pf=ctx.createLinearGradient(left,top,left+pw,top+ph);
+    pf.addColorStop(0,'#70818c');pf.addColorStop(.2,'#23333d');pf.addColorStop(1,'#05090d');
+    iso3D(left,top,pw,ph,7,'#536b78','#101b21',pf);
+    ctx.strokeStyle='#70e1ffcc';ctx.lineWidth=1.5;rr(left,top,pw,ph,7);ctx.stroke();ctx.shadowBlur=0;
+    // Botões físicos na lateral do aparelho.
+    ctx.strokeStyle='#8a9aa4';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(left-1,top+s*.28);ctx.lineTo(left-1,top+s*.48);ctx.moveTo(left+pw+1,top+s*.34);ctx.lineTo(left+pw+1,top+s*.58);ctx.stroke();
+    // Tela, papel de parede e brilho no vidro.
+    const sx=left+4,sy=top+4,sw=pw-8,sh=ph-8;
+    const scr=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);
+    scr.addColorStop(0,'#164b79');scr.addColorStop(.5,'#12687a');scr.addColorStop(1,'#4a236f');ctx.fillStyle=scr;rr(sx,sy,sw,sh,4);ctx.fill();
+    const halo=ctx.createRadialGradient(x+s*.12,y+s*.2,1,x+s*.12,y+s*.2,s*.62);
+    halo.addColorStop(0,'rgba(112,225,255,.62)');halo.addColorStop(1,'rgba(112,225,255,0)');ctx.fillStyle=halo;ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.09)';ctx.beginPath();ctx.moveTo(sx+2,sy+2);ctx.lineTo(sx+sw*.42,sy+2);ctx.lineTo(sx+sw*.15,sy+sh-2);ctx.lineTo(sx+2,sy+sh-2);ctx.closePath();ctx.fill();
+    // Ilha dinâmica, câmera e informações de status.
+    ctx.fillStyle='#020406';rr(x-s*.14,sy+2,s*.28,s*.09,s*.05);ctx.fill();
+    ctx.fillStyle='#245879';ctx.beginPath();ctx.arc(x+s*.07,sy+s*.065,s*.018,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.font=`bold ${Math.max(4,s*.075)}px Arial`;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText('10:24',sx+3,sy+s*.09);
+    ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=.7;
+    [s*.03,s*.05,s*.07].forEach(rad=>{ctx.beginPath();ctx.arc(sx+sw-6,sy+s*.11,rad,Math.PI+.65,-.65);ctx.stroke();});
+    // Grade de aplicativos com pequenos glifos.
+    const apps=['#4dabf7','#56d364','#ff7b72','#d2a8ff','#f2cc60','#79c0ff'];
+    const aw=s*.105,gap=s*.09,startX=x-s*.21,startY=y-s*.18;
+    apps.forEach((ac,i)=>{const ax=startX+(i%3)*(aw+gap),ay=startY+Math.floor(i/3)*(aw+s*.11);ctx.fillStyle=ac;rr(ax,ay,aw,aw,aw*.26);ctx.fill();ctx.fillStyle='rgba(255,255,255,.5)';ctx.beginPath();ctx.arc(ax+aw/2,ay+aw/2,aw*.17,0,Math.PI*2);ctx.fill();});
+    // Dock translúcido e barra de navegação.
+    ctx.fillStyle='rgba(4,12,20,.58)';rr(sx+4,sy+sh-s*.22,sw-8,s*.15,s*.055);ctx.fill();
+    ['#70e1ff','#56d364','#ff8c00'].forEach((dc,i)=>{ctx.fillStyle=dc;rr(x-s*.21+i*s*.17,sy+sh-s*.19,s*.095,s*.095,s*.025);ctx.fill();});
+    ctx.fillStyle='rgba(255,255,255,.86)';rr(x-s*.12,sy+sh-3,s*.24,1.6,.8);ctx.fill();
+
+  } else if (shape === 'router') {
+    const rw=s*1.38,rh=s*0.4;
+    ctx.shadowBlur=24;ctx.shadowColor=color+'55';
+    const rf=ctx.createLinearGradient(x-rw/2,y-rh/2,x-rw/2,y+rh/2);
+    rf.addColorStop(0,'#22273e');rf.addColorStop(0.5,'#181c2e');rf.addColorStop(1,'#0d1020');
+    iso3D(x-rw/2,y-rh/2,rw,rh,7,'#2c3250','#1a1e38',rf);
+    ctx.strokeStyle=color+'cc';ctx.lineWidth=1.5;rr(x-rw/2,y-rh/2,rw,rh,6);ctx.stroke();
+    ctx.shadowBlur=0;
+    // Ventilation slits
+    ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=0.5;
+    for(let i=0;i<6;i++)ctx.strokeRect(x-rw/2+6+i*7,y+rh/2-5,4,3);
+    // Antennas (3)
+    const ants=[{ox:-rw*0.36,h:s*.72},{ox:0,h:s*.58},{ox:rw*0.36,h:s*.68}];
+    ants.forEach(a=>{
+      ctx.strokeStyle='#556';ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(x+a.ox,y-rh/2);ctx.lineTo(x+a.ox,y-rh/2-a.h*.85);ctx.stroke();
+      ctx.strokeStyle=color;ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(x+a.ox,y-rh/2-a.h*.85);ctx.lineTo(x+a.ox,y-rh/2-a.h);ctx.stroke();
+      const ag=ctx.createRadialGradient(x+a.ox,y-rh/2-a.h,0,x+a.ox,y-rh/2-a.h,4);
+      ag.addColorStop(0,color);ag.addColorStop(1,color+'00');
+      ctx.fillStyle=ag;ctx.beginPath();ctx.arc(x+a.ox,y-rh/2-a.h,4,0,Math.PI*2);ctx.fill();
+    });
+    // WiFi signal rings from top
+    [8,15,22].forEach((rad,i)=>{
+      ctx.strokeStyle=`${color}${['55','33','18'][i]}`;ctx.lineWidth=1-i*.2;
+      ctx.beginPath();ctx.arc(x,y-rh/2-s*.05,rad,Math.PI+.5,-.5);ctx.stroke();
+    });
+    // Ports
+    for(let i=0;i<4;i++) port(x-rw*0.27+i*rw*0.155-5,y-2,10,8,i<3);
+    // WAN port (different color)
+    ctx.fillStyle='#0a0510';ctx.strokeStyle='#ff8c0066';ctx.lineWidth=1;
+    rr(x+rw*.35-5,y-2,10,8,1);ctx.fill();ctx.stroke();
+    led(x+rw*.35,y-4,2,'#ff8c00',8);
+    // USB port
+    ctx.fillStyle='#0a0a15';ctx.strokeStyle='#4dabf766';ctx.lineWidth=.8;
+    ctx.fillRect(x-rw*.42,y-3,6,9);ctx.strokeRect(x-rw*.42,y-3,6,9);
+    // Brand name
+    ctx.fillStyle='rgba(255,255,255,0.08)';ctx.font=`bold ${Math.max(5,r*.3)}px "Arial Narrow",monospace`;
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('ROUTER',x,y);
+    // Power LED
+    led(x+rw/2-6,y,2.5,color,12);
+
+  } else if (shape === 'switch') {
+    const sw=s*1.6,sh=s*0.3;
+    ctx.shadowBlur=20;ctx.shadowColor=color+'44';
+    const sf=ctx.createLinearGradient(x-sw/2,y-sh/2,x-sw/2,y+sh/2);
+    sf.addColorStop(0,'#162318');sf.addColorStop(1,'#0a1510');
+    iso3D(x-sw/2,y-sh/2,sw,sh,5,'#1f3022','#111a12',sf);
+    ctx.strokeStyle=color+'aa';ctx.lineWidth=1.2;rr(x-sw/2,y-sh/2,sw,sh,3);ctx.stroke();
+    ctx.shadowBlur=0;
+    // 24 ports in 2 rows of 12
+    const np=12,pw=6.2,ph=5.5,gap2=1.8;
+    const totalPW=np*(pw+gap2)-gap2;
+    for(let row=0;row<2;row++){
+      for(let i=0;i<np;i++){
+        const px=x-totalPW/2+i*(pw+gap2);
+        const py=y-sh/2+sh*0.1+row*(ph+2.5);
+        const active=Math.random()>.25;
+        ctx.fillStyle='#050e06';ctx.strokeStyle='#182018';ctx.lineWidth=.4;
+        ctx.fillRect(px,py,pw,ph);ctx.strokeRect(px,py,pw,ph);
+        ctx.fillStyle='#030808';ctx.fillRect(px+.5,py+1.5,pw-1,ph-2.5);
+        // bicolor LED (link/activity)
+        const lc=active?(Math.random()>.7?'#ff8c00':'#3fb950'):'#111';
+        led(px+pw/2,py-1.5,1.3,lc,active?4:0);
+      }
+    }
+    // SFP uplink slots
+    for(let i=0;i<2;i++){
+      ctx.fillStyle='#070e07';ctx.strokeStyle='#4dabf744';ctx.lineWidth=.8;
+      ctx.fillRect(x+sw/2-22+i*11,y-sh/2+2,9,sh-4);ctx.strokeRect(x+sw/2-22+i*11,y-sh/2+2,9,sh-4);
+      ctx.fillStyle='#4dabf7';ctx.fillRect(x+sw/2-20+i*11,y-sh/2+3,5,2);
+    }
+    // Console + management
+    ctx.fillStyle='#040c04';ctx.strokeStyle='#d2a67944';ctx.lineWidth=.6;
+    ctx.fillRect(x-sw/2+3,y-sh*.2,5,sh*.55);ctx.strokeRect(x-sw/2+3,y-sh*.2,5,sh*.55);
+    // System / Pwr LEDs
+    led(x-sw/2+12,y,2.2,'#3fb950',10);
+    led(x-sw/2+19,y,2.2,'#ff8c00',6);
+    ctx.fillStyle='rgba(255,255,255,0.07)';ctx.font=`bold ${Math.max(5,r*.25)}px monospace`;
+    ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('24-PORT MANAGED SWITCH',x,y+sh/2-1);
+
+  } else if (shape === 'patchPanel') {
+    const pw=s*1.65,ph=s*.28;
+    ctx.shadowBlur=20;ctx.shadowColor='#d2992244';
+    const pf=ctx.createLinearGradient(x-pw/2,y-ph/2,x-pw/2,y+ph/2);pf.addColorStop(0,'#3b372d');pf.addColorStop(1,'#17140d');
+    iso3D(x-pw/2,y-ph/2,pw,ph,5,'#4a4333','#211d13',pf);ctx.strokeStyle='#d29922';ctx.lineWidth=1.2;rr(x-pw/2,y-ph/2,pw,ph,3);ctx.stroke();ctx.shadowBlur=0;
+    const ports=24,step=(pw-20)/(ports-1);
+    for(let i=0;i<ports;i++){
+      const px=x-pw/2+10+i*step;ctx.fillStyle='#080808';ctx.strokeStyle='#8a6f25';ctx.lineWidth=.4;ctx.fillRect(px-2,y-3,4,6);ctx.strokeRect(px-2,y-3,4,6);
+    }
+    ctx.fillStyle='#f2cc60';ctx.font=`bold ${Math.max(4,r*.22)}px monospace`;ctx.textAlign='right';ctx.textBaseline='bottom';ctx.fillText('PATCH PANEL',x+pw/2-4,y+ph/2-1);
+
+  } else if (shape === 'serverRack' || shape === 'server') {
+    const srw=s*.95,srh=s*1.35;
+    ctx.shadowBlur=22;ctx.shadowColor='#f8514944';
+    const srf=ctx.createLinearGradient(x-srw/2,y-srh/2,x-srw/2,y+srh/2);
+    srf.addColorStop(0,'#282828');srf.addColorStop(1,'#101010');
+    iso3D(x-srw/2,y-srh/2,srw,srh,6,'#353535','#1a1a1a',srf);
+    ctx.strokeStyle='#444';ctx.lineWidth=1.2;rr(x-srw/2,y-srh/2,srw,srh,3);ctx.stroke();
+    ctx.shadowBlur=0;
+    // 4 rack units
+    const units=4,unitH=(srh-8)/units;
+    for(let u=0;u<units;u++){
+      const uy=y-srh/2+4+u*unitH;
+      const ug=ctx.createLinearGradient(x-srw/2+2,uy,x-srw/2+2,uy+unitH-2);
+      ug.addColorStop(0,'#2c2c2c');ug.addColorStop(1,'#1a1a1a');
+      ctx.fillStyle=ug;rr(x-srw/2+2,uy,srw-4,unitH-2,2);ctx.fill();
+      ctx.strokeStyle='#333';ctx.lineWidth=.5;rr(x-srw/2+2,uy,srw-4,unitH-2,2);ctx.stroke();
+      // drive bays
+      for(let b=0;b<3;b++){
+        const bx=x-srw/2+5+b*(srw*.28),bw2=srw*.25,bh2=unitH-6;
+        const bg3=ctx.createLinearGradient(bx,uy+2,bx+bw2,uy+2+bh2);
+        bg3.addColorStop(0,'#1c1c1c');bg3.addColorStop(1,'#121212');
+        ctx.fillStyle=bg3;ctx.strokeStyle='#2a2a2a';ctx.lineWidth=.4;
+        ctx.fillRect(bx,uy+2,bw2,bh2);ctx.strokeRect(bx,uy+2,bw2,bh2);
+        // handle bar
+        ctx.fillStyle='#3a3a3a';ctx.fillRect(bx+2,uy+unitH-7,bw2-4,2);
+        // activity LED
+        const act=Math.random()>.5;
+        led(bx+4,uy+4,1.5,act?'#ff8c00':'#1a1a1a',act?6:0);
+      }
+      // status LEDs right
+      const stC=[u===0?'#3fb950':u<3?'#3fb950':'#333','#ff8c00'][u%2===1&&u<2?1:0]||'#3fb950';
+      led(x+srw/2-8,uy+unitH/2,2.5,u<3?'#3fb950':'#333',u<3?8:0);
+      // unit label
+      ctx.fillStyle='rgba(255,255,255,0.07)';ctx.font=`${Math.max(4,r*.22)}px monospace`;
+      ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(`1U-${u+1}`,x-srw/2+4,uy+2);
+    }
+    // Power button
+    const pbg=ctx.createRadialGradient(x+srw/2-9,y+srh/2-9,0,x+srw/2-9,y+srh/2-9,5);
+    pbg.addColorStop(0,'#5aff8a');pbg.addColorStop(1,'#1a6a30');
+    ctx.fillStyle=pbg;ctx.shadowBlur=14;ctx.shadowColor='#3fb950';
+    ctx.beginPath();ctx.arc(x+srw/2-9,y+srh/2-9,4.5,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#2a2a2a';ctx.lineWidth=1;ctx.stroke();
+    ctx.shadowBlur=0;
+    // Vent holes bottom
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    for(let v=0;v<8;v++) ctx.fillRect(x-srw/2+4+v*8,y+srh/2-5,5,3);
+
+  } else if (shape === 'serverTower') {
+    const tw=s*.78,th=s*1.55;
+    ctx.shadowBlur=22;ctx.shadowColor='#f8514944';
+    const tf=ctx.createLinearGradient(x-tw/2,y-th/2,x+tw/2,y+th/2);
+    tf.addColorStop(0,'#333');tf.addColorStop(1,'#0c0c0c');
+    iso3D(x-tw/2,y-th/2,tw,th,7,'#3b3b3b','#171717',tf);
+    ctx.strokeStyle='#555';ctx.lineWidth=1.2;rr(x-tw/2,y-th/2,tw,th,4);ctx.stroke();ctx.shadowBlur=0;
+    for(let b=0;b<3;b++){
+      const by=y-th/2+8+b*12;
+      ctx.fillStyle='#141414';ctx.strokeStyle='#444';ctx.lineWidth=.6;ctx.fillRect(x-tw/2+5,by,tw-10,9);ctx.strokeRect(x-tw/2+5,by,tw-10,9);
+      ctx.fillStyle='#555';ctx.fillRect(x+tw/2-10,by+3,3,3);
+    }
+    ctx.fillStyle='#080808';ctx.beginPath();ctx.arc(x,y+th/2-15,9,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#333';ctx.lineWidth=1;for(let a=0;a<Math.PI*2;a+=Math.PI/4){ctx.beginPath();ctx.moveTo(x,y+th/2-15);ctx.lineTo(x+Math.cos(a)*8,y+th/2-15+Math.sin(a)*8);ctx.stroke();}
+    led(x+tw/2-8,y+th/2-7,3,'#3fb950',10);
+
+  } else if (shape === 'firewall') {
+    const fw=s*1.18,fh=s*.48;
+    ctx.shadowBlur=24;ctx.shadowColor='#f8514966';
+    const ff=ctx.createLinearGradient(x-fw/2,y-fh/2,x-fw/2,y+fh/2);
+    ff.addColorStop(0,'#2e1212');ff.addColorStop(1,'#160808');
+    iso3D(x-fw/2,y-fh/2,fw,fh,6,'#3e1818','#201010',ff);
+    ctx.strokeStyle='#f85149';ctx.lineWidth=1.5;rr(x-fw/2,y-fh/2,fw,fh,5);ctx.stroke();
+    ctx.shadowBlur=0;
+    // Ventilation mesh pattern
+    ctx.fillStyle='rgba(0,0,0,0.3)';
+    for(let vx=0;vx<5;vx++) for(let vy=0;vy<2;vy++)
+      ctx.fillRect(x+fw*.1+vx*8,y-fh*.3+vy*7,5,4);
+    // Shield logo (detailed)
+    const shH=fh*.85,shW=shH*.65;
+    ctx.save();
+    ctx.shadowBlur=12;ctx.shadowColor='#f85149';
+    // Outer shield
+    ctx.fillStyle='#f8514933';ctx.strokeStyle='#f85149';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(x,y-shH*.48);
+    ctx.lineTo(x+shW*.5,y-shH*.2);ctx.lineTo(x+shW*.5,y+shH*.08);
+    ctx.quadraticCurveTo(x+shW*.5,y+shH*.35,x,y+shH*.52);
+    ctx.quadraticCurveTo(x-shW*.5,y+shH*.35,x-shW*.5,y+shH*.08);
+    ctx.lineTo(x-shW*.5,y-shH*.2);ctx.closePath();ctx.fill();ctx.stroke();
+    // Inner shield highlight
+    ctx.fillStyle='rgba(248,81,73,0.12)';
+    ctx.beginPath();ctx.moveTo(x,y-shH*.42);
+    ctx.lineTo(x+shW*.38,y-shH*.16);ctx.lineTo(x+shW*.38,y+shH*.04);
+    ctx.quadraticCurveTo(x,y+shH*.28,x,y+shH*.28);
+    ctx.quadraticCurveTo(x-shW*.38,y+shH*.04,x-shW*.38,y+shH*.04);
+    ctx.lineTo(x-shW*.38,y-shH*.16);ctx.closePath();ctx.fill();
+    // Lightning bolt
+    ctx.strokeStyle='#f85149';ctx.lineWidth=1.5;ctx.fillStyle='#f85149';
+    ctx.beginPath();ctx.moveTo(x+2,y-shH*.28);ctx.lineTo(x-5,y+2);ctx.lineTo(x,y+2);ctx.lineTo(x-3,y+shH*.3);
+    ctx.lineTo(x+6,y-2);ctx.lineTo(x+1,y-2);ctx.closePath();ctx.fill();
+    ctx.restore();
+    // 6 ports
+    for(let i=0;i<6;i++){
+      const lcs=['#3fb950','#3fb950','#f85149','#f85149','#ff8c00','#333'];
+      port(x-fw*.38+i*(fw*.13)-4,y+fh*.14,9,fh*.28,i<4);
+    }
+    // Status panel right
+    ctx.fillStyle='#0d0505';ctx.strokeStyle='#f8514944';ctx.lineWidth=.8;
+    rr(x+fw*.35,y-fh*.3,fw*.12,fh*.6,2);ctx.fill();ctx.stroke();
+    led(x+fw*.35+fw*.06,y-fh*.15,2,'#3fb950',8);
+    led(x+fw*.35+fw*.06,y+fh*.05,2,'#f85149',8);
+    led(x+fw*.35+fw*.06,y+fh*.22,2,'#ff8c00',6);
+
+  } else if (shape === 'satDish') {
+    const p=SATELLITE_PROVIDERS[node?.satelliteProvider]||SATELLITE_PROVIDERS.starlink,pc=p.color;
+    ctx.shadowBlur=22;ctx.shadowColor=pc+'66';
+    ctx.strokeStyle='#78909c';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,y+r*.2);ctx.lineTo(x,y+r*1.05);ctx.stroke();
+    const dg=ctx.createLinearGradient(x-r,y-r,x+r,y+r);dg.addColorStop(0,'#f4f8fa');dg.addColorStop(.55,'#9fb1bc');dg.addColorStop(1,'#42545f');
+    ctx.save();ctx.translate(x,y-r*.15);ctx.rotate(-.45);ctx.fillStyle=dg;ctx.strokeStyle=pc;ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(0,0,r*1.1,r*.48,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.strokeStyle='#5f7380';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(r*.2,0);ctx.lineTo(r*.95,-r*.42);ctx.stroke();led(r*.95,-r*.42,r*.12,pc,8);ctx.restore();
+    ctx.shadowBlur=0;ctx.fillStyle='#21323b';ctx.strokeStyle=pc;rr(x-r*.65,y+r*.92,r*1.3,r*.3,4);ctx.fill();ctx.stroke();
+    ctx.fillStyle=pc;ctx.font=`bold ${Math.max(5,r*.28)}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.name.toUpperCase(),x,y+r*1.08);
+
+  } else if (shape === 'satellite') {
+    const p=SATELLITE_PROVIDERS[node?.satelliteProvider]||SATELLITE_PROVIDERS.starlink,pc=p.color;
+    ctx.shadowBlur=24;ctx.shadowColor=pc+'66';
+    const pw=r*1.25,ph=r*.65;[-1,1].forEach(side=>{const px=side<0?x-r*2.1:x+r*.85;ctx.fillStyle='#12346a';ctx.strokeStyle='#4dabf7';rr(px,y-ph/2,pw,ph,3);ctx.fill();ctx.stroke();for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(px+i*pw/4,y-ph/2);ctx.lineTo(px+i*pw/4,y+ph/2);ctx.stroke();}});
+    const body=ctx.createLinearGradient(x-r,y-r,x+r,y+r);body.addColorStop(0,'#f4f5f6');body.addColorStop(.45,'#8999a3');body.addColorStop(1,'#2f3b42');ctx.fillStyle=body;ctx.strokeStyle=pc;rr(x-r*.85,y-r*.7,r*1.7,r*1.4,6);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#152832';rr(x-r*.5,y-r*.36,r,r*.72,3);ctx.fill();led(x,y-r*.08,r*.15,pc,10);
+    ctx.strokeStyle='#708690';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y+r*.55);ctx.lineTo(x,y+r*1.15);ctx.stroke();ctx.fillStyle='#dbe4e8';ctx.strokeStyle=pc;ctx.beginPath();ctx.ellipse(x,y+r*1.15,r*.55,r*.2,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.shadowBlur=0;ctx.strokeStyle=pc+'66';ctx.setLineDash([4,5]);ctx.beginPath();ctx.ellipse(x,y,r*2.6,r*1.1,-.18,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=pc;ctx.font=`bold ${Math.max(6,r*.32)}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.orbit,x,y+r*.2);
+
+  } else if (shape === 'dataCenter') {
+    const bw=s*1.75,bh=s*1.35,bx=x-bw/2,by=y-bh/2;
+    const bg=ctx.createLinearGradient(bx,by,bx+bw,by+bh);bg.addColorStop(0,'#334b5f');bg.addColorStop(.5,'#14293a');bg.addColorStop(1,'#07131e');
+    ctx.shadowBlur=24;ctx.shadowColor=color+'66';iso3D(bx,by,bw,bh,10,'#45677f','#0a1c2a',bg);ctx.shadowBlur=0;
+    ctx.strokeStyle=color+'cc';ctx.lineWidth=1.6;rr(bx,by,bw,bh,5);ctx.stroke();
+    for(let row=0;row<3;row++)for(let column=0;column<6;column++){
+      const ww=bw*.1,wh=bh*.11,wx=bx+bw*.08+column*bw*.145,wy=by+bh*.18+row*bh*.2;
+      ctx.fillStyle=(row+column)%3===0?'#7dd3fc':'#1d4f70';rr(wx,wy,ww,wh,1);ctx.fill();
+    }
+    ctx.fillStyle='#071018';ctx.strokeStyle=color;rr(x-bw*.12,by+bh*.72,bw*.24,bh*.28,2);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#d9f4ff';ctx.font=`bold ${Math.max(6,r*.28)}px Arial`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('DATA CENTER',x,by+bh*.09);
+    ctx.strokeStyle='#a8c2d2';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+bw*.28,by-8);ctx.lineTo(x+bw*.28,by-25);ctx.stroke();
+    ctx.fillStyle='#e8f2f7';ctx.strokeStyle=color;ctx.beginPath();ctx.ellipse(x+bw*.28,by-27,11,5,-.35,0,Math.PI*2);ctx.fill();ctx.stroke();
+    [12,20].forEach(rad=>{ctx.strokeStyle=color+'66';ctx.beginPath();ctx.arc(x+bw*.31,by-34,rad,Math.PI+.2,-.55);ctx.stroke();});
+
+  } else if (shape === 'cloud') {
+    // ── GLOBO ISP/CLOUD REALISTA HD ───────────
+    ctx.shadowBlur=28;ctx.shadowColor=color+'66';
+    // ocean base
+    const cg=ctx.createRadialGradient(x-r*.28,y-r*.32,r*.05,x,y,r);
+    cg.addColorStop(0,'#1e4a7a');cg.addColorStop(0.4,'#0f2d54');cg.addColorStop(0.8,'#081a36');cg.addColorStop(1,'#040e20');
+    ctx.fillStyle=cg;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.stroke();
+    ctx.shadowBlur=0;
+    // continent blobs
+    const conts=[{dx:-.25,dy:-.2,rw:.28,rh:.22},{dx:.2,dy:.15,rw:.22,rh:.18},{dx:-.1,dy:.3,rw:.15,rh:.12}];
+    ctx.fillStyle='rgba(60,160,80,0.55)';
+    conts.forEach(c2=>{
+      ctx.beginPath();ctx.ellipse(x+c2.dx*r,y+c2.dy*r,c2.rw*r,c2.rh*r,Math.random()*.5,0,Math.PI*2);ctx.fill();
+    });
+    // polar caps
+    ctx.fillStyle='rgba(220,240,255,0.35)';
+    ctx.beginPath();ctx.ellipse(x,y-r*.82,r*.28,r*.14,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(x,y+r*.82,r*.22,r*.11,0,0,Math.PI*2);ctx.fill();
+    // lat/lon lines
+    ctx.strokeStyle=color+'30';ctx.lineWidth=.6;
+    [-0.6,-0.3,0,0.3,0.6].forEach(lat=>{
+      const yr=y+lat*r,wr=Math.sqrt(Math.max(0,r*r-(lat*r)*(lat*r)));
+      ctx.beginPath();ctx.ellipse(x,yr,wr,wr*.25,0,0,Math.PI*2);ctx.stroke();
+    });
+    [-.5,-.1,.3,.7].forEach(lon=>{
+      ctx.beginPath();ctx.ellipse(x,y,Math.abs(lon)*r+r*.08,r,0,0,Math.PI*2);ctx.stroke();
+    });
+    // atmosphere glow rim
+    const atmo=ctx.createRadialGradient(x,y,r*.88,x,y,r*1.08);
+    atmo.addColorStop(0,'rgba(100,180,255,0.18)');atmo.addColorStop(1,'rgba(100,180,255,0)');
+    ctx.fillStyle=atmo;ctx.beginPath();ctx.arc(x,y,r*1.08,0,Math.PI*2);ctx.fill();
+    // specular highlight
+    const sp=ctx.createRadialGradient(x-r*.3,y-r*.35,0,x-r*.15,y-r*.2,r*.55);
+    sp.addColorStop(0,'rgba(200,230,255,0.28)');sp.addColorStop(1,'rgba(200,230,255,0)');
+    ctx.fillStyle=sp;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+    // orbit ring
+    ctx.strokeStyle=color+'66';ctx.lineWidth=.8;ctx.setLineDash([3,5]);
+    ctx.beginPath();ctx.ellipse(x,y,r*1.22,r*.32,Math.PI/6,0,Math.PI*2);ctx.stroke();
+    ctx.setLineDash([]);
+    // satellite on orbit
+    const sAngle=_3d.frame*.04;
+    const sx=x+Math.cos(sAngle)*r*1.22,sy=y+Math.sin(sAngle)*r*.32*.8;
+    ctx.fillStyle=color;ctx.shadowBlur=8;ctx.shadowColor=color;
+    ctx.fillRect(sx-4,sy-1.5,8,3);ctx.fillRect(sx-1,sy-4,2,8);
+    ctx.shadowBlur=0;
+    // pulsing signal rings
+    const pulse=Math.sin(_3d.frame*.07)*3;
+    [[r+6+pulse,'55'],[r+13+pulse*.7,'33'],[r+20+pulse*.4,'18']].forEach(([rad,op])=>{
+      const rgb=color.slice(1).match(/../g).map(h=>parseInt(h,16));
+      ctx.strokeStyle=`rgba(${rgb.join(',')},${parseInt(op,16)/255})`;
+      ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.stroke();
+    });
+    // network nodes on surface
+    const gnodes=[{a:-.3,b:-.4},{a:.5,b:.1},{a:-.15,b:.5},{a:.25,b:-.25},{a:.0,b:.3}];
+    gnodes.forEach((n2,i)=>{
+      const nx=x+n2.a*r*.85,ny=y+n2.b*r*.85;
+      ctx.fillStyle=i%2===0?'#fff':'#4dabf7';ctx.shadowBlur=6;ctx.shadowColor='#4dabf7';
+      ctx.beginPath();ctx.arc(nx,ny,2,0,Math.PI*2);ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.strokeStyle='rgba(100,180,255,0.3)';ctx.lineWidth=.5;
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(nx,ny);ctx.stroke();
+    });
+  } else {
+    ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+  }
+  ctx.restore();
+}
+
+function roundRect3D(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);
+  ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
+}
+
+
+
+function render3DLoop(){
+  if(!_3d.running){return;}
+  const c=document.getElementById('canvas3d');
+  if(!c||document.getElementById('modal3d').style.display==='none'){_3d.running=false;return;}
+  const ctx=c.getContext('2d');
+  c.width=window.innerWidth;c.height=window.innerHeight;
+
+  if(_3d.animating) _3d.rotY+=0.004;
+  _3d.frame++;
+
+  // Background gradient
+  const bg=ctx.createRadialGradient(c.width/2,c.height/2,0,c.width/2,c.height/2,c.width*.7);
+  bg.addColorStop(0,'#0a0f1a');bg.addColorStop(1,'#000408');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,c.width,c.height);
+
+  // Grid floor
+  ctx.save();ctx.strokeStyle='rgba(100,100,200,0.06)';ctx.lineWidth=1;
+  for(let g=-500;g<=500;g+=80){
+    const a=project3D(g,-120,-500),b=project3D(g,-120,500);
+    const c2=project3D(-500,-120,g),d2=project3D(500,-120,g);
+    ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(c2.sx,c2.sy);ctx.lineTo(d2.sx,d2.sy);ctx.stroke();
+  }
+  ctx.restore();
+
+  // Project all nodes
+  _3d.nodes.forEach(n=>{
+    const p=project3D(n.x,n.y,n.z);
+    n.px=p.sx;n.py=p.sy;n.pscale=p.scale;n.pz=p.z;
+  });
+
+  // Sort by Z (painter's algo)
+  const sorted=[..._3d.nodes].sort((a,b)=>a.pz-b.pz);
+
+  // Draw edges
+  _3d.edges.forEach(e=>{
+    const gradient=ctx.createLinearGradient(e.a.px,e.a.py,e.b.px,e.b.py);
+    gradient.addColorStop(0,e.kind==='wifi'?'#70e1ffcc':e.kind==='satellite'?'#ffd166dd':e.a.color+'66');
+    gradient.addColorStop(1,e.kind==='wifi'?'#38bcd8cc':e.kind==='satellite'?'#70e1ffdd':e.b.color+'66');
+    ctx.save();ctx.strokeStyle=gradient;ctx.lineWidth=e.kind==='backbone'?4:((e.kind==='wifi'||e.kind==='satellite')?2.5:1.5);
+    ctx.setLineDash(e.kind==='wifi'?[2,7]:(e.kind==='satellite'?[9,6]:[4,8]));ctx.beginPath();
+    ctx.moveTo(e.a.px,e.a.py);ctx.lineTo(e.b.px,e.b.py);ctx.stroke();
+    ctx.restore();
+  });
+
+  // Animate particles
+  if(_3d.animating){
+    _3d.particles.forEach(p=>{
+      p.t+=p.speed;if(p.t>1)p.t=0;
+      const px=p.edge.a.px+(p.edge.b.px-p.edge.a.px)*p.t;
+      const py=p.edge.a.py+(p.edge.b.py-p.edge.a.py)*p.t;
+      ctx.save();ctx.fillStyle=p.color;ctx.shadowBlur=8;ctx.shadowColor=p.color;
+      ctx.beginPath();ctx.arc(px,py,3,0,Math.PI*2);ctx.fill();ctx.restore();
+    });
+  }
+
+  // Ping ICMP: anima a rota de ida (azul) e a resposta (verde), mesmo com a câmera pausada.
+  draw3DPingParticles(ctx);
+
+  // Draw nodes
+  sorted.forEach(n=>{
+    const r=Math.max(10,20*n.pscale);
+    const shape=n.type==='server'?(n.serverType==='tower'?'serverTower':'serverRack'):(DEV_SHAPES[n.type]||'sphere');
+    // Glow
+    ctx.save();ctx.shadowBlur=20*n.pscale;ctx.shadowColor=n.color;
+    drawShape3D(ctx,shape,n.px,n.py,r,n.color,0.92,n);
+    ctx.restore();
+    // Inner highlight
+    ctx.save();ctx.fillStyle='rgba(255,255,255,0.18)';ctx.beginPath();ctx.arc(n.px-r*.2,n.py-r*.25,r*.35,0,Math.PI*2);ctx.fill();ctx.restore();
+    // Label
+    if(_3d.showLabels&&r>10){
+      ctx.save();
+      ctx.font=`bold ${Math.max(9,11*n.pscale)}px monospace`;
+      ctx.fillStyle='#fff';ctx.strokeStyle='rgba(0,0,0,.8)';ctx.lineWidth=3;
+      ctx.textAlign='center';ctx.textBaseline='top';
+      ctx.strokeText(n.name,n.px,n.py+r+3);
+      ctx.fillText(n.name,n.px,n.py+r+3);
+      // IP tag
+      ctx.font=`${Math.max(7,9*n.pscale)}px monospace`;
+      ctx.fillStyle=n.color;ctx.strokeStyle='rgba(0,0,0,.7)';ctx.lineWidth=2;
+      ctx.strokeText(n.ip,n.px,n.py+r+14);
+      ctx.fillText(n.ip,n.px,n.py+r+14);
+      ctx.restore();
+    }
+  });
+
+  // HUD
+  ctx.save();ctx.fillStyle='rgba(196,181,253,.7)';ctx.font='10px monospace';ctx.textAlign='right';ctx.textBaseline='top';
+  ctx.fillText('Dispositivos: '+_3d.nodes.length+' · Conexões: '+_3d.edges.length+' · Frame: '+_3d.frame,c.width-16,50);
+  ctx.restore();
+
+  requestAnimationFrame(render3DLoop);
+}
+
+// Mouse controls
+const c3=document.getElementById('canvas3d');
+function get3DNodeAt(x,y){
+  return [..._3d.nodes].sort((a,b)=>b.pz-a.pz).find(n=>{
+    const radius=Math.max(18,32*(n.pscale||1));
+    return Math.hypot(x-n.px,y-n.py)<=radius;
+  })||null;
+}
+function persist3DNodePosition(n){
+  const dev=devices.find(d=>d.id===n.id);
+  if(dev)dev.view3d={x:n.x,y:n.y,z:n.z};
+}
+function move3DNodeByScreen(n,dx,dy){
+  const scale=Math.max(n.pscale||1,.15);
+  const drx=dx/scale,dry=-dy/scale;
+  const cosX=Math.cos(_3d.rotX),sinX=Math.sin(_3d.rotX);
+  const cosY=Math.cos(_3d.rotY),sinY=Math.sin(_3d.rotY);
+  n.x+=drx*cosY-dry*sinX*sinY;
+  n.y+=dry*cosX;
+  n.z+=-drx*sinY-dry*sinX*cosY;
+  persist3DNodePosition(n);
+}
+function begin3DPointer(x,y){
+  _3d.drag=true;_3d.dragMoved=false;_3d.dragHistorySaved=false;
+  _3d.lastMX=x;_3d.lastMY=y;
+  _3d.dragNode=!_3d.animating?get3DNodeAt(x,y):null;
+  c3.style.cursor=_3d.dragNode?'grabbing':'grabbing';
+}
+function move3DPointer(x,y){
+  if(!_3d.drag)return;
+  const dx=x-_3d.lastMX,dy=y-_3d.lastMY;
+  if(Math.abs(dx)+Math.abs(dy)>1)_3d.dragMoved=true;
+  if(_3d.dragNode){
+    if(!_3d.dragHistorySaved&&_3d.dragMoved){saveHistory();_3d.dragHistorySaved=true;}
+    move3DNodeByScreen(_3d.dragNode,dx,dy);
+  }else{
+    _3d.rotY+=dx*.005;_3d.rotX+=dy*.005;
+  }
+  _3d.lastMX=x;_3d.lastMY=y;
+}
+function end3DPointer(x,y){
+  if(!_3d.drag)return;
+  const movedNode=_3d.dragNode,wasMoved=_3d.dragMoved;
+  _3d.drag=false;_3d.dragNode=null;_3d.dragMoved=false;_3d.dragHistorySaved=false;
+  c3.style.cursor=_3d.animating?'grab':'default';
+  if(movedNode){
+    persist3DNodePosition(movedNode);
+    if(!wasMoved)show3DInfo(movedNode);
+    else{draw();updateDevList();sysLog(`Posição 3D atualizada: ${movedNode.name}`,'lsys');}
+    return;
+  }
+  if(!wasMoved){const node=get3DNodeAt(x,y);if(node)show3DInfo(node);}
+}
+c3.addEventListener('mousedown',e=>{begin3DPointer(e.clientX,e.clientY);e.preventDefault();});
+c3.addEventListener('mouseup',e=>{
+  end3DPointer(e.clientX,e.clientY);
+});
+c3.addEventListener('mousemove',e=>{
+  if(_3d.drag){move3DPointer(e.clientX,e.clientY);return;}
+  if(!_3d.animating)c3.style.cursor=get3DNodeAt(e.clientX,e.clientY)?'grab':'default';
+});
+c3.addEventListener('mouseleave',e=>{if(_3d.drag)end3DPointer(e.clientX,e.clientY);});
+c3.addEventListener('wheel',e=>{e.preventDefault();_3d.camDist=Math.max(150,Math.min(1500,_3d.camDist+e.deltaY*.8));},{passive:false});
+// Touch
+c3.addEventListener('touchstart',e=>{begin3DPointer(e.touches[0].clientX,e.touches[0].clientY);},{passive:true});
+c3.addEventListener('touchend',e=>end3DPointer(_3d.lastMX,_3d.lastMY));
+c3.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  move3DPointer(e.touches[0].clientX,e.touches[0].clientY);
+},{passive:false});
+
+function show3DInfo(n){
+  const el=document.getElementById('modal3d-info');
+  const dev=devices.find(d=>d.id==n.id);
+  el.style.display='block';
+  el.innerHTML=`<div style="font-size:12px;font-weight:700;color:${n.color};margin-bottom:6px;">${n.name}</div>
+    <div><span style="color:#6e7681">Tipo:</span> ${n.type}</div>
+    <div><span style="color:#6e7681">IP:</span> <code style="color:#3fb950">${n.ip}</code></div>
+    ${dev?.mac?`<div><span style="color:#6e7681">MAC:</span> <code style="color:#6e7681;font-size:9px">${dev.mac}</code></div>`:''}
+    ${dev?.gw?`<div><span style="color:#6e7681">GW:</span> <code>${dev.gw}</code></div>`:''}
+    ${dev?.ssid?`<div><span style="color:#6e7681">Wi-Fi:</span> <code style="color:#70e1ff">${dev.ssid}</code></div>`:''}
+    ${n.ispData?`<div><span style="color:#6e7681">ISP:</span> ${n.ispData.name}</div>`:''}
+    ${n.routerType?`<div><span style="color:#6e7681">Modelo:</span> ${n.routerType}</div>`:''}
+    ${n.type==='server'?`<div><span style="color:#6e7681">Formato:</span> ${n.serverType==='tower'?'Servidor torre':'Servidor rack 2U'}</div>`:''}
+    ${n.type==='switch'?`<div><span style="color:#6e7681">Formato:</span> ${n.switchForm==='desktop'?'Switch de mesa':'Switch rack 1U'} · ${n.portCount||24} portas</div>`:''}
+    ${n.type==='patchPanel'?`<div><span style="color:#6e7681">Formato:</span> Patch panel passivo 1U · ${n.portCount||24} portas</div>`:''}
+    <div style="margin-top:6px;font-size:9px;color:#6e7681">Clique em outro ponto para fechar</div>`;
+}
+
+function toggle3DLabels(){_3d.showLabels=!_3d.showLabels;}
+function toggle3DAnimate(){
+  _3d.animating=!_3d.animating;
+  document.getElementById('btn3danim').textContent=_3d.animating?'⏸ Pausar':'▶ Retomar';
+  document.getElementById('modal3d-drag-hint').style.display=_3d.animating?'none':'block';
+  c3.style.cursor=_3d.animating?'grab':'default';
+  if(_3d.animating){_3d.dragNode=null;_3d.drag=false;}
+}
+function reset3DCam(){_3d.rotX=0.4;_3d.rotY=0.3;_3d.camDist=600;_3d.camX=0;_3d.camY=0;}
+function zoom3D(f){_3d.camDist=Math.max(150,Math.min(1500,_3d.camDist*f));}
+function setView3D(v){
+  if(v==='top'){_3d.rotX=1.57;_3d.rotY=0;}
+  else if(v==='side'){_3d.rotX=0;_3d.rotY=1.57;}
+  else{_3d.rotX=0.4;_3d.rotY=0.6;}
+}
+window.addEventListener('resize',()=>{
+  const c=document.getElementById('canvas3d');
+  if(c){c.width=window.innerWidth;c.height=window.innerHeight;}
+});
+</script>
+
+<!-- AllanNet EDU: avaliações da Sala Cidade e painel de entregas -->
+</body>
+</html>
