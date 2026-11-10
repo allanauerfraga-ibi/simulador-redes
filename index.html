@@ -653,7 +653,7 @@ let history=[];// undo stack [{devices, connections}]
 let cityScene={active:false,name:'Cidade Conectada',terrain:'mountains',time:'day',weather:'clear',vegetation:'medium',showCoverage:true,showLabels:true};
 let classroom={role:'student',studentName:'',activity:null,subnetColors:false,lastScore:null,faults:[],faultSnapshot:null};
 let teacherExamSession=null;
-const EMPTY_EXAM_STATE=Object.freeze({active:false,locked:false,attemptToken:'',examId:'',title:'',activity:'',assessmentType:'prova',customPrompt:'',knowledgeLevel:'',studentName:'',studentGrade:'',studentClass:'',studentSchool:'',deadline:'',maxScore:10});
+const EMPTY_EXAM_STATE=Object.freeze({active:false,locked:false,attemptToken:'',examId:'',examSetId:'',versionNumber:null,stageNumber:null,totalSetScore:null,title:'',activity:'',assessmentType:'prova',customPrompt:'',knowledgeLevel:'',studentName:'',studentName2:'',isPair:false,studentGrade:'',studentClass:'',studentSchool:'',deadline:'',maxScore:10});
 let examState={...EMPTY_EXAM_STATE};
 try{examState={...examState,...JSON.parse(sessionStorage.getItem('allannet-exam-state')||'{}')};sessionStorage.removeItem('allannet-teacher-session');}catch(e){}
 if(examState.studentSchool==='narceu')examState.studentClass='UNICA';
@@ -711,6 +711,8 @@ const CLASS_ACTIVITIES={
   vlan7:{room:'vlan',level:7,title:'Segmentação com Internet redundante',desc:'Monte 5 VLANs para pelo menos 12 clientes e servidores, usando 3 switches — incluindo um modelo de 24 portas no rack —, patch panel, roteador, firewall e servidores rack/torre. Acrescente dois provedores ligados por fibra e acesso via satélite, mantendo comunicação entre as VLANs e saída para a Internet.'}
 };
 const PRACTICAL_EXAM_KEYS=Array.from({length:15},(_,index)=>`prova${String(index+1).padStart(2,'0')}`);
+// A segunda etapa usa 15 atividades diferentes e percorre todas as salas já trabalhadas.
+const PRACTICAL_EXAM_STAGE2_KEYS=['lan6','wifi6','backbone4','vlan4','city1','lan7','wifi7','backbone5','vlan5','city2','backbone6','vlan6','city3','backbone7','vlan7'];
 
 const COLORS={pc:'#1f6feb',phone:'#00b8d9',router:'#e05c2a',switch:'#1a7f37',patchPanel:'#d29922',server:'#8250df',firewall:'#cf222e',cloud:'#0969da',satDish:'#00a6c7',satellite:'#f0a91f',cellTower:'#ff3d8d',house:'#f59e0b',person:'#19a974',dataCenter:'#0ea5e9'};
 const GLOW={pc:'#58a6ff',phone:'#70e1ff',router:'#ff8a50',switch:'#56d364',patchPanel:'#f2cc60',server:'#bc8cff',firewall:'#ff6166',cloud:'#4dabf7',satDish:'#70e1ff',satellite:'#ffd166',cellTower:'#ff79b0',house:'#ffd166',person:'#5ee6b3',dataCenter:'#7dd3fc'};
@@ -3154,35 +3156,56 @@ function showExamRoomModal(){
   if(examState.active){
     const status=examState.locked?'Entregue ao professor':'Em andamento';
     const activity=currentActivityDefinition();
-    const type=examTypeName(examState.assessmentType);showModal(`<h3>📝 Sala de Prova</h3><div class="exam-status"><strong>${escapeReport(examState.title)}</strong><br>Tipo: <b>${escapeReport(type)}</b> · Escola: <b>${escapeReport(examSchoolName(examState.studentSchool,true))}</b><br>Aluno: ${escapeReport(examState.studentName)} · ${escapeReport(examClassName(examState.studentSchool,examState.studentClass))}<br>Valor: <b>${formatExamNumber(examState.maxScore||10)} pontos</b> · Status: <b>${status}</b><br>⏰ Prazo final: <b>${formatExamDateTime(examState.deadline)}</b></div><div class="edu-note"><b>Enunciado</b><br>${escapeReport(activity?.desc||'Monte a rede solicitada pelo professor.')}</div><div class="edu-note">${examState.locked?`${type} registrada. A nota ficará disponível somente no painel do professor. Clique em “Sair” para limpar a área de trabalho e voltar ao simulador.`:`Quando terminar, use “Entregar prova” na barra superior.`}</div><div class="modal-btns">${examState.locked?`<button class="green" onclick="exitExamRoom()">🚪 Sair</button>`:`<button onclick="closeModal()">Fechar</button><button class="green" onclick="submitExamAttempt(false)">📨 Entregar agora</button>`}</div>`);return;
+    const type=examTypeName(examState.assessmentType),students=examState.isPair?`${escapeReport(examState.studentName)} e ${escapeReport(examState.studentName2)}`:escapeReport(examState.studentName),stage=examState.stageNumber?` · <b>Prova ${examState.stageNumber} de 2</b>`:'';
+    showModal(`<h3>📝 Sala de Prova</h3><div class="exam-status"><strong>${escapeReport(examState.title)}</strong><br>Tipo: <b>${escapeReport(type)}</b>${stage} · Escola: <b>${escapeReport(examSchoolName(examState.studentSchool,true))}</b><br>${examState.isPair?'Alunos':'Aluno'}: ${students} · ${escapeReport(examClassName(examState.studentSchool,examState.studentClass))}<br>Valor desta etapa: <b>${formatExamNumber(examState.maxScore||10)} pontos</b>${examState.totalSetScore?` · Valor total: <b>${formatExamNumber(examState.totalSetScore)} pontos</b>`:''} · Status: <b>${status}</b><br>⏰ Tempo único das duas provas: <b>${formatExamDateTime(examState.deadline)}</b></div><div class="edu-note"><b>Enunciado</b><br>${escapeReport(activity?.desc||'Monte a rede solicitada pelo professor.')}</div><div class="edu-note">${examState.locked?`${type} registrada. A nota ficará disponível somente no painel do professor. Clique em “Sair” para limpar a área de trabalho e voltar ao simulador.`:`Quando terminar, use “Entregar prova” na barra superior.`}</div><div class="modal-btns">${examState.locked?`<button class="green" onclick="exitExamRoom()">🚪 Sair</button>`:`<button onclick="closeModal()">Fechar</button><button class="green" onclick="submitExamAttempt(false)">📨 Entregar prova${examState.stageNumber?` ${examState.stageNumber}`:''}</button>`}</div>`);return;
   }
   const setup=examConfigured()?'':`<div class="edu-note">A Sala de Prova ainda aguarda a conexão com o banco de dados pelo professor.</div>`;
-  showModal(`<h3>📝 Entrar na Sala de Prova</h3>${setup}<div class="edu-note">Digite a senha informada pelo professor, seu nome e escolha a escola e a turma corretas. A nota não será exibida ao aluno após a entrega.</div><label>Senha da prova</label><input id="exam-password" type="password" autocomplete="off" placeholder="Senha informada pelo professor"><div class="exam-grid"><div class="full"><label>Nome completo</label><input id="exam-student-name" autocomplete="name" placeholder="Nome completo do aluno"></div><div class="full"><label>Escola</label><select id="exam-student-school" onchange="syncExamClassSelect('exam-student-school','exam-student-class')">${examSchoolOptions()}</select></div><div class="full"><label>Turma</label><select id="exam-student-class">${examClassOptions()}</select></div></div><div id="exam-entry-error" style="display:none;margin-top:8px;color:#f85149;font-weight:700"></div><div class="modal-btns">${classroom.role==='teacher'?`<button onclick="showSupabaseSetupModal()">⚙️ Banco de dados</button>`:''}<button onclick="closeModal()">Cancelar</button><button id="exam-entry-btn" class="green" onclick="enterExamRoom()" ${examConfigured()?'':'disabled'}>Entrar na prova</button></div>`);
+  showModal(`<h3>📝 Entrar na Sala de Prova</h3>${setup}<div class="edu-note">Digite a senha informada pelo professor, identifique o aluno ou a dupla e escolha a escola e a turma corretas. A nota não será exibida após a entrega.</div><label>Senha da prova</label><input id="exam-password" type="password" autocomplete="off" placeholder="Senha informada pelo professor"><div class="exam-grid"><div class="full"><label>Nome completo do primeiro aluno</label><input id="exam-student-name" autocomplete="name" placeholder="Nome completo do aluno"></div><div class="full"><label style="display:flex;align-items:center;gap:8px"><input id="exam-is-pair" type="checkbox" onchange="toggleExamPairFields()" style="width:auto"> Fazer a prova em dupla</label></div><div class="full" id="exam-partner-field" style="display:none"><label>Nome completo do segundo aluno</label><input id="exam-student-name-2" autocomplete="off" placeholder="Nome completo do segundo aluno"></div><div class="full"><label>Escola</label><select id="exam-student-school" onchange="syncExamClassSelect('exam-student-school','exam-student-class')">${examSchoolOptions()}</select></div><div class="full"><label>Turma</label><select id="exam-student-class">${examClassOptions()}</select></div></div><div id="exam-entry-error" style="display:none;margin-top:8px;color:#f85149;font-weight:700"></div><div class="modal-btns">${classroom.role==='teacher'?`<button onclick="showSupabaseSetupModal()">⚙️ Banco de dados</button>`:''}<button onclick="closeModal()">Cancelar</button><button id="exam-entry-btn" class="green" onclick="enterExamRoom()" ${examConfigured()?'':'disabled'}>Entrar na prova</button></div>`);
+}
+function toggleExamPairFields(){const pair=document.getElementById('exam-is-pair')?.checked,field=document.getElementById('exam-partner-field');if(field)field.style.display=pair?'block':'none';}
+function resetExamWorkspace(){
+  devices=[];connections=[];packets=[];racks=[];arpTable={};macTable={};selected=null;history=[];sTx=0;sRx=0;sDrop=0;
+  connectFirst=null;backboneFirst=null;backboneSecond=null;wifiFirst=null;ispFiberFirst=null;satelliteLinkFirst=null;
+  document.getElementById('canvas-area')?.classList.remove('exam-locked');setMode('select');updateProp(null);updateAll();
+}
+function activateExamData(data,studentName,studentName2='',isPair=false){
+  const generated=data.activity_key==='gerada'&&typeof data.custom_prompt==='string'&&data.custom_prompt.trim().length>0;
+  if(!CLASS_ACTIVITIES[data.activity_key]&&!generated)throw new Error('A atividade vinculada à prova não existe nesta versão do simulador.');
+  examState={active:true,locked:false,attemptToken:data.attempt_token,examId:data.exam_id,examSetId:data.exam_set_id||'',versionNumber:data.version_number||null,stageNumber:data.stage_number||null,totalSetScore:Number(data.total_set_score)||null,title:data.title,activity:data.activity_key,assessmentType:data.assessment_type||'prova',customPrompt:data.custom_prompt||'',knowledgeLevel:data.knowledge_level||'',studentName,studentName2:data.student_name_2||studentName2||'',isPair:Boolean(data.is_pair??isPair),studentGrade:SCHOOL_EXAM_GRADE,studentClass:examState.studentClass||'',studentSchool:data.school_code||examState.studentSchool||'',deadline:data.deadline,maxScore:Number(data.max_score)||10};persistExamState();
+  classroom.role='student';classroom.studentName=examState.isPair?`${studentName} e ${examState.studentName2}`:studentName;classroom.activity=data.activity_key;classroom.lastScore=null;resetExamWorkspace();syncClassroomUI();updateExamTimer();
 }
 async function enterExamRoom(){
   const btn=document.getElementById('exam-entry-btn'),error=document.getElementById('exam-entry-error');if(!btn||!error)return;
-  const password=document.getElementById('exam-password')?.value||'',studentName=document.getElementById('exam-student-name')?.value.trim()||'',studentSchool=document.getElementById('exam-student-school')?.value.trim()||'',studentClass=document.getElementById('exam-student-class')?.value.trim()||'',studentGrade=studentClass?SCHOOL_EXAM_GRADE:'';
-  if(!password||studentName.length<3||!studentSchool||!studentClass){error.textContent='Preencha a senha, o nome completo, escolha a escola e a turma.';error.style.display='block';return;}
+  const password=document.getElementById('exam-password')?.value||'',studentName=document.getElementById('exam-student-name')?.value.trim()||'',isPair=Boolean(document.getElementById('exam-is-pair')?.checked),studentName2=document.getElementById('exam-student-name-2')?.value.trim()||'',studentSchool=document.getElementById('exam-student-school')?.value.trim()||'',studentClass=document.getElementById('exam-student-class')?.value.trim()||'',studentGrade=studentClass?SCHOOL_EXAM_GRADE:'';
+  if(!password||studentName.length<3||(isPair&&studentName2.length<3)||!studentSchool||!studentClass){error.textContent='Preencha a senha, o nome do aluno ou da dupla, escolha a escola e a turma.';error.style.display='block';return;}
   btn.disabled=true;btn.textContent='Liberando...';error.style.display='none';
   try{
-    const data=await supabaseRequest('/rest/v1/rpc/start_exam',{method:'POST',body:{p_password:password,p_student_name:studentName,p_student_school:studentSchool,p_student_grade:studentGrade,p_student_class:studentClass}});
-    const isGeneratedActivity=data.activity_key==='gerada'&&typeof data.custom_prompt==='string'&&data.custom_prompt.trim().length>0;
-    if(!CLASS_ACTIVITIES[data.activity_key]&&!isGeneratedActivity)throw new Error('A atividade vinculada à prova não existe nesta versão do simulador.');
-    examState={active:true,locked:false,attemptToken:data.attempt_token,examId:data.exam_id,title:data.title,activity:data.activity_key,assessmentType:data.assessment_type||'prova',customPrompt:data.custom_prompt||'',knowledgeLevel:data.knowledge_level||'',studentName,studentGrade,studentClass,studentSchool:data.school_code||studentSchool,deadline:data.deadline,maxScore:Number(data.max_score)||10};persistExamState();
-    classroom.role='student';classroom.studentName=studentName;classroom.activity=data.activity_key;classroom.lastScore=null;
-    devices=[];connections=[];packets=[];racks=[];arpTable={};macTable={};selected=null;history=[];sTx=0;sRx=0;sDrop=0;
-    closeModal();setMode('select');syncClassroomUI();updateAll();updateExamTimer();rackNotice('Prova liberada',`${data.title}. O cronômetro já foi iniciado.`,'ok');
+    examState.studentSchool=studentSchool;examState.studentClass=studentClass;
+    let data;
+    try{data=await supabaseRequest('/rest/v1/rpc/start_exam_team',{method:'POST',body:{p_password:password,p_student_name:studentName,p_student_name_2:studentName2,p_is_pair:isPair,p_student_school:studentSchool,p_student_grade:studentGrade,p_student_class:studentClass}});}
+    catch(err){if(isPair||!/start_exam_team|function|schema cache|404/i.test(err.message||''))throw err;data=await supabaseRequest('/rest/v1/rpc/start_exam',{method:'POST',body:{p_password:password,p_student_name:studentName,p_student_school:studentSchool,p_student_grade:studentGrade,p_student_class:studentClass}});}
+    activateExamData(data,studentName,studentName2,isPair);examState.studentGrade=studentGrade;examState.studentClass=studentClass;examState.studentSchool=data.school_code||studentSchool;persistExamState();
+    closeModal();rackNotice('Prova liberada',`${data.title}. O cronômetro único de 50 minutos já foi iniciado.`,'ok');
   }catch(err){error.textContent=err.message;error.style.display='block';btn.disabled=false;btn.textContent='Entrar na prova';}
 }
 function examTopologySnapshot(){return {devices,connections,racks,cityScene:citySceneDefaults(cityScene),activity:classroom.activity,statistics:{tx:sTx,rx:sRx,drops:sDrop}};}
 async function submitExamAttempt(automatic){
   if(!examState.active||examState.locked)return;
-  if(!automatic&&!confirm('Entregar a prova agora? Depois do envio não será possível alterar a rede.'))return;
+  const stageLabel=examState.stageNumber?`Prova ${examState.stageNumber}`:'prova';
+  if(!automatic&&!confirm(`Entregar a ${stageLabel} agora? Depois do envio não será possível alterar esta montagem.`))return;
   try{
-    await supabaseRequest('/rest/v1/rpc/submit_exam_secure',{method:'POST',body:{p_attempt_token:examState.attemptToken,p_topology:examTopologySnapshot()}});
+    const deliveredToken=examState.attemptToken,deliveredStage=examState.stageNumber;
+    await supabaseRequest('/rest/v1/rpc/submit_exam_secure',{method:'POST',body:{p_attempt_token:deliveredToken,p_topology:examTopologySnapshot()}});
+    if(deliveredStage===1&&examState.examSetId&&!automatic){
+      showModal('<h3>✅ Prova 1 entregue</h3><div class="edu-note"><b>Primeira montagem registrada.</b> Preparando uma nova prova diferente para a mesma dupla ou aluno. O cronômetro de 50 minutos continua contando.</div>');
+      const data=await supabaseRequest('/rest/v1/rpc/start_exam_part_two',{method:'POST',body:{p_attempt_token:deliveredToken}}),studentName=examState.studentName,studentName2=examState.studentName2,isPair=examState.isPair,studentGrade=examState.studentGrade,studentClass=examState.studentClass,studentSchool=examState.studentSchool;
+      activateExamData(data,studentName,studentName2,isPair);examState.studentGrade=studentGrade;examState.studentClass=studentClass;examState.studentSchool=data.school_code||studentSchool;persistExamState();
+      closeModal();rackNotice('Prova 2 liberada',`${data.title}. A área foi limpa e o mesmo cronômetro continua em andamento.`,'ok');sysLog('PROVA: etapa 1 entregue e etapa 2 iniciada automaticamente.','lsys');return;
+    }
     examState.locked=true;persistExamState();document.getElementById('canvas-area')?.classList.add('exam-locked');syncActivityBar();
     const deliveredType=examTypeName(examState.assessmentType);
-    showModal(`<h3>✅ ${escapeReport(deliveredType)} entregue</h3><div class="edu-note"><b>Envio concluído.</b> Sua montagem e a correção automática foram registradas. A nota e os critérios de correção são visíveis somente para o professor.</div><div class="edu-note">Clique em <b>Sair</b> para limpar a área de trabalho e voltar ao simulador. A entrega continuará salva e você poderá iniciar outra prova ou atividade.</div><div class="modal-btns"><button class="green" onclick="exitExamRoom()">🚪 Sair</button></div>`);
+    const finalText=deliveredStage===2?'<b>As duas provas foram concluídas.</b> O sistema somará as notas da Prova 1 e da Prova 2 para apresentar o resultado total ao professor.':'<b>Envio concluído.</b> Sua montagem e a correção automática foram registradas.';
+    showModal(`<h3>✅ ${escapeReport(deliveredType)} entregue</h3><div class="edu-note">${finalText} A nota e os critérios de correção são visíveis somente para o professor.</div><div class="edu-note">Clique em <b>Sair</b> para limpar a área de trabalho e voltar ao simulador. A entrega continuará salva e você poderá iniciar outra prova ou atividade.</div><div class="modal-btns"><button class="green" onclick="exitExamRoom()">🚪 Sair</button></div>`);
     sysLog('PROVA: entrega registrada no banco de dados.','lsys');
   }catch(err){rackNotice('Não foi possível entregar',err.message,'err');}
 }
@@ -3242,26 +3265,26 @@ async function loadTeacherExamDashboard(schoolFilter=window._examSchoolFilter||'
   try{
     const token=teacherExamSession.access_token;
     let exams;
-    try{exams=await supabaseRequest('/rest/v1/exams?select=id,title,activity_key,assessment_type,school_code,target_grade,target_class,duration_minutes,max_score,starts_at,ends_at,active,created_at,custom_prompt,custom_rules,knowledge_level,generation_key&order=created_at.desc',{token});}
+    try{exams=await supabaseRequest('/rest/v1/exams?select=id,title,activity_key,assessment_type,school_code,target_grade,target_class,duration_minutes,max_score,starts_at,ends_at,active,created_at,custom_prompt,custom_rules,knowledge_level,generation_key,exam_set_id,version_number,stage_number,total_set_score&order=created_at.desc',{token});}
     catch(err){if(!/max_score|school_code|assessment_type|custom_prompt|custom_rules|knowledge_level|generation_key|column/i.test(err.message))throw err;exams=(await supabaseRequest('/rest/v1/exams?select=id,title,activity_key,assessment_type,school_code,target_grade,target_class,duration_minutes,max_score,starts_at,ends_at,active,created_at&order=created_at.desc',{token})).map(e=>({...e,assessment_type:e.assessment_type||'prova',school_code:e.school_code||'narceu',max_score:e.max_score||10}));}
     const attempts=[],attemptPageSize=1000;
-    for(let offset=0;offset<10000;offset+=attemptPageSize){const batch=await supabaseRequest(`/rest/v1/exam_attempts?select=id,exam_id,student_name,student_school,student_grade,student_class,started_at,submitted_at,status,score,passed_checks,total_checks,checks,topology&order=started_at.desc&limit=${attemptPageSize}&offset=${offset}`,{token});attempts.push(...batch);if(batch.length<attemptPageSize)break;}
+    for(let offset=0;offset<10000;offset+=attemptPageSize){let batch;try{batch=await supabaseRequest(`/rest/v1/exam_attempts?select=id,exam_id,student_name,student_name_2,is_pair,student_school,student_grade,student_class,started_at,submitted_at,status,score,passed_checks,total_checks,checks,topology&order=started_at.desc&limit=${attemptPageSize}&offset=${offset}`,{token});}catch(err){if(!/student_name_2|is_pair|column/i.test(err.message))throw err;batch=await supabaseRequest(`/rest/v1/exam_attempts?select=id,exam_id,student_name,student_school,student_grade,student_class,started_at,submitted_at,status,score,passed_checks,total_checks,checks,topology&order=started_at.desc&limit=${attemptPageSize}&offset=${offset}`,{token});}attempts.push(...batch);if(batch.length<attemptPageSize)break;}
     window._examDashboard={exams,attempts};
     const activityCandidates=exams.filter(e=>(!schoolFilter||(e.school_code||'narceu')===schoolFilter)&&(!typeFilter||(e.assessment_type||'prova')===typeFilter)&&(!classFilter||String(e.target_class||'')===classFilter||String(e.target_class||'').toUpperCase()==='TODAS'));
     const activeActivityFilter=activityCandidates.some(e=>e.id===activityFilter)?activityFilter:'';window._examActivityFilter=activeActivityFilter;
     const visibleExams=activityCandidates.filter(e=>!activeActivityFilter||e.id===activeActivityFilter),visibleIds=new Set(visibleExams.map(e=>e.id));
     const classAttempts=attempts.filter(a=>visibleIds.has(a.exam_id)&&(!classFilter||String(a.student_class||'')===classFilter));
-    const studentNames=[...new Set(classAttempts.map(a=>String(a.student_name||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    const studentNames=[...new Set(classAttempts.flatMap(a=>[String(a.student_name||'').trim(),String(a.student_name_2||'').trim()]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     const activeStudentFilter=studentNames.includes(studentFilter)?studentFilter:'';window._examStudentFilter=activeStudentFilter;
-    const visibleAttempts=classAttempts.filter(a=>!activeStudentFilter||String(a.student_name||'').trim()===activeStudentFilter);
+    const visibleAttempts=classAttempts.filter(a=>!activeStudentFilter||String(a.student_name||'').trim()===activeStudentFilter||String(a.student_name_2||'').trim()===activeStudentFilter);
     const examRows=visibleExams.map(e=>{
       const deliveredCount=attempts.filter(a=>a.exam_id===e.id&&(a.status==='submitted'||a.status==='expired')).length;
-      return `<tr><td><b>${escapeReport(e.title)}</b><br><small>${escapeReport(e.activity_key==='gerada'?`Atividade inédita · ${knowledgeLevelName(e.knowledge_level)}`:(CLASS_ACTIVITIES[e.activity_key]?.title||e.activity_key))}</small></td><td><b>${escapeReport(examTypeName(e.assessment_type))}</b></td><td><b>${escapeReport(examSchoolName(e.school_code,true))}</b></td><td>${escapeReport(examClassName(e.school_code||'narceu',e.target_class))}</td><td>${formatExamNumber(e.max_score||10)} pts</td><td><b>${formatExamDateTime(e.ends_at)}</b></td><td>${e.active?'🟢 Liberada':'⚫ Fechada'}</td><td style="white-space:normal;min-width:250px"><button onclick="showExamDeliveries('${e.id}')" style="font-size:8px;padding:3px 5px;background:#176b45;border-color:#45a873;color:#fff">📥 Ver entregas (${deliveredCount})</button> <button onclick="toggleExamActive('${e.id}',${!e.active})" style="font-size:8px;padding:3px 5px">${e.active?'Encerrar':'Liberar'}</button> <button onclick="showExtendExamModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#6b4f00;border-color:#d29922;color:#ffd166">⏰ Prorrogar</button> <button onclick="showChangeExamValueModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#075da8;border-color:#4e9bd3;color:#fff">✏️ Alterar valor</button> <button onclick="showChangeExamPasswordModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#6842a8;border-color:#a88ada;color:#fff">🔑 Alterar senha</button> ${e.activity_key==='gerada'?'':`<button onclick="showDuplicateExamClassModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#075da8;border-color:#4e9bd3;color:#fff">↔ Outra turma/escola</button>`} <button onclick="deleteExamOnline('${e.id}')" style="font-size:8px;padding:3px 5px;background:#b42318;border-color:#d94b45;color:#fff">🗑 Excluir</button></td></tr>`;
+      return `<tr><td><b>${escapeReport(e.title)}</b><br><small>${escapeReport(e.activity_key==='gerada'?`Atividade inédita · ${knowledgeLevelName(e.knowledge_level)}`:(CLASS_ACTIVITIES[e.activity_key]?.title||e.activity_key))}${e.stage_number?` · Etapa ${e.stage_number}/2`:''}</small></td><td><b>${escapeReport(examTypeName(e.assessment_type))}</b></td><td><b>${escapeReport(examSchoolName(e.school_code,true))}</b></td><td>${escapeReport(examClassName(e.school_code||'narceu',e.target_class))}</td><td>${formatExamNumber(e.max_score||10)} pts${e.total_set_score?`<br><small>Total: ${formatExamNumber(e.total_set_score)}</small>`:''}</td><td><b>${formatExamDateTime(e.ends_at)}</b></td><td>${e.active?'🟢 Liberada':'⚫ Fechada'}</td><td style="white-space:normal;min-width:250px"><button onclick="showExamDeliveries('${e.id}')" style="font-size:8px;padding:3px 5px;background:#176b45;border-color:#45a873;color:#fff">📥 Ver entregas (${deliveredCount})</button> <button onclick="toggleExamActive('${e.id}',${!e.active})" style="font-size:8px;padding:3px 5px">${e.active?'Encerrar':'Liberar'}</button> <button onclick="showExtendExamModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#6b4f00;border-color:#d29922;color:#ffd166">⏰ Prorrogar</button> <button onclick="showChangeExamValueModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#075da8;border-color:#4e9bd3;color:#fff">✏️ Alterar valor</button> <button onclick="showChangeExamPasswordModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#6842a8;border-color:#a88ada;color:#fff">🔑 Alterar senha</button> ${e.activity_key==='gerada'||e.exam_set_id?'':`<button onclick="showDuplicateExamClassModal('${e.id}')" style="font-size:8px;padding:3px 5px;background:#075da8;border-color:#4e9bd3;color:#fff">↔ Outra turma/escola</button>`} <button onclick="deleteExamOnline('${e.id}')" style="font-size:8px;padding:3px 5px;background:#b42318;border-color:#d94b45;color:#fff">🗑 Excluir</button></td></tr>`;
     }).join('');
     const examMap=new Map(exams.map(e=>[e.id,e]));
-    const resultRows=visibleAttempts.map(a=>{const e=examMap.get(a.exam_id),school=a.student_school||e?.school_code||'narceu',finished=a.status==='submitted'||a.status==='expired',value=Number(e?.max_score)||10,points=finished?examPoints(a.score,value):null,deliveredAt=finished&&a.submitted_at?formatExamDateTime(a.submitted_at):'Ainda não entregue';return `<tr><td>${escapeReport(a.student_name)}<br><small>${escapeReport(examClassName(school,a.student_class))}</small></td><td>${escapeReport(examTypeName(e?.assessment_type))}</td><td>${escapeReport(examSchoolName(school,true))}</td><td>${escapeReport(e?.title||'Prova')}</td><td>${finished?`<b>${formatExamNumber(points)}</b> / ${formatExamNumber(value)}<br><small>${a.score??0}%</small>`:'🟡 Em andamento'}</td><td><b>${escapeReport(deliveredAt)}</b>${a.status==='expired'?'<br><small style="color:#b42318">Após o prazo</small>':''}</td><td>${a.passed_checks??'-'}/${a.total_checks??'-'}</td><td style="white-space:normal;min-width:210px">${finished?`<button onclick="viewExamAttemptPDF('${a.id}')" style="font-size:8px;padding:4px 6px">👁 Ver PDF</button> `:''}<button onclick="releaseExamAttempt('${a.id}')" style="font-size:8px;padding:4px 6px;background:#9a6700;border-color:#d29922;color:#fff">🔓 Liberar aluno</button> <button onclick="deleteStudentRecords('${a.id}')" style="font-size:8px;padding:4px 6px;background:#b42318;border-color:#d94b45;color:#fff">🗑 Excluir aluno</button></td></tr>`;}).join('');
+    const resultRows=visibleAttempts.map(a=>{const e=examMap.get(a.exam_id),school=a.student_school||e?.school_code||'narceu',finished=a.status==='submitted'||a.status==='expired',value=Number(e?.max_score)||10,points=finished?examPoints(a.score,value):null,deliveredAt=finished&&a.submitted_at?formatExamDateTime(a.submitted_at):'Ainda não entregue',teamName=a.is_pair&&a.student_name_2?`${a.student_name} e ${a.student_name_2}`:a.student_name,setExams=e?.exam_set_id?exams.filter(item=>item.exam_set_id===e.exam_set_id):[],setIds=new Set(setExams.map(item=>item.id)),setAttempts=attempts.filter(item=>setIds.has(item.exam_id)&&String(item.student_name||'').trim()===String(a.student_name||'').trim()&&String(item.student_name_2||'').trim()===String(a.student_name_2||'').trim()),setEarned=setAttempts.filter(item=>item.status==='submitted'||item.status==='expired').reduce((sum,item)=>sum+examPoints(item.score,Number(examMap.get(item.exam_id)?.max_score)||0),0),setFinished=e?.exam_set_id&&setAttempts.filter(item=>item.status==='submitted'||item.status==='expired').length>=2,totalLine=e?.total_set_score?`<br><small>${setFinished?`Total final: <b>${formatExamNumber(setEarned)} / ${formatExamNumber(e.total_set_score)}</b>`:'Total final aguardando a Prova 2'}</small>`:'';return `<tr><td>${escapeReport(teamName)}<br><small>${escapeReport(examClassName(school,a.student_class))}</small></td><td>${escapeReport(examTypeName(e?.assessment_type))}</td><td>${escapeReport(examSchoolName(school,true))}</td><td>${escapeReport(e?.title||'Prova')}</td><td>${finished?`<b>${formatExamNumber(points)}</b> / ${formatExamNumber(value)}<br><small>${a.score??0}%</small>${totalLine}`:'🟡 Em andamento'+totalLine}</td><td><b>${escapeReport(deliveredAt)}</b>${a.status==='expired'?'<br><small style="color:#b42318">Após o prazo</small>':''}</td><td>${a.passed_checks??'-'}/${a.total_checks??'-'}</td><td style="white-space:normal;min-width:210px">${finished?`<button onclick="viewExamAttemptPDF('${a.id}')" style="font-size:8px;padding:4px 6px">👁 Ver PDF</button> `:''}<button onclick="releaseExamAttempt('${a.id}')" style="font-size:8px;padding:4px 6px;background:#9a6700;border-color:#d29922;color:#fff">🔓 Liberar aluno</button> <button onclick="deleteStudentRecords('${a.id}')" style="font-size:8px;padding:4px 6px;background:#b42318;border-color:#d94b45;color:#fff">🗑 Excluir aluno</button></td></tr>`;}).join('');
     const schoolFilterOptions=`<option value="" ${schoolFilter?'':'selected'}>Todas as escolas</option>`+EXAM_SCHOOLS.map(s=>`<option value="${s.value}" ${schoolFilter===s.value?'selected':''}>${s.label}</option>`).join(''),typeFilterOptions=`<option value="" ${typeFilter?'':'selected'}>Provas e atividades</option>`+EXAM_TYPES.map(t=>`<option value="${t.value}" ${typeFilter===t.value?'selected':''}>Somente ${t.label.toLowerCase()}${t.value==='prova'?'s':''}</option>`).join(''),classFilterOptions=examDashboardClassOptions(schoolFilter,classFilter),activityFilterOptions=`<option value="" ${activeActivityFilter?'':'selected'}>Todas as atividades criadas</option>`+activityCandidates.map(e=>`<option value="${e.id}" ${e.id===activeActivityFilter?'selected':''}>${escapeReport(e.title)} — ${escapeReport(examSchoolName(e.school_code,true))} / ${escapeReport(examClassName(e.school_code||'narceu',e.target_class))}</option>`).join(''),studentFilterOptions=`<option value="" ${activeStudentFilter?'':'selected'}>Todos os alunos</option>`+studentNames.map(name=>`<option value="${escapeReport(name)}" ${name===activeStudentFilter?'selected':''}>${escapeReport(name)}</option>`).join('');
-    showModal(`<h3>📊 Planejamento — Provas e Atividades</h3><div class="exam-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))"><div><label>Filtrar por escola</label><select onchange="loadTeacherExamDashboard(this.value,window._examTypeFilter||'','','','')">${schoolFilterOptions}</select></div><div><label>Filtrar por turma</label><select onchange="loadTeacherExamDashboard(window._examSchoolFilter||'',window._examTypeFilter||'',this.value,'','')">${classFilterOptions}</select></div><div><label>Filtrar por tipo</label><select onchange="loadTeacherExamDashboard(window._examSchoolFilter||'',this.value,window._examClassFilter||'','','')">${typeFilterOptions}</select></div><div><label>Filtrar por atividade criada</label><select onchange="loadTeacherExamDashboard(window._examSchoolFilter||'',window._examTypeFilter||'',window._examClassFilter||'','',this.value)">${activityFilterOptions}</select></div><div><label>Filtrar por aluno</label><select onchange="loadTeacherExamDashboard(window._examSchoolFilter||'',window._examTypeFilter||'',window._examClassFilter||'',this.value,window._examActivityFilter||'')">${studentFilterOptions}</select></div></div><div class="modal-btns" style="justify-content:flex-start"><button class="green" onclick="showCreateExamModal()">➕ Nova prova/atividade</button><button class="green" onclick="showGeneratedActivityModal()">✨ Gerar atividade inédita</button><button class="yellow" onclick="showCreateExamBatchModal()">🧪 Criar 15 versões</button><button onclick="exportExamResultsSpreadsheet()">📊 Exportar planilha geral</button><button onclick="teacherExamLogout()">Sair</button></div><details class="activity-room" open><summary><span>Planejamento cadastrado</span><small>${visibleExams.length}</small></summary><div style="padding:6px;max-height:180px;overflow:auto"><table class="exam-table"><thead><tr><th>Título</th><th>Tipo</th><th>Escola</th><th>Turma</th><th>Valor</th><th>Expira em</th><th>Status</th><th>Ação</th></tr></thead><tbody>${examRows||'<tr><td colspan="8">Nenhuma prova ou atividade encontrada com estes filtros.</td></tr>'}</tbody></table></div></details><details class="activity-room" open><summary><span>${activeStudentFilter?`Todas as atividades de ${escapeReport(activeStudentFilter)}`:activeActivityFilter?`Resultados de ${escapeReport(visibleExams[0]?.title||'atividade selecionada')}`:'Resultados dos alunos'}</span><small>${visibleAttempts.length}</small></summary><div class="edu-note" style="margin:6px">A coluna <b>Entregue em</b> mostra a data e a hora registradas pelo banco no momento em que cada aluno encaminhou a avaliação.</div><div style="padding:6px;max-height:260px;overflow:auto"><table class="exam-table"><thead><tr><th>Aluno</th><th>Tipo</th><th>Escola</th><th>Título</th><th>Nota</th><th>Entregue em</th><th>Critérios</th><th>Ações</th></tr></thead><tbody>${resultRows||'<tr><td colspan="8">Nenhuma entrega registrada com estes filtros.</td></tr>'}</tbody></table></div></details><div class="modal-btns"><button onclick="closeModal()">Fechar</button></div>`);
+    showModal(`<h3>📊 Planejamento — Provas e Atividades</h3><div class="exam-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))"><div><label>Filtrar por escola</label><select onchange="loadTeacherExamDashboard(this.value,window._examTypeFilter||'','','','')">${schoolFilterOptions}</select></div><div><label>Filtrar por turma</label><select onchange="loadTeacherExamDashboard(window._examSchoolFilter||'',window._examTypeFilter||'',this.value,'','')">${classFilterOptions}</select></div><div><label>Filtrar por tipo</label><select onchange="loadTeacherExamDashboard(window._examSchoolFilter||'',this.value,window._examClassFilter||'','','')">${typeFilterOptions}</select></div><div><label>Filtrar por atividade criada</label><select onchange="loadTeacherExamDashboard(window._examSchoolFilter||'',window._examTypeFilter||'',window._examClassFilter||'','',this.value)">${activityFilterOptions}</select></div><div><label>Filtrar por aluno</label><select onchange="loadTeacherExamDashboard(window._examSchoolFilter||'',window._examTypeFilter||'',window._examClassFilter||'',this.value,window._examActivityFilter||'')">${studentFilterOptions}</select></div></div><div class="modal-btns" style="justify-content:flex-start"><button class="green" onclick="showCreateExamModal()">➕ Nova prova/atividade</button><button class="green" onclick="showGeneratedActivityModal()">✨ Gerar atividade inédita</button><button class="yellow" onclick="showCreateExamBatchModal()">🧪 Criar 15 versões de provas</button><button onclick="exportExamResultsSpreadsheet()">📊 Exportar planilha geral</button><button onclick="teacherExamLogout()">Sair</button></div><details class="activity-room" open><summary><span>Planejamento cadastrado</span><small>${visibleExams.length}</small></summary><div style="padding:6px;max-height:180px;overflow:auto"><table class="exam-table"><thead><tr><th>Título</th><th>Tipo</th><th>Escola</th><th>Turma</th><th>Valor</th><th>Expira em</th><th>Status</th><th>Ação</th></tr></thead><tbody>${examRows||'<tr><td colspan="8">Nenhuma prova ou atividade encontrada com estes filtros.</td></tr>'}</tbody></table></div></details><details class="activity-room" open><summary><span>${activeStudentFilter?`Todas as atividades de ${escapeReport(activeStudentFilter)}`:activeActivityFilter?`Resultados de ${escapeReport(visibleExams[0]?.title||'atividade selecionada')}`:'Resultados dos alunos'}</span><small>${visibleAttempts.length}</small></summary><div class="edu-note" style="margin:6px">A coluna <b>Entregue em</b> mostra a data e a hora registradas pelo banco no momento em que cada aluno ou dupla encaminhou a avaliação. Nas versões em duas etapas, a nota total aparece após a Prova 2.</div><div style="padding:6px;max-height:260px;overflow:auto"><table class="exam-table"><thead><tr><th>Aluno(s)</th><th>Tipo</th><th>Escola</th><th>Título</th><th>Nota</th><th>Entregue em</th><th>Critérios</th><th>Ações</th></tr></thead><tbody>${resultRows||'<tr><td colspan="8">Nenhuma entrega registrada com estes filtros.</td></tr>'}</tbody></table></div></details><div class="modal-btns"><button onclick="closeModal()">Fechar</button></div>`);
   }catch(err){if(/401|JWT|token|autoriz/i.test(err.message)){teacherExamLogout();return;}showModal(`<h3>📊 Painel de Provas</h3><div class="edu-note">${escapeReport(err.message)}</div><div class="modal-btns"><button onclick="showSupabaseSetupModal()">⚙️ Configurar banco</button><button onclick="closeModal()">Fechar</button></div>`);}
 }
 function showExamDeliveries(id){
@@ -3269,10 +3292,10 @@ function showExamDeliveries(id){
   if(!exam){rackNotice('Registro não encontrado','Atualize o painel e tente novamente.','err');return;}
   const deliveries=dashboard.attempts.filter(item=>item.exam_id===id&&(item.status==='submitted'||item.status==='expired')).sort((a,b)=>new Date(b.submitted_at||0)-new Date(a.submitted_at||0));
   const value=Number(exam.max_score)||10,rows=deliveries.map(attempt=>{
-    const school=attempt.student_school||exam.school_code||'narceu',points=examPoints(attempt.score,value),late=attempt.status==='expired';
-    return `<tr><td><b>${escapeReport(attempt.student_name)}</b></td><td>${escapeReport(examSchoolName(school,true))}</td><td>${escapeReport(examClassName(school,attempt.student_class))}</td><td><b>${escapeReport(formatExamDateTime(attempt.submitted_at))}</b>${late?'<br><small style="color:#b42318">Após o prazo</small>':''}</td><td><b>${formatExamNumber(points)}</b> / ${formatExamNumber(value)}<br><small>${Number(attempt.score)||0}%</small></td><td>${attempt.passed_checks??'-'}/${attempt.total_checks??'-'}</td><td><button onclick="viewExamAttemptPDF('${attempt.id}')" style="font-size:8px;padding:4px 6px">👁 Ver PDF</button></td></tr>`;
+    const school=attempt.student_school||exam.school_code||'narceu',points=examPoints(attempt.score,value),late=attempt.status==='expired',names=attempt.is_pair&&attempt.student_name_2?`${attempt.student_name} e ${attempt.student_name_2}`:attempt.student_name;
+    return `<tr><td><b>${escapeReport(names)}</b>${attempt.is_pair?'<br><small>Prova em dupla</small>':''}</td><td>${escapeReport(examSchoolName(school,true))}</td><td>${escapeReport(examClassName(school,attempt.student_class))}</td><td><b>${escapeReport(formatExamDateTime(attempt.submitted_at))}</b>${late?'<br><small style="color:#b42318">Após o prazo</small>':''}</td><td><b>${formatExamNumber(points)}</b> / ${formatExamNumber(value)}<br><small>${Number(attempt.score)||0}%</small></td><td>${attempt.passed_checks??'-'}/${attempt.total_checks??'-'}</td><td><button onclick="viewExamAttemptPDF('${attempt.id}')" style="font-size:8px;padding:4px 6px">👁 Ver PDF</button></td></tr>`;
   }).join('');
-  showModal(`<h3>📥 Alunos que entregaram</h3><div class="exam-status"><strong>${escapeReport(exam.title)}</strong><br>${escapeReport(examTypeName(exam.assessment_type))} · ${escapeReport(examSchoolName(exam.school_code,true))} — ${escapeReport(examClassName(exam.school_code||'narceu',exam.target_class))}<br>Valor: <b>${formatExamNumber(value)} pontos</b> · Entregas: <b>${deliveries.length}</b></div><div class="edu-note">Esta lista mostra somente os alunos que já encaminharam a prova ou atividade. A data e a hora são registradas pelo banco no momento da entrega.</div><div style="max-height:390px;overflow:auto"><table class="exam-table"><thead><tr><th>Aluno</th><th>Escola</th><th>Turma</th><th>Entregue em</th><th>Nota</th><th>Critérios</th><th>Ação</th></tr></thead><tbody>${rows||'<tr><td colspan="7">Nenhum aluno entregou esta prova ou atividade.</td></tr>'}</tbody></table></div><div class="modal-btns"><button onclick="loadTeacherExamDashboard(window._examSchoolFilter||'',window._examTypeFilter||'',window._examClassFilter||'',window._examStudentFilter||'',window._examActivityFilter||'')">Voltar ao planejamento</button></div>`);
+  showModal(`<h3>📥 Alunos que entregaram</h3><div class="exam-status"><strong>${escapeReport(exam.title)}</strong><br>${escapeReport(examTypeName(exam.assessment_type))} · ${escapeReport(examSchoolName(exam.school_code,true))} — ${escapeReport(examClassName(exam.school_code||'narceu',exam.target_class))}<br>Valor desta etapa: <b>${formatExamNumber(value)} pontos</b>${exam.total_set_score?` · Total das duas provas: <b>${formatExamNumber(exam.total_set_score)} pontos</b>`:''} · Entregas: <b>${deliveries.length}</b></div><div class="edu-note">Esta lista mostra somente os alunos ou duplas que já encaminharam esta etapa. A data e a hora são registradas pelo banco no momento da entrega.</div><div style="max-height:390px;overflow:auto"><table class="exam-table"><thead><tr><th>Aluno(s)</th><th>Escola</th><th>Turma</th><th>Entregue em</th><th>Nota</th><th>Critérios</th><th>Ação</th></tr></thead><tbody>${rows||'<tr><td colspan="7">Nenhum aluno entregou esta prova ou atividade.</td></tr>'}</tbody></table></div><div class="modal-btns"><button onclick="loadTeacherExamDashboard(window._examSchoolFilter||'',window._examTypeFilter||'',window._examClassFilter||'',window._examStudentFilter||'',window._examActivityFilter||'')">Voltar ao planejamento</button></div>`);
 }
 let generatedActivityDraft=null;
 function generatedRandomInt(min,max){const data=new Uint32Array(1);crypto.getRandomValues(data);return min+(data[0]%(max-min+1));}
@@ -3338,29 +3361,29 @@ function showCreateExamModal(){
 }
 function showCreateExamBatchModal(){
   const start=new Date(Date.now()-3*60000),end=new Date(Date.now()+24*60*60000),local=date=>new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
-  const versions=PRACTICAL_EXAM_KEYS.map((key,index)=>`<tr><td>${String(index+1).padStart(2,'0')}</td><td><b>${escapeReport(CLASS_ACTIVITIES[key].title)}</b><br><small>${escapeReport(CLASS_ACTIVITIES[key].desc)}</small></td></tr>`).join('');
-  const selectedSchool=window._examSchoolFilter||'',selectedType=window._examTypeFilter||'prova';showModal(`<h3>🧪 Criar 15 versões práticas</h3><div class="edu-note">Serão criadas <b>15 versões diferentes de nível médio-avançado</b>, uma para cada dupla, vinculadas à escola escolhida.</div><div class="exam-grid"><div><label>Tipo</label><select id="batch-exam-type">${examTypeOptions(selectedType)}</select></div><div><label>Título base</label><input id="batch-exam-title" value="Avaliação prática de redes"></div></div><div class="exam-grid"><div class="full"><label>Escola</label><select id="batch-exam-school" onchange="syncExamClassSelect('batch-exam-school','batch-exam-class')">${examSchoolOptions(selectedSchool)}</select></div><div class="full"><label>Turma que poderá realizar as 15 versões</label><select id="batch-exam-class">${examClassOptions('',selectedSchool)}</select></div><div><label>Valor de cada versão</label><input id="batch-exam-max-score" type="number" min="0.1" max="1000" step="0.1" value="10"></div><div><label>Duração (minutos)</label><input id="batch-exam-duration" type="number" min="5" max="240" value="50"></div><div class="full"><label>Senha-base</label><input id="batch-exam-password" type="password" minlength="6" autocomplete="new-password" placeholder="Mínimo de 6 caracteres"><small style="color:#8b949e">O número da versão será acrescentado, formando senhas com pelo menos 8 caracteres.</small></div><div><label>Início</label><input id="batch-exam-start" type="datetime-local" value="${local(start)}"></div><div><label>Expira em (data e horário)</label><input id="batch-exam-end" type="datetime-local" value="${local(end)}"></div></div><details class="activity-room"><summary><span>Conferir as 15 versões</span><small>Nível médio-avançado</small></summary><div style="padding:6px;max-height:260px;overflow:auto"><table class="exam-table"><thead><tr><th>Versão</th><th>Enunciado</th></tr></thead><tbody>${versions}</tbody></table></div></details><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar</button><button id="create-batch-exam-btn" class="green" onclick="createExamBatchOnline()">Criar e liberar 15 versões</button></div>`);
+  const versions=PRACTICAL_EXAM_KEYS.map((key,index)=>{const second=PRACTICAL_EXAM_STAGE2_KEYS[index];return `<tr><td><b>${String(index+1).padStart(2,'0')}</b></td><td><b>Prova 1 — ${escapeReport(CLASS_ACTIVITIES[key].title)}</b><br><small>${escapeReport(CLASS_ACTIVITIES[key].desc)}</small></td><td><b>Prova 2 — ${escapeReport(CLASS_ACTIVITIES[second].title)}</b><br><small>${escapeReport(CLASS_ACTIVITIES[second].desc)}</small></td></tr>`;}).join('');
+  const selectedSchool=window._examSchoolFilter||'';showModal(`<h3>🧪 Criar 15 versões de provas</h3><div class="edu-note">Cada versão terá <b>duas provas práticas diferentes</b>. Quando o aluno ou a dupla entregar a Prova 1, a área será limpa e a Prova 2 abrirá automaticamente. O mesmo cronômetro de <b>50 minutos</b> vale para as duas etapas. As propostas percorrem Sala LAN, Rede sem fio, Backbone, Segmentação e Sala Cidade.</div><label>Título base</label><input id="batch-exam-title" value="Avaliação prática completa de redes"><div class="exam-grid"><div class="full"><label>Escola</label><select id="batch-exam-school" onchange="syncExamClassSelect('batch-exam-school','batch-exam-class')">${examSchoolOptions(selectedSchool)}</select></div><div class="full"><label>Turma que poderá realizar as 15 versões</label><select id="batch-exam-class">${examClassOptions('',selectedSchool)}</select></div><div><label>Valor total das duas provas</label><input id="batch-exam-max-score" type="number" min="0.2" max="1000" step="0.1" value="10"><small style="color:#8b949e">O sistema divide o valor igualmente e soma o resultado final.</small></div><div><label>Tempo total das duas provas (minutos)</label><input id="batch-exam-duration" type="number" min="5" max="240" value="50"></div><div class="full"><label>Senha-base</label><input id="batch-exam-password" type="password" minlength="6" autocomplete="new-password" placeholder="Mínimo de 6 caracteres"><small style="color:#8b949e">O número da versão será acrescentado, formando senhas com pelo menos 8 caracteres.</small></div><div><label>Início</label><input id="batch-exam-start" type="datetime-local" value="${local(start)}"></div><div><label>Expira em (data e horário)</label><input id="batch-exam-end" type="datetime-local" value="${local(end)}"></div></div><details class="activity-room"><summary><span>Conferir as 15 versões e suas duas provas</span><small>30 montagens diferentes</small></summary><div style="padding:6px;max-height:300px;overflow:auto"><table class="exam-table"><thead><tr><th>Versão</th><th>Prova 1</th><th>Prova 2</th></tr></thead><tbody>${versions}</tbody></table></div></details><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar</button><button id="create-batch-exam-btn" class="green" onclick="createExamBatchOnline()">Criar e liberar 15 versões de provas</button></div>`);
 }
 async function createExamBatchOnline(){
-  const btn=document.getElementById('create-batch-exam-btn'),title=document.getElementById('batch-exam-title')?.value.trim(),assessmentType=document.getElementById('batch-exam-type')?.value||'prova',school=document.getElementById('batch-exam-school')?.value.trim()||'',grade=SCHOOL_EXAM_GRADE,studentClass=document.getElementById('batch-exam-class')?.value.trim()||'',duration=+document.getElementById('batch-exam-duration')?.value||50,maxScore=+document.getElementById('batch-exam-max-score')?.value||10,passwordBase=(document.getElementById('batch-exam-password')?.value||'').trim(),startsAt=new Date(document.getElementById('batch-exam-start')?.value),endsAt=new Date(document.getElementById('batch-exam-end')?.value);
-  if(!title||!school||!studentClass||passwordBase.length<6||maxScore<=0||Number.isNaN(startsAt.getTime())||Number.isNaN(endsAt.getTime())||endsAt<=startsAt){rackNotice('Dados incompletos','Escolha a escola e a turma e informe título, período válido, valor e uma senha-base com pelo menos 6 caracteres.','err');return;}
-  if(!confirm('Criar e liberar agora as 15 versões diferentes da prova prática?'))return;
+  const btn=document.getElementById('create-batch-exam-btn'),title=document.getElementById('batch-exam-title')?.value.trim(),school=document.getElementById('batch-exam-school')?.value.trim()||'',grade=SCHOOL_EXAM_GRADE,studentClass=document.getElementById('batch-exam-class')?.value.trim()||'',duration=+document.getElementById('batch-exam-duration')?.value||50,totalScore=+document.getElementById('batch-exam-max-score')?.value||10,passwordBase=(document.getElementById('batch-exam-password')?.value||'').trim(),startsAt=new Date(document.getElementById('batch-exam-start')?.value),endsAt=new Date(document.getElementById('batch-exam-end')?.value);
+  if(!title||!school||!studentClass||passwordBase.length<6||totalScore<=0||Number.isNaN(startsAt.getTime())||Number.isNaN(endsAt.getTime())||endsAt<=startsAt){rackNotice('Dados incompletos','Escolha a escola e a turma e informe título, período válido, valor total e uma senha-base com pelo menos 6 caracteres.','err');return;}
+  if(!confirm('Criar e liberar agora as 15 versões, cada uma com Prova 1 e Prova 2 diferentes?'))return;
   btn.disabled=true;let created=[],errors=[];
   for(let index=0;index<PRACTICAL_EXAM_KEYS.length;index++){
-    const key=PRACTICAL_EXAM_KEYS[index],version=String(index+1).padStart(2,'0'),password=`${passwordBase}${version}`,payload={p_title:`${title} — Versão ${version}`,p_activity_key:key,p_password:password,p_assessment_type:assessmentType,p_school:school,p_target_grade:grade,p_target_class:studentClass,p_duration_minutes:duration,p_max_score:maxScore,p_starts_at:startsAt.toISOString(),p_ends_at:endsAt.toISOString()};
+    const key1=PRACTICAL_EXAM_KEYS[index],key2=PRACTICAL_EXAM_STAGE2_KEYS[index],version=String(index+1).padStart(2,'0'),password=`${passwordBase}${version}`,payload={p_title:title,p_activity_key_1:key1,p_activity_key_2:key2,p_password:password,p_school:school,p_target_grade:grade,p_target_class:studentClass,p_duration_minutes:duration,p_total_score:totalScore,p_starts_at:startsAt.toISOString(),p_ends_at:endsAt.toISOString(),p_version_number:index+1};
     btn.textContent=`Criando versão ${version}/15...`;
     try{
-      await createExamRpc(payload);
-      created.push({version,type:examTypeName(assessmentType),title:CLASS_ACTIVITIES[key].title,password,activity:key,school:examSchoolName(school,true),studentClass:examClassName(school,studentClass),expiresAt:endsAt.toISOString()});
+      await supabaseRequest('/rest/v1/rpc/create_two_stage_exam',{method:'POST',body:payload,token:teacherExamSession.access_token});
+      created.push({version,type:'Prova em duas etapas',title1:CLASS_ACTIVITIES[key1].title,title2:CLASS_ACTIVITIES[key2].title,password,school:examSchoolName(school,true),studentClass:examClassName(school,studentClass),totalScore,expiresAt:endsAt.toISOString()});
     }catch(err){errors.push({version,message:err.message});}
   }
   window._examBatchCreated=created;
-  const rows=created.map(item=>`<tr><td>${item.version}</td><td>${escapeReport(item.type)}</td><td>${escapeReport(item.school)}</td><td>${escapeReport(item.studentClass)}</td><td>${escapeReport(item.title)}</td><td><b>${escapeReport(item.password)}</b></td></tr>`).join(''),errorNote=errors.length?`<div class="edu-note" style="border-color:#b42318;color:#ffb4ae">${errors.length} versão(ões) não foram criadas. Tente novamente somente depois de conferir o painel.</div>`:'';
-  showModal(`<h3>✅ Versões práticas preparadas</h3><div class="exam-status"><strong>${created.length} de 15 versões de ${escapeReport(examTypeName(assessmentType).toLowerCase())} criadas para ${escapeReport(examSchoolName(school,true))} — ${escapeReport(examClassName(school,studentClass))}.</strong><br>⏰ Expiram em: <b>${formatExamDateTime(endsAt)}</b><br>Entregue a cada dupla apenas a senha correspondente à sua versão.</div>${errorNote}<div style="max-height:360px;overflow:auto"><table class="exam-table"><thead><tr><th>Versão</th><th>Tipo</th><th>Escola</th><th>Turma</th><th>Atividade</th><th>Senha</th></tr></thead><tbody>${rows||'<tr><td colspan="6">Nenhuma versão foi criada.</td></tr>'}</tbody></table></div><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar ao painel</button><button class="green" onclick="downloadExamBatchCSV()" ${created.length?'':'disabled'}>⬇️ Baixar distribuição</button></div>`);
+  const rows=created.map(item=>`<tr><td>${item.version}</td><td>${escapeReport(item.school)}</td><td>${escapeReport(item.studentClass)}</td><td>${escapeReport(item.title1)}</td><td>${escapeReport(item.title2)}</td><td>${formatExamNumber(item.totalScore)}</td><td><b>${escapeReport(item.password)}</b></td></tr>`).join(''),errorNote=errors.length?`<div class="edu-note" style="border-color:#b42318;color:#ffb4ae">${errors.length} versão(ões) não foram criadas. Confira o painel antes de tentar novamente.</div>`:'';
+  showModal(`<h3>✅ Versões de provas preparadas</h3><div class="exam-status"><strong>${created.length} de 15 versões criadas para ${escapeReport(examSchoolName(school,true))} — ${escapeReport(examClassName(school,studentClass))}.</strong><br>Cada versão possui <b>Prova 1 + Prova 2</b>, tempo total de <b>${duration} minutos</b> e valor total de <b>${formatExamNumber(totalScore)} pontos</b>.<br>⏰ Expiram em: <b>${formatExamDateTime(endsAt)}</b><br>Entregue a cada aluno ou dupla apenas a senha correspondente à sua versão.</div>${errorNote}<div style="max-height:360px;overflow:auto"><table class="exam-table"><thead><tr><th>Versão</th><th>Escola</th><th>Turma</th><th>Prova 1</th><th>Prova 2</th><th>Valor total</th><th>Senha</th></tr></thead><tbody>${rows||'<tr><td colspan="7">Nenhuma versão foi criada.</td></tr>'}</tbody></table></div><div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Voltar ao painel</button><button class="green" onclick="downloadExamBatchCSV()" ${created.length?'':'disabled'}>⬇️ Baixar distribuição</button></div>`);
 }
 function downloadExamBatchCSV(){
   const rows=window._examBatchCreated||[];if(!rows.length)return;
-  const csv=[['Dupla/Versão','Tipo','Escola','Turma','Atividade','Senha','Expira em'],...rows.map(item=>[item.version,item.type,item.school,item.studentClass,item.title,item.password,formatExamDateTime(item.expiresAt)])].map(row=>row.map(value=>`"${String(value??'').replace(/"/g,'""')}"`).join(';')).join('\n'),blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='distribuicao_15_versoes.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  const csv=[['Aluno/Dupla - Versão','Escola','Turma','Prova 1','Prova 2','Valor total','Senha','Expira em'],...rows.map(item=>[item.version,item.school,item.studentClass,item.title1,item.title2,item.totalScore,item.password,formatExamDateTime(item.expiresAt)])].map(row=>row.map(value=>`"${String(value??'').replace(/"/g,'""')}"`).join(';')).join('\n'),blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='distribuicao_15_versoes_duas_provas.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 async function createExamRpc(payload){
   try{return await supabaseRequest('/rest/v1/rpc/create_exam',{method:'POST',body:payload,token:teacherExamSession.access_token});}
@@ -3488,12 +3511,12 @@ function exportExamResultsSpreadsheet(){
   const data=window._examDashboard||{exams:[],attempts:[]},examMap=new Map(data.exams.map(e=>[e.id,e]));
   const visible=data.attempts.filter(a=>{
     const exam=examMap.get(a.exam_id),school=a.student_school||exam?.school_code||'narceu';
-    return(!window._examSchoolFilter||school===window._examSchoolFilter)&&(!window._examTypeFilter||(exam?.assessment_type||'prova')===window._examTypeFilter)&&(!window._examClassFilter||String(a.student_class||'')===window._examClassFilter)&&(!window._examActivityFilter||a.exam_id===window._examActivityFilter)&&(!window._examStudentFilter||String(a.student_name||'').trim()===window._examStudentFilter);
+    return(!window._examSchoolFilter||school===window._examSchoolFilter)&&(!window._examTypeFilter||(exam?.assessment_type||'prova')===window._examTypeFilter)&&(!window._examClassFilter||String(a.student_class||'')===window._examClassFilter)&&(!window._examActivityFilter||a.exam_id===window._examActivityFilter)&&(!window._examStudentFilter||String(a.student_name||'').trim()===window._examStudentFilter||String(a.student_name_2||'').trim()===window._examStudentFilter);
   }).sort((a,b)=>String(a.student_school||'').localeCompare(String(b.student_school||''))||String(a.student_class||'').localeCompare(String(b.student_class||''))||String(a.student_name||'').localeCompare(String(b.student_name||''),'pt-BR')||new Date(a.started_at)-new Date(b.started_at));
   if(!visible.length){rackNotice('Sem dados para exportar','Não existem alunos ou atividades correspondentes aos filtros selecionados.','err');return;}
   const summaries=new Map();
   visible.forEach(attempt=>{
-    const exam=examMap.get(attempt.exam_id),school=attempt.student_school||exam?.school_code||'narceu',studentClass=String(attempt.student_class||''),name=String(attempt.student_name||'').trim(),key=`${school}|${studentClass}|${name.toLocaleLowerCase('pt-BR')}`;
+    const exam=examMap.get(attempt.exam_id),school=attempt.student_school||exam?.school_code||'narceu',studentClass=String(attempt.student_class||''),name=attempt.is_pair&&attempt.student_name_2?`${String(attempt.student_name).trim()} e ${String(attempt.student_name_2).trim()}`:String(attempt.student_name||'').trim(),key=`${school}|${studentClass}|${name.toLocaleLowerCase('pt-BR')}`;
     if(!summaries.has(key))summaries.set(key,{name,school,studentClass,records:0,completed:0,inProgress:0,earned:0,possible:0});
     const item=summaries.get(key),finished=attempt.status==='submitted'||attempt.status==='expired',value=Number(exam?.max_score)||10;item.records++;
     if(finished){item.completed++;item.earned+=examPoints(attempt.score,value);item.possible+=value;}else item.inProgress++;
@@ -3502,8 +3525,8 @@ function exportExamResultsSpreadsheet(){
   const xmlEscape=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
   const cell=(value,type='String',style='')=>`<Cell${style?` ss:StyleID="${style}"`:''}><Data ss:Type="${type}">${xmlEscape(value)}</Data></Cell>`;
   const row=cells=>`<Row>${cells.join('')}</Row>`,header=values=>row(values.map(value=>cell(value,'String','Header')));
-  const summaryTable=header(['Aluno','Escola','Turma','Registros','Concluídas','Em andamento','Pontos obtidos','Valor total','Aproveitamento geral (%)'])+summaryRows.map(item=>row([cell(item.name),cell(examSchoolName(item.school)),cell(examClassName(item.school,item.studentClass)),cell(item.records,'Number'),cell(item.completed,'Number'),cell(item.inProgress,'Number'),cell(Number(item.earned.toFixed(2)),'Number','Decimal'),cell(Number(item.possible.toFixed(2)),'Number','Decimal'),cell(item.possible?Number((item.earned/item.possible*100).toFixed(2)):0,'Number','Decimal')])).join('');
-  const detailTable=header(['Aluno','Escola','Turma','Tipo','Prova ou atividade','Status','Nota (%)','Valor','Pontos obtidos','Critérios atendidos','Total de critérios','Início','Entrega'])+visible.map(attempt=>{const exam=examMap.get(attempt.exam_id),school=attempt.student_school||exam?.school_code||'narceu',finished=attempt.status==='submitted'||attempt.status==='expired',value=Number(exam?.max_score)||10,status=attempt.status==='submitted'?'Entregue':attempt.status==='expired'?'Entregue após o prazo':'Em andamento';return row([cell(attempt.student_name),cell(examSchoolName(school)),cell(examClassName(school,attempt.student_class)),cell(examTypeName(exam?.assessment_type)),cell(exam?.title||''),cell(status),finished?cell(Number(attempt.score)||0,'Number','Decimal'):cell(''),cell(value,'Number','Decimal'),finished?cell(examPoints(attempt.score,value),'Number','Decimal'):cell(''),cell(attempt.passed_checks??''),cell(attempt.total_checks??''),cell(formatExamDateTime(attempt.started_at)),cell(attempt.submitted_at?formatExamDateTime(attempt.submitted_at):'')]);}).join('');
+  const summaryTable=header(['Aluno ou dupla','Escola','Turma','Registros','Concluídas','Em andamento','Pontos obtidos','Valor total','Aproveitamento geral (%)'])+summaryRows.map(item=>row([cell(item.name),cell(examSchoolName(item.school)),cell(examClassName(item.school,item.studentClass)),cell(item.records,'Number'),cell(item.completed,'Number'),cell(item.inProgress,'Number'),cell(Number(item.earned.toFixed(2)),'Number','Decimal'),cell(Number(item.possible.toFixed(2)),'Number','Decimal'),cell(item.possible?Number((item.earned/item.possible*100).toFixed(2)):0,'Number','Decimal')])).join('');
+  const detailTable=header(['Aluno ou dupla','Escola','Turma','Tipo','Prova ou atividade','Etapa','Status','Nota (%)','Valor','Pontos obtidos','Critérios atendidos','Total de critérios','Início','Entrega'])+visible.map(attempt=>{const exam=examMap.get(attempt.exam_id),school=attempt.student_school||exam?.school_code||'narceu',finished=attempt.status==='submitted'||attempt.status==='expired',value=Number(exam?.max_score)||10,status=attempt.status==='submitted'?'Entregue':attempt.status==='expired'?'Entregue após o prazo':'Em andamento',name=attempt.is_pair&&attempt.student_name_2?`${attempt.student_name} e ${attempt.student_name_2}`:attempt.student_name;return row([cell(name),cell(examSchoolName(school)),cell(examClassName(school,attempt.student_class)),cell(examTypeName(exam?.assessment_type)),cell(exam?.title||''),cell(exam?.stage_number?`Prova ${exam.stage_number} de 2`:''),cell(status),finished?cell(Number(attempt.score)||0,'Number','Decimal'):cell(''),cell(value,'Number','Decimal'),finished?cell(examPoints(attempt.score,value),'Number','Decimal'):cell(''),cell(attempt.passed_checks??''),cell(attempt.total_checks??''),cell(formatExamDateTime(attempt.started_at)),cell(attempt.submitted_at?formatExamDateTime(attempt.submitted_at):'')]);}).join('');
   const xml=`<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Bottom"/><Font ss:FontName="Calibri" ss:Size="11"/></Style><Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#075DA8" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style><Style ss:ID="Decimal"><NumberFormat ss:Format="0.00"/></Style></Styles><Worksheet ss:Name="Resumo Geral"><Table>${summaryTable}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane></WorksheetOptions></Worksheet><Worksheet ss:Name="Atividades"><Table>${detailTable}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane></WorksheetOptions></Worksheet></Workbook>`;
   const parts=['pontuacao_geral_allannet',window._examSchoolFilter||'todas_escolas',window._examClassFilter||'todas_turmas'].map(value=>String(value).replace(/[^a-z0-9_-]+/gi,'_'));
   const blob=new Blob(['\ufeff'+xml],{type:'application/vnd.ms-excel;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=parts.join('_')+'.xls';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -3511,7 +3534,7 @@ function exportExamResultsSpreadsheet(){
 }
 function createExamAttemptPDFCanvases(attempt,exam){
   const W=1240,H=1754,M=60,pages=[];
-  const activity=CLASS_ACTIVITIES[exam.activity_key]||(exam.activity_key==='gerada'?{room:'exam',level:knowledgeLevelName(exam.knowledge_level),title:exam.title||'Atividade inédita',desc:exam.custom_prompt||'Atividade prática de rede.',examRules:exam.custom_rules||{}}:null),value=Number(exam.max_score)||10,points=examPoints(attempt.score,value),topology=attempt.topology&&typeof attempt.topology==='object'?attempt.topology:{},savedDevices=Array.isArray(topology.devices)?topology.devices:[],savedConnections=Array.isArray(topology.connections)?topology.connections:[],checks=Array.isArray(attempt.checks)?attempt.checks:[];
+  const activity=CLASS_ACTIVITIES[exam.activity_key]||(exam.activity_key==='gerada'?{room:'exam',level:knowledgeLevelName(exam.knowledge_level),title:exam.title||'Atividade inédita',desc:exam.custom_prompt||'Atividade prática de rede.',examRules:exam.custom_rules||{}}:null),value=Number(exam.max_score)||10,points=examPoints(attempt.score,value),topology=attempt.topology&&typeof attempt.topology==='object'?attempt.topology:{},savedDevices=Array.isArray(topology.devices)?topology.devices:[],savedConnections=Array.isArray(topology.connections)?topology.connections:[],checks=Array.isArray(attempt.checks)?attempt.checks:[],studentDisplay=attempt.is_pair&&attempt.student_name_2?`${attempt.student_name} e ${attempt.student_name_2}`:(attempt.student_name||'Não informado');
   const passed=checks.filter(item=>item&&item.ok).length,failed=Math.max(0,checks.length-passed),answerChecks=checks.length?checks:activityChecks(exam.activity_key).map(item=>({label:item[0],ok:true}));
   let page=null,p=null,y=0,pageNumber=0;
   const startPage=()=>{
@@ -3545,11 +3568,12 @@ function createExamAttemptPDFCanvases(attempt,exam){
   };
   startPage();
   p.fillStyle='#075da8';p.font='bold 38px Arial';reportWrapText(p,exam.title||'Avaliação prática de redes',W-2*M).slice(0,2).forEach((text,index)=>p.fillText(text,M,y+36+index*43));y+=82;
-  keyValue('Aluno',attempt.student_name||'Não informado');
+  keyValue(attempt.is_pair?'Alunos da dupla':'Aluno',studentDisplay);
   keyValue('Tipo',examTypeName(exam.assessment_type));
   keyValue('Escola',examSchoolName(attempt.student_school||exam.school_code));
   keyValue('Turma',examClassName(attempt.student_school||exam.school_code||'narceu',attempt.student_class));
   keyValue('Atividade',activity?`Nível ${activity.level} — ${activity.title}`:(exam.activity_key||'Atividade prática'));
+  if(exam.stage_number)keyValue('Etapa',`Prova ${exam.stage_number} de 2 · ${formatExamNumber(value)} de ${formatExamNumber(exam.total_set_score||value)} pontos totais`);
   keyValue('Entrega',attempt.submitted_at?new Date(attempt.submitted_at).toLocaleString('pt-BR'):'Não entregue');
   ensure(125);y+=12;p.fillStyle=failed?'#fff7ed':'#edf9f0';p.fillRect(M,y,W-2*M,105);p.strokeStyle=failed?'#e8a34a':'#62aa72';p.lineWidth=2;p.strokeRect(M,y,W-2*M,105);
   p.fillStyle='#17324a';p.font='bold 22px Arial';p.fillText('RESULTADO DA CORREÇÃO AUTOMÁTICA',M+18,y+31);
@@ -5397,582 +5421,4 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha, node) {
     if(notebook){
       // Notebook 3D aberto, com tela fina e base em perspectiva.
       const lw=s*1.22,lh=s*.76,lx=x-lw/2,ly=y-lh*.7;
-      ctx.shadowBlur=24;ctx.shadowColor='#4dabf766';
-      const lf=ctx.createLinearGradient(lx,ly,lx+lw,ly+lh);lf.addColorStop(0,'#536a78');lf.addColorStop(.18,'#263742');lf.addColorStop(1,'#070d12');
-      iso3D(lx,ly,lw,lh,6,'#617986','#16242c',lf);ctx.shadowBlur=0;
-      ctx.strokeStyle='#4dabf7cc';ctx.lineWidth=1.2;rr(lx,ly,lw,lh,4);ctx.stroke();
-      const sx=lx+5,sy=ly+5,sw=lw-10,sh=lh-10,sg=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);sg.addColorStop(0,'#17628a');sg.addColorStop(.5,'#12365d');sg.addColorStop(1,'#4a246d');ctx.fillStyle=sg;rr(sx,sy,sw,sh,2);ctx.fill();
-      ctx.fillStyle='rgba(255,255,255,.10)';ctx.beginPath();ctx.moveTo(sx+2,sy+2);ctx.lineTo(sx+sw*.35,sy+2);ctx.lineTo(sx+sw*.12,sy+sh-2);ctx.lineTo(sx+2,sy+sh-2);ctx.closePath();ctx.fill();
-      ctx.fillStyle='rgba(4,11,20,.74)';rr(sx+8,sy+8,sw-17,sh-18,2);ctx.fill();ctx.fillStyle='#256b9c';ctx.fillRect(sx+8,sy+8,sw-17,5);
-      ['#ff7b72','#f2cc60','#56d364'].forEach((c,i)=>led(sx+12+i*7,sy+10.5,1.6,c,0));
-      ctx.fillStyle='rgba(88,166,255,.36)';for(let i=0;i<3;i++)ctx.fillRect(sx+12,sy+19+i*6,(sw-27)*(1-i*.16),2);
-      led(x,ly+3,1.8,'#4dabf7',5);
-      const bw=lw*1.08,bh=s*.32,bx=x-bw/2,by=ly+lh+s*.08,bg=ctx.createLinearGradient(bx,by,bx,by+bh);bg.addColorStop(0,'#607581');bg.addColorStop(.3,'#344650');bg.addColorStop(1,'#111a20');
-      iso3D(bx,by,bw,bh,8,'#718792','#17232a',bg);
-      // Teclas individuais e touchpad.
-      const keyW=bw*.075,keyH=bh*.16,startX=bx+bw*.12,startY=by+bh*.12;
-      for(let row=0;row<3;row++)for(let key=0;key<9;key++){ctx.fillStyle='#101820';rr(startX+key*(keyW+2)+(row===2?keyW/2:0),startY+row*(keyH+2),keyW,keyH,1);ctx.fill();ctx.strokeStyle='rgba(180,210,225,.23)';ctx.lineWidth=.4;ctx.stroke();}
-      ctx.fillStyle='#1b2830';ctx.strokeStyle='#607681';rr(x-bw*.13,by+bh*.67,bw*.26,bh*.22,2);ctx.fill();ctx.stroke();
-      ctx.fillStyle='rgba(255,255,255,.28)';rr(x-bw*.22,by+bh-2,bw*.44,1.5,.7);ctx.fill();
-    }else{
-      // Computador 3D: monitor, teclado, gabinete e mouse.
-      const mw=s*1.02,mh=s*.72,mx=x-s*.12;
-      const fg=ctx.createLinearGradient(mx-mw/2,y-mh/2,mx+mw/2,y+mh/2);fg.addColorStop(0,'#405564');fg.addColorStop(1,'#0c1820');iso3D(mx-mw/2,y-mh/2,mw,mh,6,'#526a78','#172832',fg);
-      ctx.fillStyle='#07101a';rr(mx-mw/2+5,y-mh/2+5,mw-10,mh-16,2);ctx.fill();const sg=ctx.createLinearGradient(mx-mw/2+6,y-mh/2+6,mx+mw/2-6,y+mh/2-17);sg.addColorStop(0,'#17628a');sg.addColorStop(1,'#351b59');ctx.fillStyle=sg;rr(mx-mw/2+6,y-mh/2+6,mw-12,mh-18,2);ctx.fill();led(mx,y-mh/2+3,1.5,'#4dabf7',4);
-      ctx.fillStyle='#253640';ctx.fillRect(mx-4,y+mh/2-1,8,s*.18);rr(mx-mw*.25,y+mh/2+s*.16,mw*.5,s*.07,3);ctx.fill();
-      const kw=mw*.78,kh=s*.13,kx=mx-kw/2,ky=y+mh/2+s*.29,kg=ctx.createLinearGradient(kx,ky,kx,ky+kh);kg.addColorStop(0,'#465b68');kg.addColorStop(1,'#111a20');iso3D(kx,ky,kw,kh,3,'#566c78','#142029',kg);
-      const tw=s*.31,th=s*.88,tx=x+mw/2+s*.08,ty=y-mh/2+s*.02,tg=ctx.createLinearGradient(tx,ty,tx+tw,ty+th);tg.addColorStop(0,'#354955');tg.addColorStop(1,'#070c10');iso3D(tx,ty,tw,th,5,'#4c626f','#101b22',tg);ctx.fillStyle='#05090c';rr(tx+3,ty+5,tw-6,s*.12,2);ctx.fill();led(tx+tw/2,ty+th-s*.13,s*.045,'#4dabf7',9);
-      ctx.fillStyle='#263640';rr(mx+kw*.5,ky,s*.13,s*.2,s*.06);ctx.fill();ctx.strokeStyle='#526673';ctx.stroke();
-    }
-
-  } else if (shape === 'phone') {
-    const pw=s*.76,ph=s*1.28,left=x-pw/2,top=y-ph/2;
-    ctx.shadowBlur=24;ctx.shadowColor='#70e1ff66';
-    const pf=ctx.createLinearGradient(left,top,left+pw,top+ph);
-    pf.addColorStop(0,'#70818c');pf.addColorStop(.2,'#23333d');pf.addColorStop(1,'#05090d');
-    iso3D(left,top,pw,ph,7,'#536b78','#101b21',pf);
-    ctx.strokeStyle='#70e1ffcc';ctx.lineWidth=1.5;rr(left,top,pw,ph,7);ctx.stroke();ctx.shadowBlur=0;
-    // Botões físicos na lateral do aparelho.
-    ctx.strokeStyle='#8a9aa4';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(left-1,top+s*.28);ctx.lineTo(left-1,top+s*.48);ctx.moveTo(left+pw+1,top+s*.34);ctx.lineTo(left+pw+1,top+s*.58);ctx.stroke();
-    // Tela, papel de parede e brilho no vidro.
-    const sx=left+4,sy=top+4,sw=pw-8,sh=ph-8;
-    const scr=ctx.createLinearGradient(sx,sy,sx+sw,sy+sh);
-    scr.addColorStop(0,'#164b79');scr.addColorStop(.5,'#12687a');scr.addColorStop(1,'#4a236f');ctx.fillStyle=scr;rr(sx,sy,sw,sh,4);ctx.fill();
-    const halo=ctx.createRadialGradient(x+s*.12,y+s*.2,1,x+s*.12,y+s*.2,s*.62);
-    halo.addColorStop(0,'rgba(112,225,255,.62)');halo.addColorStop(1,'rgba(112,225,255,0)');ctx.fillStyle=halo;ctx.fill();
-    ctx.fillStyle='rgba(255,255,255,.09)';ctx.beginPath();ctx.moveTo(sx+2,sy+2);ctx.lineTo(sx+sw*.42,sy+2);ctx.lineTo(sx+sw*.15,sy+sh-2);ctx.lineTo(sx+2,sy+sh-2);ctx.closePath();ctx.fill();
-    // Ilha dinâmica, câmera e informações de status.
-    ctx.fillStyle='#020406';rr(x-s*.14,sy+2,s*.28,s*.09,s*.05);ctx.fill();
-    ctx.fillStyle='#245879';ctx.beginPath();ctx.arc(x+s*.07,sy+s*.065,s*.018,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#fff';ctx.font=`bold ${Math.max(4,s*.075)}px Arial`;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText('10:24',sx+3,sy+s*.09);
-    ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=.7;
-    [s*.03,s*.05,s*.07].forEach(rad=>{ctx.beginPath();ctx.arc(sx+sw-6,sy+s*.11,rad,Math.PI+.65,-.65);ctx.stroke();});
-    // Grade de aplicativos com pequenos glifos.
-    const apps=['#4dabf7','#56d364','#ff7b72','#d2a8ff','#f2cc60','#79c0ff'];
-    const aw=s*.105,gap=s*.09,startX=x-s*.21,startY=y-s*.18;
-    apps.forEach((ac,i)=>{const ax=startX+(i%3)*(aw+gap),ay=startY+Math.floor(i/3)*(aw+s*.11);ctx.fillStyle=ac;rr(ax,ay,aw,aw,aw*.26);ctx.fill();ctx.fillStyle='rgba(255,255,255,.5)';ctx.beginPath();ctx.arc(ax+aw/2,ay+aw/2,aw*.17,0,Math.PI*2);ctx.fill();});
-    // Dock translúcido e barra de navegação.
-    ctx.fillStyle='rgba(4,12,20,.58)';rr(sx+4,sy+sh-s*.22,sw-8,s*.15,s*.055);ctx.fill();
-    ['#70e1ff','#56d364','#ff8c00'].forEach((dc,i)=>{ctx.fillStyle=dc;rr(x-s*.21+i*s*.17,sy+sh-s*.19,s*.095,s*.095,s*.025);ctx.fill();});
-    ctx.fillStyle='rgba(255,255,255,.86)';rr(x-s*.12,sy+sh-3,s*.24,1.6,.8);ctx.fill();
-
-  } else if (shape === 'router') {
-    const rw=s*1.38,rh=s*0.4;
-    ctx.shadowBlur=24;ctx.shadowColor=color+'55';
-    const rf=ctx.createLinearGradient(x-rw/2,y-rh/2,x-rw/2,y+rh/2);
-    rf.addColorStop(0,'#22273e');rf.addColorStop(0.5,'#181c2e');rf.addColorStop(1,'#0d1020');
-    iso3D(x-rw/2,y-rh/2,rw,rh,7,'#2c3250','#1a1e38',rf);
-    ctx.strokeStyle=color+'cc';ctx.lineWidth=1.5;rr(x-rw/2,y-rh/2,rw,rh,6);ctx.stroke();
-    ctx.shadowBlur=0;
-    // Ventilation slits
-    ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=0.5;
-    for(let i=0;i<6;i++)ctx.strokeRect(x-rw/2+6+i*7,y+rh/2-5,4,3);
-    // Antennas (3)
-    const ants=[{ox:-rw*0.36,h:s*.72},{ox:0,h:s*.58},{ox:rw*0.36,h:s*.68}];
-    ants.forEach(a=>{
-      ctx.strokeStyle='#556';ctx.lineWidth=2;
-      ctx.beginPath();ctx.moveTo(x+a.ox,y-rh/2);ctx.lineTo(x+a.ox,y-rh/2-a.h*.85);ctx.stroke();
-      ctx.strokeStyle=color;ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(x+a.ox,y-rh/2-a.h*.85);ctx.lineTo(x+a.ox,y-rh/2-a.h);ctx.stroke();
-      const ag=ctx.createRadialGradient(x+a.ox,y-rh/2-a.h,0,x+a.ox,y-rh/2-a.h,4);
-      ag.addColorStop(0,color);ag.addColorStop(1,color+'00');
-      ctx.fillStyle=ag;ctx.beginPath();ctx.arc(x+a.ox,y-rh/2-a.h,4,0,Math.PI*2);ctx.fill();
-    });
-    // WiFi signal rings from top
-    [8,15,22].forEach((rad,i)=>{
-      ctx.strokeStyle=`${color}${['55','33','18'][i]}`;ctx.lineWidth=1-i*.2;
-      ctx.beginPath();ctx.arc(x,y-rh/2-s*.05,rad,Math.PI+.5,-.5);ctx.stroke();
-    });
-    // Ports
-    for(let i=0;i<4;i++) port(x-rw*0.27+i*rw*0.155-5,y-2,10,8,i<3);
-    // WAN port (different color)
-    ctx.fillStyle='#0a0510';ctx.strokeStyle='#ff8c0066';ctx.lineWidth=1;
-    rr(x+rw*.35-5,y-2,10,8,1);ctx.fill();ctx.stroke();
-    led(x+rw*.35,y-4,2,'#ff8c00',8);
-    // USB port
-    ctx.fillStyle='#0a0a15';ctx.strokeStyle='#4dabf766';ctx.lineWidth=.8;
-    ctx.fillRect(x-rw*.42,y-3,6,9);ctx.strokeRect(x-rw*.42,y-3,6,9);
-    // Brand name
-    ctx.fillStyle='rgba(255,255,255,0.08)';ctx.font=`bold ${Math.max(5,r*.3)}px "Arial Narrow",monospace`;
-    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('ROUTER',x,y);
-    // Power LED
-    led(x+rw/2-6,y,2.5,color,12);
-
-  } else if (shape === 'switch') {
-    const sw=s*1.6,sh=s*0.3;
-    ctx.shadowBlur=20;ctx.shadowColor=color+'44';
-    const sf=ctx.createLinearGradient(x-sw/2,y-sh/2,x-sw/2,y+sh/2);
-    sf.addColorStop(0,'#162318');sf.addColorStop(1,'#0a1510');
-    iso3D(x-sw/2,y-sh/2,sw,sh,5,'#1f3022','#111a12',sf);
-    ctx.strokeStyle=color+'aa';ctx.lineWidth=1.2;rr(x-sw/2,y-sh/2,sw,sh,3);ctx.stroke();
-    ctx.shadowBlur=0;
-    // 24 ports in 2 rows of 12
-    const np=12,pw=6.2,ph=5.5,gap2=1.8;
-    const totalPW=np*(pw+gap2)-gap2;
-    for(let row=0;row<2;row++){
-      for(let i=0;i<np;i++){
-        const px=x-totalPW/2+i*(pw+gap2);
-        const py=y-sh/2+sh*0.1+row*(ph+2.5);
-        const active=Math.random()>.25;
-        ctx.fillStyle='#050e06';ctx.strokeStyle='#182018';ctx.lineWidth=.4;
-        ctx.fillRect(px,py,pw,ph);ctx.strokeRect(px,py,pw,ph);
-        ctx.fillStyle='#030808';ctx.fillRect(px+.5,py+1.5,pw-1,ph-2.5);
-        // bicolor LED (link/activity)
-        const lc=active?(Math.random()>.7?'#ff8c00':'#3fb950'):'#111';
-        led(px+pw/2,py-1.5,1.3,lc,active?4:0);
-      }
-    }
-    // SFP uplink slots
-    for(let i=0;i<2;i++){
-      ctx.fillStyle='#070e07';ctx.strokeStyle='#4dabf744';ctx.lineWidth=.8;
-      ctx.fillRect(x+sw/2-22+i*11,y-sh/2+2,9,sh-4);ctx.strokeRect(x+sw/2-22+i*11,y-sh/2+2,9,sh-4);
-      ctx.fillStyle='#4dabf7';ctx.fillRect(x+sw/2-20+i*11,y-sh/2+3,5,2);
-    }
-    // Console + management
-    ctx.fillStyle='#040c04';ctx.strokeStyle='#d2a67944';ctx.lineWidth=.6;
-    ctx.fillRect(x-sw/2+3,y-sh*.2,5,sh*.55);ctx.strokeRect(x-sw/2+3,y-sh*.2,5,sh*.55);
-    // System / Pwr LEDs
-    led(x-sw/2+12,y,2.2,'#3fb950',10);
-    led(x-sw/2+19,y,2.2,'#ff8c00',6);
-    ctx.fillStyle='rgba(255,255,255,0.07)';ctx.font=`bold ${Math.max(5,r*.25)}px monospace`;
-    ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('24-PORT MANAGED SWITCH',x,y+sh/2-1);
-
-  } else if (shape === 'patchPanel') {
-    const pw=s*1.65,ph=s*.28;
-    ctx.shadowBlur=20;ctx.shadowColor='#d2992244';
-    const pf=ctx.createLinearGradient(x-pw/2,y-ph/2,x-pw/2,y+ph/2);pf.addColorStop(0,'#3b372d');pf.addColorStop(1,'#17140d');
-    iso3D(x-pw/2,y-ph/2,pw,ph,5,'#4a4333','#211d13',pf);ctx.strokeStyle='#d29922';ctx.lineWidth=1.2;rr(x-pw/2,y-ph/2,pw,ph,3);ctx.stroke();ctx.shadowBlur=0;
-    const ports=24,step=(pw-20)/(ports-1);
-    for(let i=0;i<ports;i++){
-      const px=x-pw/2+10+i*step;ctx.fillStyle='#080808';ctx.strokeStyle='#8a6f25';ctx.lineWidth=.4;ctx.fillRect(px-2,y-3,4,6);ctx.strokeRect(px-2,y-3,4,6);
-    }
-    ctx.fillStyle='#f2cc60';ctx.font=`bold ${Math.max(4,r*.22)}px monospace`;ctx.textAlign='right';ctx.textBaseline='bottom';ctx.fillText('PATCH PANEL',x+pw/2-4,y+ph/2-1);
-
-  } else if (shape === 'serverRack' || shape === 'server') {
-    const srw=s*.95,srh=s*1.35;
-    ctx.shadowBlur=22;ctx.shadowColor='#f8514944';
-    const srf=ctx.createLinearGradient(x-srw/2,y-srh/2,x-srw/2,y+srh/2);
-    srf.addColorStop(0,'#282828');srf.addColorStop(1,'#101010');
-    iso3D(x-srw/2,y-srh/2,srw,srh,6,'#353535','#1a1a1a',srf);
-    ctx.strokeStyle='#444';ctx.lineWidth=1.2;rr(x-srw/2,y-srh/2,srw,srh,3);ctx.stroke();
-    ctx.shadowBlur=0;
-    // 4 rack units
-    const units=4,unitH=(srh-8)/units;
-    for(let u=0;u<units;u++){
-      const uy=y-srh/2+4+u*unitH;
-      const ug=ctx.createLinearGradient(x-srw/2+2,uy,x-srw/2+2,uy+unitH-2);
-      ug.addColorStop(0,'#2c2c2c');ug.addColorStop(1,'#1a1a1a');
-      ctx.fillStyle=ug;rr(x-srw/2+2,uy,srw-4,unitH-2,2);ctx.fill();
-      ctx.strokeStyle='#333';ctx.lineWidth=.5;rr(x-srw/2+2,uy,srw-4,unitH-2,2);ctx.stroke();
-      // drive bays
-      for(let b=0;b<3;b++){
-        const bx=x-srw/2+5+b*(srw*.28),bw2=srw*.25,bh2=unitH-6;
-        const bg3=ctx.createLinearGradient(bx,uy+2,bx+bw2,uy+2+bh2);
-        bg3.addColorStop(0,'#1c1c1c');bg3.addColorStop(1,'#121212');
-        ctx.fillStyle=bg3;ctx.strokeStyle='#2a2a2a';ctx.lineWidth=.4;
-        ctx.fillRect(bx,uy+2,bw2,bh2);ctx.strokeRect(bx,uy+2,bw2,bh2);
-        // handle bar
-        ctx.fillStyle='#3a3a3a';ctx.fillRect(bx+2,uy+unitH-7,bw2-4,2);
-        // activity LED
-        const act=Math.random()>.5;
-        led(bx+4,uy+4,1.5,act?'#ff8c00':'#1a1a1a',act?6:0);
-      }
-      // status LEDs right
-      const stC=[u===0?'#3fb950':u<3?'#3fb950':'#333','#ff8c00'][u%2===1&&u<2?1:0]||'#3fb950';
-      led(x+srw/2-8,uy+unitH/2,2.5,u<3?'#3fb950':'#333',u<3?8:0);
-      // unit label
-      ctx.fillStyle='rgba(255,255,255,0.07)';ctx.font=`${Math.max(4,r*.22)}px monospace`;
-      ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(`1U-${u+1}`,x-srw/2+4,uy+2);
-    }
-    // Power button
-    const pbg=ctx.createRadialGradient(x+srw/2-9,y+srh/2-9,0,x+srw/2-9,y+srh/2-9,5);
-    pbg.addColorStop(0,'#5aff8a');pbg.addColorStop(1,'#1a6a30');
-    ctx.fillStyle=pbg;ctx.shadowBlur=14;ctx.shadowColor='#3fb950';
-    ctx.beginPath();ctx.arc(x+srw/2-9,y+srh/2-9,4.5,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle='#2a2a2a';ctx.lineWidth=1;ctx.stroke();
-    ctx.shadowBlur=0;
-    // Vent holes bottom
-    ctx.fillStyle='rgba(0,0,0,0.5)';
-    for(let v=0;v<8;v++) ctx.fillRect(x-srw/2+4+v*8,y+srh/2-5,5,3);
-
-  } else if (shape === 'serverTower') {
-    const tw=s*.78,th=s*1.55;
-    ctx.shadowBlur=22;ctx.shadowColor='#f8514944';
-    const tf=ctx.createLinearGradient(x-tw/2,y-th/2,x+tw/2,y+th/2);
-    tf.addColorStop(0,'#333');tf.addColorStop(1,'#0c0c0c');
-    iso3D(x-tw/2,y-th/2,tw,th,7,'#3b3b3b','#171717',tf);
-    ctx.strokeStyle='#555';ctx.lineWidth=1.2;rr(x-tw/2,y-th/2,tw,th,4);ctx.stroke();ctx.shadowBlur=0;
-    for(let b=0;b<3;b++){
-      const by=y-th/2+8+b*12;
-      ctx.fillStyle='#141414';ctx.strokeStyle='#444';ctx.lineWidth=.6;ctx.fillRect(x-tw/2+5,by,tw-10,9);ctx.strokeRect(x-tw/2+5,by,tw-10,9);
-      ctx.fillStyle='#555';ctx.fillRect(x+tw/2-10,by+3,3,3);
-    }
-    ctx.fillStyle='#080808';ctx.beginPath();ctx.arc(x,y+th/2-15,9,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle='#333';ctx.lineWidth=1;for(let a=0;a<Math.PI*2;a+=Math.PI/4){ctx.beginPath();ctx.moveTo(x,y+th/2-15);ctx.lineTo(x+Math.cos(a)*8,y+th/2-15+Math.sin(a)*8);ctx.stroke();}
-    led(x+tw/2-8,y+th/2-7,3,'#3fb950',10);
-
-  } else if (shape === 'firewall') {
-    const fw=s*1.18,fh=s*.48;
-    ctx.shadowBlur=24;ctx.shadowColor='#f8514966';
-    const ff=ctx.createLinearGradient(x-fw/2,y-fh/2,x-fw/2,y+fh/2);
-    ff.addColorStop(0,'#2e1212');ff.addColorStop(1,'#160808');
-    iso3D(x-fw/2,y-fh/2,fw,fh,6,'#3e1818','#201010',ff);
-    ctx.strokeStyle='#f85149';ctx.lineWidth=1.5;rr(x-fw/2,y-fh/2,fw,fh,5);ctx.stroke();
-    ctx.shadowBlur=0;
-    // Ventilation mesh pattern
-    ctx.fillStyle='rgba(0,0,0,0.3)';
-    for(let vx=0;vx<5;vx++) for(let vy=0;vy<2;vy++)
-      ctx.fillRect(x+fw*.1+vx*8,y-fh*.3+vy*7,5,4);
-    // Shield logo (detailed)
-    const shH=fh*.85,shW=shH*.65;
-    ctx.save();
-    ctx.shadowBlur=12;ctx.shadowColor='#f85149';
-    // Outer shield
-    ctx.fillStyle='#f8514933';ctx.strokeStyle='#f85149';ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.moveTo(x,y-shH*.48);
-    ctx.lineTo(x+shW*.5,y-shH*.2);ctx.lineTo(x+shW*.5,y+shH*.08);
-    ctx.quadraticCurveTo(x+shW*.5,y+shH*.35,x,y+shH*.52);
-    ctx.quadraticCurveTo(x-shW*.5,y+shH*.35,x-shW*.5,y+shH*.08);
-    ctx.lineTo(x-shW*.5,y-shH*.2);ctx.closePath();ctx.fill();ctx.stroke();
-    // Inner shield highlight
-    ctx.fillStyle='rgba(248,81,73,0.12)';
-    ctx.beginPath();ctx.moveTo(x,y-shH*.42);
-    ctx.lineTo(x+shW*.38,y-shH*.16);ctx.lineTo(x+shW*.38,y+shH*.04);
-    ctx.quadraticCurveTo(x,y+shH*.28,x,y+shH*.28);
-    ctx.quadraticCurveTo(x-shW*.38,y+shH*.04,x-shW*.38,y+shH*.04);
-    ctx.lineTo(x-shW*.38,y-shH*.16);ctx.closePath();ctx.fill();
-    // Lightning bolt
-    ctx.strokeStyle='#f85149';ctx.lineWidth=1.5;ctx.fillStyle='#f85149';
-    ctx.beginPath();ctx.moveTo(x+2,y-shH*.28);ctx.lineTo(x-5,y+2);ctx.lineTo(x,y+2);ctx.lineTo(x-3,y+shH*.3);
-    ctx.lineTo(x+6,y-2);ctx.lineTo(x+1,y-2);ctx.closePath();ctx.fill();
-    ctx.restore();
-    // 6 ports
-    for(let i=0;i<6;i++){
-      const lcs=['#3fb950','#3fb950','#f85149','#f85149','#ff8c00','#333'];
-      port(x-fw*.38+i*(fw*.13)-4,y+fh*.14,9,fh*.28,i<4);
-    }
-    // Status panel right
-    ctx.fillStyle='#0d0505';ctx.strokeStyle='#f8514944';ctx.lineWidth=.8;
-    rr(x+fw*.35,y-fh*.3,fw*.12,fh*.6,2);ctx.fill();ctx.stroke();
-    led(x+fw*.35+fw*.06,y-fh*.15,2,'#3fb950',8);
-    led(x+fw*.35+fw*.06,y+fh*.05,2,'#f85149',8);
-    led(x+fw*.35+fw*.06,y+fh*.22,2,'#ff8c00',6);
-
-  } else if (shape === 'satDish') {
-    const p=SATELLITE_PROVIDERS[node?.satelliteProvider]||SATELLITE_PROVIDERS.starlink,pc=p.color;
-    ctx.shadowBlur=22;ctx.shadowColor=pc+'66';
-    ctx.strokeStyle='#78909c';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,y+r*.2);ctx.lineTo(x,y+r*1.05);ctx.stroke();
-    const dg=ctx.createLinearGradient(x-r,y-r,x+r,y+r);dg.addColorStop(0,'#f4f8fa');dg.addColorStop(.55,'#9fb1bc');dg.addColorStop(1,'#42545f');
-    ctx.save();ctx.translate(x,y-r*.15);ctx.rotate(-.45);ctx.fillStyle=dg;ctx.strokeStyle=pc;ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(0,0,r*1.1,r*.48,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.strokeStyle='#5f7380';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(r*.2,0);ctx.lineTo(r*.95,-r*.42);ctx.stroke();led(r*.95,-r*.42,r*.12,pc,8);ctx.restore();
-    ctx.shadowBlur=0;ctx.fillStyle='#21323b';ctx.strokeStyle=pc;rr(x-r*.65,y+r*.92,r*1.3,r*.3,4);ctx.fill();ctx.stroke();
-    ctx.fillStyle=pc;ctx.font=`bold ${Math.max(5,r*.28)}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.name.toUpperCase(),x,y+r*1.08);
-
-  } else if (shape === 'satellite') {
-    const p=SATELLITE_PROVIDERS[node?.satelliteProvider]||SATELLITE_PROVIDERS.starlink,pc=p.color;
-    ctx.shadowBlur=24;ctx.shadowColor=pc+'66';
-    const pw=r*1.25,ph=r*.65;[-1,1].forEach(side=>{const px=side<0?x-r*2.1:x+r*.85;ctx.fillStyle='#12346a';ctx.strokeStyle='#4dabf7';rr(px,y-ph/2,pw,ph,3);ctx.fill();ctx.stroke();for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(px+i*pw/4,y-ph/2);ctx.lineTo(px+i*pw/4,y+ph/2);ctx.stroke();}});
-    const body=ctx.createLinearGradient(x-r,y-r,x+r,y+r);body.addColorStop(0,'#f4f5f6');body.addColorStop(.45,'#8999a3');body.addColorStop(1,'#2f3b42');ctx.fillStyle=body;ctx.strokeStyle=pc;rr(x-r*.85,y-r*.7,r*1.7,r*1.4,6);ctx.fill();ctx.stroke();
-    ctx.fillStyle='#152832';rr(x-r*.5,y-r*.36,r,r*.72,3);ctx.fill();led(x,y-r*.08,r*.15,pc,10);
-    ctx.strokeStyle='#708690';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y+r*.55);ctx.lineTo(x,y+r*1.15);ctx.stroke();ctx.fillStyle='#dbe4e8';ctx.strokeStyle=pc;ctx.beginPath();ctx.ellipse(x,y+r*1.15,r*.55,r*.2,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-    ctx.shadowBlur=0;ctx.strokeStyle=pc+'66';ctx.setLineDash([4,5]);ctx.beginPath();ctx.ellipse(x,y,r*2.6,r*1.1,-.18,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle=pc;ctx.font=`bold ${Math.max(6,r*.32)}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.orbit,x,y+r*.2);
-
-  } else if (shape === 'dataCenter') {
-    const bw=s*1.75,bh=s*1.35,bx=x-bw/2,by=y-bh/2;
-    const bg=ctx.createLinearGradient(bx,by,bx+bw,by+bh);bg.addColorStop(0,'#334b5f');bg.addColorStop(.5,'#14293a');bg.addColorStop(1,'#07131e');
-    ctx.shadowBlur=24;ctx.shadowColor=color+'66';iso3D(bx,by,bw,bh,10,'#45677f','#0a1c2a',bg);ctx.shadowBlur=0;
-    ctx.strokeStyle=color+'cc';ctx.lineWidth=1.6;rr(bx,by,bw,bh,5);ctx.stroke();
-    for(let row=0;row<3;row++)for(let column=0;column<6;column++){
-      const ww=bw*.1,wh=bh*.11,wx=bx+bw*.08+column*bw*.145,wy=by+bh*.18+row*bh*.2;
-      ctx.fillStyle=(row+column)%3===0?'#7dd3fc':'#1d4f70';rr(wx,wy,ww,wh,1);ctx.fill();
-    }
-    ctx.fillStyle='#071018';ctx.strokeStyle=color;rr(x-bw*.12,by+bh*.72,bw*.24,bh*.28,2);ctx.fill();ctx.stroke();
-    ctx.fillStyle='#d9f4ff';ctx.font=`bold ${Math.max(6,r*.28)}px Arial`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('DATA CENTER',x,by+bh*.09);
-    ctx.strokeStyle='#a8c2d2';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+bw*.28,by-8);ctx.lineTo(x+bw*.28,by-25);ctx.stroke();
-    ctx.fillStyle='#e8f2f7';ctx.strokeStyle=color;ctx.beginPath();ctx.ellipse(x+bw*.28,by-27,11,5,-.35,0,Math.PI*2);ctx.fill();ctx.stroke();
-    [12,20].forEach(rad=>{ctx.strokeStyle=color+'66';ctx.beginPath();ctx.arc(x+bw*.31,by-34,rad,Math.PI+.2,-.55);ctx.stroke();});
-
-  } else if (shape === 'cloud') {
-    // ── GLOBO ISP/CLOUD REALISTA HD ───────────
-    ctx.shadowBlur=28;ctx.shadowColor=color+'66';
-    // ocean base
-    const cg=ctx.createRadialGradient(x-r*.28,y-r*.32,r*.05,x,y,r);
-    cg.addColorStop(0,'#1e4a7a');cg.addColorStop(0.4,'#0f2d54');cg.addColorStop(0.8,'#081a36');cg.addColorStop(1,'#040e20');
-    ctx.fillStyle=cg;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.stroke();
-    ctx.shadowBlur=0;
-    // continent blobs
-    const conts=[{dx:-.25,dy:-.2,rw:.28,rh:.22},{dx:.2,dy:.15,rw:.22,rh:.18},{dx:-.1,dy:.3,rw:.15,rh:.12}];
-    ctx.fillStyle='rgba(60,160,80,0.55)';
-    conts.forEach(c2=>{
-      ctx.beginPath();ctx.ellipse(x+c2.dx*r,y+c2.dy*r,c2.rw*r,c2.rh*r,Math.random()*.5,0,Math.PI*2);ctx.fill();
-    });
-    // polar caps
-    ctx.fillStyle='rgba(220,240,255,0.35)';
-    ctx.beginPath();ctx.ellipse(x,y-r*.82,r*.28,r*.14,0,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.ellipse(x,y+r*.82,r*.22,r*.11,0,0,Math.PI*2);ctx.fill();
-    // lat/lon lines
-    ctx.strokeStyle=color+'30';ctx.lineWidth=.6;
-    [-0.6,-0.3,0,0.3,0.6].forEach(lat=>{
-      const yr=y+lat*r,wr=Math.sqrt(Math.max(0,r*r-(lat*r)*(lat*r)));
-      ctx.beginPath();ctx.ellipse(x,yr,wr,wr*.25,0,0,Math.PI*2);ctx.stroke();
-    });
-    [-.5,-.1,.3,.7].forEach(lon=>{
-      ctx.beginPath();ctx.ellipse(x,y,Math.abs(lon)*r+r*.08,r,0,0,Math.PI*2);ctx.stroke();
-    });
-    // atmosphere glow rim
-    const atmo=ctx.createRadialGradient(x,y,r*.88,x,y,r*1.08);
-    atmo.addColorStop(0,'rgba(100,180,255,0.18)');atmo.addColorStop(1,'rgba(100,180,255,0)');
-    ctx.fillStyle=atmo;ctx.beginPath();ctx.arc(x,y,r*1.08,0,Math.PI*2);ctx.fill();
-    // specular highlight
-    const sp=ctx.createRadialGradient(x-r*.3,y-r*.35,0,x-r*.15,y-r*.2,r*.55);
-    sp.addColorStop(0,'rgba(200,230,255,0.28)');sp.addColorStop(1,'rgba(200,230,255,0)');
-    ctx.fillStyle=sp;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
-    // orbit ring
-    ctx.strokeStyle=color+'66';ctx.lineWidth=.8;ctx.setLineDash([3,5]);
-    ctx.beginPath();ctx.ellipse(x,y,r*1.22,r*.32,Math.PI/6,0,Math.PI*2);ctx.stroke();
-    ctx.setLineDash([]);
-    // satellite on orbit
-    const sAngle=_3d.frame*.04;
-    const sx=x+Math.cos(sAngle)*r*1.22,sy=y+Math.sin(sAngle)*r*.32*.8;
-    ctx.fillStyle=color;ctx.shadowBlur=8;ctx.shadowColor=color;
-    ctx.fillRect(sx-4,sy-1.5,8,3);ctx.fillRect(sx-1,sy-4,2,8);
-    ctx.shadowBlur=0;
-    // pulsing signal rings
-    const pulse=Math.sin(_3d.frame*.07)*3;
-    [[r+6+pulse,'55'],[r+13+pulse*.7,'33'],[r+20+pulse*.4,'18']].forEach(([rad,op])=>{
-      const rgb=color.slice(1).match(/../g).map(h=>parseInt(h,16));
-      ctx.strokeStyle=`rgba(${rgb.join(',')},${parseInt(op,16)/255})`;
-      ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.stroke();
-    });
-    // network nodes on surface
-    const gnodes=[{a:-.3,b:-.4},{a:.5,b:.1},{a:-.15,b:.5},{a:.25,b:-.25},{a:.0,b:.3}];
-    gnodes.forEach((n2,i)=>{
-      const nx=x+n2.a*r*.85,ny=y+n2.b*r*.85;
-      ctx.fillStyle=i%2===0?'#fff':'#4dabf7';ctx.shadowBlur=6;ctx.shadowColor='#4dabf7';
-      ctx.beginPath();ctx.arc(nx,ny,2,0,Math.PI*2);ctx.fill();
-      ctx.shadowBlur=0;
-      ctx.strokeStyle='rgba(100,180,255,0.3)';ctx.lineWidth=.5;
-      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(nx,ny);ctx.stroke();
-    });
-  } else {
-    ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
-  }
-  ctx.restore();
-}
-
-function roundRect3D(ctx,x,y,w,h,r){
-  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
-  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);
-  ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
-}
-
-
-
-function render3DLoop(){
-  if(!_3d.running){return;}
-  const c=document.getElementById('canvas3d');
-  if(!c||document.getElementById('modal3d').style.display==='none'){_3d.running=false;return;}
-  const ctx=c.getContext('2d');
-  c.width=window.innerWidth;c.height=window.innerHeight;
-
-  if(_3d.animating) _3d.rotY+=0.004;
-  _3d.frame++;
-
-  // Background gradient
-  const bg=ctx.createRadialGradient(c.width/2,c.height/2,0,c.width/2,c.height/2,c.width*.7);
-  bg.addColorStop(0,'#0a0f1a');bg.addColorStop(1,'#000408');
-  ctx.fillStyle=bg;ctx.fillRect(0,0,c.width,c.height);
-
-  // Grid floor
-  ctx.save();ctx.strokeStyle='rgba(100,100,200,0.06)';ctx.lineWidth=1;
-  for(let g=-500;g<=500;g+=80){
-    const a=project3D(g,-120,-500),b=project3D(g,-120,500);
-    const c2=project3D(-500,-120,g),d2=project3D(500,-120,g);
-    ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(c2.sx,c2.sy);ctx.lineTo(d2.sx,d2.sy);ctx.stroke();
-  }
-  ctx.restore();
-
-  // Project all nodes
-  _3d.nodes.forEach(n=>{
-    const p=project3D(n.x,n.y,n.z);
-    n.px=p.sx;n.py=p.sy;n.pscale=p.scale;n.pz=p.z;
-  });
-
-  // Sort by Z (painter's algo)
-  const sorted=[..._3d.nodes].sort((a,b)=>a.pz-b.pz);
-
-  // Draw edges
-  _3d.edges.forEach(e=>{
-    const gradient=ctx.createLinearGradient(e.a.px,e.a.py,e.b.px,e.b.py);
-    gradient.addColorStop(0,e.kind==='wifi'?'#70e1ffcc':e.kind==='satellite'?'#ffd166dd':e.a.color+'66');
-    gradient.addColorStop(1,e.kind==='wifi'?'#38bcd8cc':e.kind==='satellite'?'#70e1ffdd':e.b.color+'66');
-    ctx.save();ctx.strokeStyle=gradient;ctx.lineWidth=e.kind==='backbone'?4:((e.kind==='wifi'||e.kind==='satellite')?2.5:1.5);
-    ctx.setLineDash(e.kind==='wifi'?[2,7]:(e.kind==='satellite'?[9,6]:[4,8]));ctx.beginPath();
-    ctx.moveTo(e.a.px,e.a.py);ctx.lineTo(e.b.px,e.b.py);ctx.stroke();
-    ctx.restore();
-  });
-
-  // Animate particles
-  if(_3d.animating){
-    _3d.particles.forEach(p=>{
-      p.t+=p.speed;if(p.t>1)p.t=0;
-      const px=p.edge.a.px+(p.edge.b.px-p.edge.a.px)*p.t;
-      const py=p.edge.a.py+(p.edge.b.py-p.edge.a.py)*p.t;
-      ctx.save();ctx.fillStyle=p.color;ctx.shadowBlur=8;ctx.shadowColor=p.color;
-      ctx.beginPath();ctx.arc(px,py,3,0,Math.PI*2);ctx.fill();ctx.restore();
-    });
-  }
-
-  // Ping ICMP: anima a rota de ida (azul) e a resposta (verde), mesmo com a câmera pausada.
-  draw3DPingParticles(ctx);
-
-  // Draw nodes
-  sorted.forEach(n=>{
-    const r=Math.max(10,20*n.pscale);
-    const shape=n.type==='server'?(n.serverType==='tower'?'serverTower':'serverRack'):(DEV_SHAPES[n.type]||'sphere');
-    // Glow
-    ctx.save();ctx.shadowBlur=20*n.pscale;ctx.shadowColor=n.color;
-    drawShape3D(ctx,shape,n.px,n.py,r,n.color,0.92,n);
-    ctx.restore();
-    // Inner highlight
-    ctx.save();ctx.fillStyle='rgba(255,255,255,0.18)';ctx.beginPath();ctx.arc(n.px-r*.2,n.py-r*.25,r*.35,0,Math.PI*2);ctx.fill();ctx.restore();
-    // Label
-    if(_3d.showLabels&&r>10){
-      ctx.save();
-      ctx.font=`bold ${Math.max(9,11*n.pscale)}px monospace`;
-      ctx.fillStyle='#fff';ctx.strokeStyle='rgba(0,0,0,.8)';ctx.lineWidth=3;
-      ctx.textAlign='center';ctx.textBaseline='top';
-      ctx.strokeText(n.name,n.px,n.py+r+3);
-      ctx.fillText(n.name,n.px,n.py+r+3);
-      // IP tag
-      ctx.font=`${Math.max(7,9*n.pscale)}px monospace`;
-      ctx.fillStyle=n.color;ctx.strokeStyle='rgba(0,0,0,.7)';ctx.lineWidth=2;
-      ctx.strokeText(n.ip,n.px,n.py+r+14);
-      ctx.fillText(n.ip,n.px,n.py+r+14);
-      ctx.restore();
-    }
-  });
-
-  // HUD
-  ctx.save();ctx.fillStyle='rgba(196,181,253,.7)';ctx.font='10px monospace';ctx.textAlign='right';ctx.textBaseline='top';
-  ctx.fillText('Dispositivos: '+_3d.nodes.length+' · Conexões: '+_3d.edges.length+' · Frame: '+_3d.frame,c.width-16,50);
-  ctx.restore();
-
-  requestAnimationFrame(render3DLoop);
-}
-
-// Mouse controls
-const c3=document.getElementById('canvas3d');
-function get3DNodeAt(x,y){
-  return [..._3d.nodes].sort((a,b)=>b.pz-a.pz).find(n=>{
-    const radius=Math.max(18,32*(n.pscale||1));
-    return Math.hypot(x-n.px,y-n.py)<=radius;
-  })||null;
-}
-function persist3DNodePosition(n){
-  const dev=devices.find(d=>d.id===n.id);
-  if(dev)dev.view3d={x:n.x,y:n.y,z:n.z};
-}
-function move3DNodeByScreen(n,dx,dy){
-  const scale=Math.max(n.pscale||1,.15);
-  const drx=dx/scale,dry=-dy/scale;
-  const cosX=Math.cos(_3d.rotX),sinX=Math.sin(_3d.rotX);
-  const cosY=Math.cos(_3d.rotY),sinY=Math.sin(_3d.rotY);
-  n.x+=drx*cosY-dry*sinX*sinY;
-  n.y+=dry*cosX;
-  n.z+=-drx*sinY-dry*sinX*cosY;
-  persist3DNodePosition(n);
-}
-function begin3DPointer(x,y){
-  _3d.drag=true;_3d.dragMoved=false;_3d.dragHistorySaved=false;
-  _3d.lastMX=x;_3d.lastMY=y;
-  _3d.dragNode=!_3d.animating?get3DNodeAt(x,y):null;
-  c3.style.cursor=_3d.dragNode?'grabbing':'grabbing';
-}
-function move3DPointer(x,y){
-  if(!_3d.drag)return;
-  const dx=x-_3d.lastMX,dy=y-_3d.lastMY;
-  if(Math.abs(dx)+Math.abs(dy)>1)_3d.dragMoved=true;
-  if(_3d.dragNode){
-    if(!_3d.dragHistorySaved&&_3d.dragMoved){saveHistory();_3d.dragHistorySaved=true;}
-    move3DNodeByScreen(_3d.dragNode,dx,dy);
-  }else{
-    _3d.rotY+=dx*.005;_3d.rotX+=dy*.005;
-  }
-  _3d.lastMX=x;_3d.lastMY=y;
-}
-function end3DPointer(x,y){
-  if(!_3d.drag)return;
-  const movedNode=_3d.dragNode,wasMoved=_3d.dragMoved;
-  _3d.drag=false;_3d.dragNode=null;_3d.dragMoved=false;_3d.dragHistorySaved=false;
-  c3.style.cursor=_3d.animating?'grab':'default';
-  if(movedNode){
-    persist3DNodePosition(movedNode);
-    if(!wasMoved)show3DInfo(movedNode);
-    else{draw();updateDevList();sysLog(`Posição 3D atualizada: ${movedNode.name}`,'lsys');}
-    return;
-  }
-  if(!wasMoved){const node=get3DNodeAt(x,y);if(node)show3DInfo(node);}
-}
-c3.addEventListener('mousedown',e=>{begin3DPointer(e.clientX,e.clientY);e.preventDefault();});
-c3.addEventListener('mouseup',e=>{
-  end3DPointer(e.clientX,e.clientY);
-});
-c3.addEventListener('mousemove',e=>{
-  if(_3d.drag){move3DPointer(e.clientX,e.clientY);return;}
-  if(!_3d.animating)c3.style.cursor=get3DNodeAt(e.clientX,e.clientY)?'grab':'default';
-});
-c3.addEventListener('mouseleave',e=>{if(_3d.drag)end3DPointer(e.clientX,e.clientY);});
-c3.addEventListener('wheel',e=>{e.preventDefault();_3d.camDist=Math.max(150,Math.min(1500,_3d.camDist+e.deltaY*.8));},{passive:false});
-// Touch
-c3.addEventListener('touchstart',e=>{begin3DPointer(e.touches[0].clientX,e.touches[0].clientY);},{passive:true});
-c3.addEventListener('touchend',e=>end3DPointer(_3d.lastMX,_3d.lastMY));
-c3.addEventListener('touchmove',e=>{
-  e.preventDefault();
-  move3DPointer(e.touches[0].clientX,e.touches[0].clientY);
-},{passive:false});
-
-function show3DInfo(n){
-  const el=document.getElementById('modal3d-info');
-  const dev=devices.find(d=>d.id==n.id);
-  el.style.display='block';
-  el.innerHTML=`<div style="font-size:12px;font-weight:700;color:${n.color};margin-bottom:6px;">${n.name}</div>
-    <div><span style="color:#6e7681">Tipo:</span> ${n.type}</div>
-    <div><span style="color:#6e7681">IP:</span> <code style="color:#3fb950">${n.ip}</code></div>
-    ${dev?.mac?`<div><span style="color:#6e7681">MAC:</span> <code style="color:#6e7681;font-size:9px">${dev.mac}</code></div>`:''}
-    ${dev?.gw?`<div><span style="color:#6e7681">GW:</span> <code>${dev.gw}</code></div>`:''}
-    ${dev?.ssid?`<div><span style="color:#6e7681">Wi-Fi:</span> <code style="color:#70e1ff">${dev.ssid}</code></div>`:''}
-    ${n.ispData?`<div><span style="color:#6e7681">ISP:</span> ${n.ispData.name}</div>`:''}
-    ${n.routerType?`<div><span style="color:#6e7681">Modelo:</span> ${n.routerType}</div>`:''}
-    ${n.type==='server'?`<div><span style="color:#6e7681">Formato:</span> ${n.serverType==='tower'?'Servidor torre':'Servidor rack 2U'}</div>`:''}
-    ${n.type==='switch'?`<div><span style="color:#6e7681">Formato:</span> ${n.switchForm==='desktop'?'Switch de mesa':'Switch rack 1U'} · ${n.portCount||24} portas</div>`:''}
-    ${n.type==='patchPanel'?`<div><span style="color:#6e7681">Formato:</span> Patch panel passivo 1U · ${n.portCount||24} portas</div>`:''}
-    <div style="margin-top:6px;font-size:9px;color:#6e7681">Clique em outro ponto para fechar</div>`;
-}
-
-function toggle3DLabels(){_3d.showLabels=!_3d.showLabels;}
-function toggle3DAnimate(){
-  _3d.animating=!_3d.animating;
-  document.getElementById('btn3danim').textContent=_3d.animating?'⏸ Pausar':'▶ Retomar';
-  document.getElementById('modal3d-drag-hint').style.display=_3d.animating?'none':'block';
-  c3.style.cursor=_3d.animating?'grab':'default';
-  if(_3d.animating){_3d.dragNode=null;_3d.drag=false;}
-}
-function reset3DCam(){_3d.rotX=0.4;_3d.rotY=0.3;_3d.camDist=600;_3d.camX=0;_3d.camY=0;}
-function zoom3D(f){_3d.camDist=Math.max(150,Math.min(1500,_3d.camDist*f));}
-function setView3D(v){
-  if(v==='top'){_3d.rotX=1.57;_3d.rotY=0;}
-  else if(v==='side'){_3d.rotX=0;_3d.rotY=1.57;}
-  else{_3d.rotX=0.4;_3d.rotY=0.6;}
-}
-window.addEventListener('resize',()=>{
-  const c=document.getElementById('canvas3d');
-  if(c){c.width=window.innerWidth;c.height=window.innerHeight;}
-});
-</script>
-
-<!-- AllanNet EDU: avaliações da Sala Cidade e painel de entregas -->
-</body>
-</html>
+      ctx.shadowBlur=24;

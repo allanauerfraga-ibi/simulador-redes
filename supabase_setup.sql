@@ -982,7 +982,6 @@ revoke all on function public.exam_deadline(uuid) from public;
 grant execute on function public.exam_deadline(uuid) to anon,authenticated;
 
 notify pgrst,'reload schema';
-
 -- Libera as atividades da Sala Cidade e adiciona correção automática segura no servidor.
 
 create or replace function public.create_exam(
@@ -1066,43 +1065,4 @@ begin
       select 1 from jsonb_array_elements(cs)c where c->>'kind'='cellular'and coalesce(c->>'active','true')<>'false'and(c->>'from'=x->>'id'or c->>'to'=x->>'id')and exists(
         select 1 from jsonb_array_elements(ds)t where t->>'type'='cellTower'and(t->>'id'=c->>'from'or t->>'id'=c->>'to'))))into ok;
     ch:=public._exam_check(ch,'Casas e pessoas conectadas por 4G/5G',houses>=4 and people>=4 and ok);
-    ch:=public._exam_check(ch,'Assinantes distribuídos entre as duas torres',serving_towers>=2);
-  else
-    ch:=public._exam_check(ch,'1 Data Center, 2 torres e 1 satélite',data_centers>=1 and towers>=2 and satellites>=1);
-    ch:=public._exam_check(ch,'4 residências e 6 pessoas com celular',houses>=4 and people>=6);
-    select exists(select 1 from jsonb_array_elements(cs)c where c->>'kind'='satellite'and coalesce(c->>'active','true')<>'false'
-      and lower(coalesce(c->>'dataCenterBackhaul','false'))='true'
-      and exists(select 1 from jsonb_array_elements(ds)d where d->>'type'='dataCenter'and(d->>'id'=c->>'from'or d->>'id'=c->>'to'))
-      and exists(select 1 from jsonb_array_elements(ds)s where s->>'type'='satellite'and(s->>'id'=c->>'from'or s->>'id'=c->>'to')))into ok;
-    ch:=public._exam_check(ch,'Data Center conectado ao satélite',ok);
-    ch:=public._exam_check(ch,'As duas torres conectadas ao satélite',orbital_towers>=2);
-    select not exists(select 1 from jsonb_array_elements(ds)x where x->>'type'in('house','person')and not exists(
-      select 1 from jsonb_array_elements(cs)c where c->>'kind'='cellular'and coalesce(c->>'active','true')<>'false'and(c->>'from'=x->>'id'or c->>'to'=x->>'id')and exists(
-        select 1 from jsonb_array_elements(ds)t where t->>'type'='cellTower'and(t->>'id'=c->>'from'or t->>'id'=c->>'to'))))into ok;
-    ch:=public._exam_check(ch,'Todos os assinantes com cobertura 4G/5G',houses+people>=10 and ok);
-    ch:=public._exam_check(ch,'Assinantes distribuídos entre as duas torres',serving_towers>=2);
-  end if;
-
-  total:=jsonb_array_length(ch);select count(*)into passed from jsonb_array_elements(ch)c where(c->>'ok')::boolean;
-  grade:=round(passed::numeric/greatest(1,total)*100);deadline:=least(e.ends_at,a.started_at+make_interval(mins=>e.duration_minutes));
-  final_status:=case when now()>deadline then'expired'else'submitted'end;
-  update public.exam_attempts set submitted_at=now(),status=final_status,score=grade,passed_checks=passed,total_checks=total,checks=ch,topology=p_topology where id=a.id;
-  return jsonb_build_object('ok',true,'status',final_status,'message','Atividade da Sala Cidade corrigida e entregue ao professor.');
-end $$;
-
-revoke all on function public._submit_city_activity(uuid,jsonb) from public,anon,authenticated;
-
-create or replace function public.submit_exam_secure(p_attempt_token uuid,p_topology jsonb)
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare v_key text;
-begin
-  select e.activity_key into v_key from public.exam_attempts a join public.exams e on e.id=a.exam_id where a.attempt_token=p_attempt_token;
-  if v_key is null then raise exception 'Tentativa não encontrada.';end if;
-  if v_key in('city1','city2','city3')then return public._submit_city_activity(p_attempt_token,p_topology);end if;
-  return public._submit_exam_secure_before_city(p_attempt_token,p_topology);
-end $$;
-
-revoke all on function public.submit_exam_secure(uuid,jsonb) from public;
-grant execute on function public.submit_exam_secure(uuid,jsonb) to anon,authenticated;
-
-notify pgrst,'reload schema';
+    ch:=public._exam_check(ch,'Assinantes distribuídos entre as duas torres',serving_towers>=2
