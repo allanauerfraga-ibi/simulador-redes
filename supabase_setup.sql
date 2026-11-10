@@ -474,8 +474,6 @@ end $$;
 revoke all on function public.submit_exam_secure(uuid,jsonb) from public;
 grant execute on function public.submit_exam_secure(uuid,jsonb) to anon,authenticated;
 notify pgrst,'reload schema';
-
-
 -- Separa provas e resultados por escola.
 
 alter table public.exams add column if not exists school_code text not null default 'narceu';
@@ -1065,4 +1063,4 @@ begin
       select 1 from jsonb_array_elements(cs)c where c->>'kind'='cellular'and coalesce(c->>'active','true')<>'false'and(c->>'from'=x->>'id'or c->>'to'=x->>'id')and exists(
         select 1 from jsonb_array_elements(ds)t where t->>'type'='cellTower'and(t->>'id'=c->>'from'or t->>'id'=c->>'to'))))into ok;
     ch:=public._exam_check(ch,'Casas e pessoas conectadas por 4G/5G',houses>=4 and people>=4 and ok);
-    ch:=public._exam_check(ch,'Assinantes distribuídos entre as duas torres',serving_towers>=2
+    ch:=public._exam_check(ch,'Assinantes distribuídos entre as duas torres',serving_towers>=2);

@@ -3176,7 +3176,7 @@ function activateExamData(data,studentName,studentName2='',isPair=false){
 }
 async function enterExamRoom(){
   const btn=document.getElementById('exam-entry-btn'),error=document.getElementById('exam-entry-error');if(!btn||!error)return;
-  const password=document.getElementById('exam-password')?.value||'',studentName=document.getElementById('exam-student-name')?.value.trim()||'',isPair=Boolean(document.getElementById('exam-is-pair')?.checked),studentName2=document.getElementById('exam-student-name-2')?.value.trim()||'',studentSchool=document.getElementById('exam-student-school')?.value.trim()||'',studentClass=document.getElementById('exam-student-class')?.value.trim()||'',studentGrade=studentClass?SCHOOL_EXAM_GRADE:'';
+  const password=(document.getElementById('exam-password')?.value||'').trim(),studentName=document.getElementById('exam-student-name')?.value.trim()||'',isPair=Boolean(document.getElementById('exam-is-pair')?.checked),studentName2=document.getElementById('exam-student-name-2')?.value.trim()||'',studentSchool=document.getElementById('exam-student-school')?.value.trim()||'',studentClass=document.getElementById('exam-student-class')?.value.trim()||'',studentGrade=studentClass?SCHOOL_EXAM_GRADE:'';
   if(!password||studentName.length<3||(isPair&&studentName2.length<3)||!studentSchool||!studentClass){error.textContent='Preencha a senha, o nome do aluno ou da dupla, escolha a escola e a turma.';error.style.display='block';return;}
   btn.disabled=true;btn.textContent='Liberando...';error.style.display='none';
   try{
@@ -5421,4 +5421,4 @@ function drawShape3D(ctx, shape, x, y, r, color, alpha, node) {
     if(notebook){
       // Notebook 3D aberto, com tela fina e base em perspectiva.
       const lw=s*1.22,lh=s*.76,lx=x-lw/2,ly=y-lh*.7;
-      ctx.shadowBlur=24;
+      ctx.shado
