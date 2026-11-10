@@ -321,6 +321,23 @@ revoke all on function public.start_exam(text,text,text,text,text) from public;
 grant execute on function public.start_exam(text,text,text,text,text) to anon,authenticated;
 
 notify pgrst,'reload schema';
+
+-- =========================================================
+-- NIVELAMENTO DAS 15 VERSÕES PRÁTICAS (10/11/2026)
+-- =========================================================
+-- Equaliza a Prova 2 dos lotes existentes que ainda não foram iniciados.
+-- Tentativas abertas ou entregues permanecem intactas para preservar o histórico.
+update public.exams as exam
+set activity_key = 'provaCidade' || lpad(exam.version_number::text, 2, '0')
+where exam.exam_set_id is not null
+  and exam.stage_number = 2
+  and exam.version_number between 1 and 15
+  and exam.activity_key is distinct from ('provaCidade' || lpad(exam.version_number::text, 2, '0'))
+  and not exists (
+    select 1
+    from public.exam_attempts as attempt
+    where attempt.exam_id = exam.id
+  );
 -- Permite ao professor substituir a senha de uma prova ou atividade própria.
 -- A senha original nunca é recuperada; somente o hash é substituído.
 
