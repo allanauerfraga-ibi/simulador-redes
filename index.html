@@ -123,6 +123,9 @@ canvas{display:block;}
 #modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center;}
 #modal-bg.show{display:flex;}
 .modal{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px;min-width:340px;max-width:480px;max-height:80vh;overflow-y:auto;}
+.modal.exam-dashboard-wide{width:min(1180px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:90vh;}
+.modal.exam-dashboard-wide .modal-btns{flex-wrap:wrap;}
+.modal.exam-dashboard-wide .exam-table{min-width:900px;}
 .modal h3{color:#58a6ff;margin-bottom:12px;font-size:14px;}
 .modal label{font-size:11px;color:#8b949e;display:block;margin-bottom:3px;}
 .modal input,.modal select{width:100%;background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:6px 8px;border-radius:5px;font-size:11px;margin-bottom:9px;}
@@ -2780,7 +2783,7 @@ function loadTopology(){
 // =========================================================
 // MODALS
 // =========================================================
-function showModal(html){document.getElementById('modal-box').innerHTML=html;document.getElementById('modal-bg').classList.add('show');}
+function showModal(html){const box=document.getElementById('modal-box');box.innerHTML=html;box.classList.toggle('exam-dashboard-wide',html.includes('Planejamento — Provas e Atividades'));document.getElementById('modal-bg').classList.add('show');}
 function closeModal(){document.getElementById('modal-bg').classList.remove('show');}
 function devOpts(sel2nd){return devices.map((d,i)=>`<option value="${d.id}"${i===(sel2nd?1:0)?' selected':''}>${d.name} (${d.ip})</option>`).join('');}
 
