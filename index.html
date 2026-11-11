@@ -1857,11 +1857,28 @@ function drawCitySceneBackground(){
   const sunX=w*.82,sunY=h*(sunset ? .29 : .14),sun=ctx.createRadialGradient(sunX,sunY,4,sunX,sunY,55);sun.addColorStop(0,night?'rgba(235,245,255,.96)':'rgba(255,250,210,.98)');sun.addColorStop(.35,night?'rgba(190,220,255,.24)':sunset?'rgba(255,145,80,.58)':'rgba(255,220,120,.55)');sun.addColorStop(1,'rgba(255,220,120,0)');ctx.fillStyle=sun;ctx.beginPath();ctx.arc(sunX,sunY,night?20:55,0,Math.PI*2);ctx.fill();
   // Nuvens suaves.
   const clouds=cloudy?[[.12,.13,1.2],[.35,.18,1],[.58,.11,1.35],[.78,.23,1.1],[.94,.13,.9]]:[[.52,.13,1],[.9,.26,.75],[.12,.12,.65]];clouds.forEach(([px,py,s])=>{const x=w*px,y=h*py;ctx.fillStyle=night?'rgba(155,175,195,.34)':cloudy?'rgba(230,235,238,.78)':'rgba(255,255,255,.72)';[[0,0,28],[28,4,22],[-25,7,19],[4,-12,23]].forEach(([dx,dy,r])=>{ctx.beginPath();ctx.arc(x+dx*s,y+dy*s,r*s,0,Math.PI*2);ctx.fill();});});
-  function mountain(points,top,bottom){const g=ctx.createLinearGradient(0,h*.18,0,ground);g.addColorStop(0,top);g.addColorStop(1,bottom);ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(0,ground);points.forEach(p=>ctx.lineTo(p[0]*w,p[1]*h));ctx.lineTo(w,ground);ctx.closePath();ctx.fill();}
-  mountain([[0,.46],[.12,.25],[.22,.43],[.34,.19],[.47,.45],[.61,.28],[.74,.46],[.88,.24],[1,.43]],night?'#314a57':sunset?'#746f72':'#6c8d8e',night?'#20353a':sunset?'#4f5348':'#42645b');
-  // Penhascos iluminados e cumes verdes em primeiro plano.
-  mountain([[0,.56],[.11,.34],[.23,.25],[.34,.52],[.47,.39],[.6,.48],[.74,.35],[.86,.49],[1,.38]],night?'#29483e':sunset?'#526b4d':'#4d7959',night?'#152d26':'#274d38');
-  ctx.fillStyle='rgba(225,238,223,.72)';ctx.beginPath();ctx.moveTo(w*.17,h*.31);ctx.lineTo(w*.23,h*.25);ctx.lineTo(w*.285,h*.36);ctx.lineTo(w*.235,h*.32);ctx.closePath();ctx.fill();
+  function mountain(points,top,mid,bottom,ridge,alpha=1){ctx.save();ctx.globalAlpha=alpha;const g=ctx.createLinearGradient(0,h*.15,0,ground);g.addColorStop(0,top);g.addColorStop(.58,mid);g.addColorStop(1,bottom);ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(0,ground);points.forEach(p=>ctx.lineTo(p[0]*w,p[1]*h));ctx.lineTo(w,ground);ctx.closePath();ctx.fill();ctx.strokeStyle=ridge;ctx.lineWidth=1.2;ctx.stroke();ctx.restore();}
+  function mountainFacet(points,color){ctx.fillStyle=color;ctx.beginPath();points.forEach((p,i)=>(i?ctx.lineTo(p[0]*w,p[1]*h):ctx.moveTo(p[0]*w,p[1]*h)));ctx.closePath();ctx.fill();}
+  function snowCap(px,py,width,depth,alpha){const x=px*w,y=py*h,ww=width*w,dd=depth*h;ctx.fillStyle=night?`rgba(184,205,218,${alpha*.62})`:cloudy?`rgba(225,234,234,${alpha*.72})`:`rgba(241,244,232,${alpha})`;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-ww*.52,y+dd*.72);ctx.lineTo(x-ww*.25,y+dd*.52);ctx.lineTo(x-ww*.08,y+dd*.68);ctx.lineTo(x+ww*.08,y+dd*.42);ctx.lineTo(x+ww*.28,y+dd*.66);ctx.lineTo(x+ww*.54,y+dd*.78);ctx.closePath();ctx.fill();}
+  // Cordilheira distante com névoa atmosférica para criar profundidade.
+  mountain([[0,.43],[.09,.31],[.18,.40],[.28,.24],[.39,.42],[.53,.22],[.65,.40],[.79,.29],[.90,.38],[1,.27]],night?'#334958':sunset?'#8a7b82':cloudy?'#82969b':'#91a8aa',night?'#2a414d':sunset?'#706c70':'#789191',night?'#233741':sunset?'#585c59':'#647f7b',night?'rgba(118,145,158,.28)':'rgba(230,239,231,.36)',.68);
+  // Plano intermediário com faces rochosas iluminadas e sombreadas.
+  mountain([[0,.46],[.12,.25],[.22,.43],[.34,.19],[.47,.45],[.61,.28],[.74,.46],[.88,.24],[1,.43]],night?'#3b5360':sunset?'#776d72':'#718d8d',night?'#29434a':sunset?'#5d5c57':'#55746d',night?'#20353a':sunset?'#454d45':'#385e50',night?'rgba(128,157,170,.34)':'rgba(222,236,222,.40)');
+  mountainFacet([[.34,.19],[.22,.43],[.34,.57]],night?'rgba(120,147,155,.13)':sunset?'rgba(255,190,145,.12)':'rgba(202,219,201,.18)');
+  mountainFacet([[.34,.19],[.47,.45],[.34,.57]],night?'rgba(4,18,28,.18)':'rgba(25,55,52,.22)');
+  mountainFacet([[.88,.24],[.74,.46],[.88,.58]],night?'rgba(115,142,151,.10)':'rgba(191,211,192,.14)');
+  mountainFacet([[.88,.24],[1,.43],[.88,.58]],night?'rgba(3,17,25,.20)':'rgba(23,51,48,.20)');
+  snowCap(.34,.19,.075,.072,.82);snowCap(.88,.24,.052,.052,.68);
+  // Névoa baixa separa visualmente a serra distante dos morros próximos.
+  const mountainMist=ctx.createLinearGradient(0,h*.40,0,ground);mountainMist.addColorStop(0,'rgba(225,236,228,0)');mountainMist.addColorStop(1,night?'rgba(75,103,105,.13)':sunset?'rgba(236,205,172,.13)':'rgba(220,235,222,.18)');ctx.fillStyle=mountainMist;ctx.fillRect(0,h*.38,w,ground-h*.38);
+  // Morros em primeiro plano, mais verdes, com vales e penhascos marcados.
+  mountain([[0,.56],[.11,.34],[.23,.25],[.34,.52],[.47,.39],[.60,.48],[.74,.35],[.86,.49],[1,.38]],night?'#2d4b40':sunset?'#586d50':'#527b5b',night?'#223d34':sunset?'#435c43':'#3d6849',night?'#152d26':'#244b34',night?'rgba(78,111,99,.52)':'rgba(121,158,116,.55)');
+  mountainFacet([[.23,.25],[.11,.34],[.23,.58]],night?'rgba(94,127,112,.10)':'rgba(142,177,129,.14)');
+  mountainFacet([[.23,.25],[.34,.52],[.23,.58]],night?'rgba(3,17,14,.20)':'rgba(15,51,30,.22)');
+  mountainFacet([[.74,.35],[.60,.48],[.74,.59]],night?'rgba(95,129,111,.08)':'rgba(145,180,129,.12)');
+  mountainFacet([[.74,.35],[.86,.49],[.74,.59]],night?'rgba(3,18,14,.18)':'rgba(14,49,29,.20)');
+  // Veios de rocha acompanham as encostas sem pesar no desempenho.
+  const rockLines=[[[.34,.23],[.30,.34],[.28,.46]],[[.34,.24],[.39,.35],[.43,.44]],[[.88,.28],[.83,.37],[.79,.45]],[[.23,.30],[.19,.39],[.16,.48]],[[.74,.39],[.69,.45],[.65,.50]]];ctx.strokeStyle=night?'rgba(160,181,178,.13)':'rgba(205,218,197,.20)';ctx.lineWidth=1;rockLines.forEach(line=>{ctx.beginPath();line.forEach((p,i)=>(i?ctx.lineTo(p[0]*w,p[1]*h):ctx.moveTo(p[0]*w,p[1]*h)));ctx.stroke();});
   // Área urbana no vale.
   const grass=ctx.createLinearGradient(0,ground,0,h);grass.addColorStop(0,night?'#365548':sunset?'#697c50':'#71935d');grass.addColorStop(1,night?'#172d28':'#33513c');ctx.fillStyle=grass;ctx.fillRect(0,ground,w,h-ground);
   // Gramado contínuo e uniforme nas duas laterais da estrada.
