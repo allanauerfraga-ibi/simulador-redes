@@ -1871,20 +1871,19 @@ function drawCitySceneBackground(){
   ctx.fillStyle=lotColor;[[.035,.64,.28,.32],[.72,.64,.245,.32]].forEach(([x,y,lw,lh])=>ctx.fillRect(w*x,h*y,w*lw,h*lh));
   ctx.strokeStyle=night?'rgba(108,132,118,.38)':'rgba(220,226,190,.58)';ctx.lineWidth=1;
   [[.15,.64,.15,.96],[.27,.64,.27,.96],[.75,.64,.75,.96],[.87,.64,.87,.96]].forEach(([x1,y1,x2,y2])=>{ctx.beginPath();ctx.moveTo(w*x1,h*y1);ctx.lineTo(w*x2,h*y2);ctx.stroke();});
-  // Estrada principal asfaltada com perspectiva, acostamento e faixa central.
-  ctx.fillStyle='#4d5457';ctx.beginPath();ctx.moveTo(w*.35,h);ctx.lineTo(w*.47,ground);ctx.lineTo(w*.57,ground);ctx.lineTo(w*.78,h);ctx.closePath();ctx.fill();
-  const asphalt=ctx.createLinearGradient(0,ground,0,h);asphalt.addColorStop(0,night?'#343b40':'#60686c');asphalt.addColorStop(1,night?'#20272b':'#3e4549');ctx.fillStyle=asphalt;ctx.beginPath();ctx.moveTo(w*.36,h);ctx.lineTo(w*.472,ground);ctx.lineTo(w*.568,ground);ctx.lineTo(w*.77,h);ctx.closePath();ctx.fill();
-  ctx.strokeStyle='#e7d98b';ctx.lineWidth=3;ctx.setLineDash([18,15]);ctx.beginPath();ctx.moveTo(w*.565,h);ctx.lineTo(w*.52,ground);ctx.stroke();ctx.setLineDash([]);
-  ctx.strokeStyle='#c9d0d1';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(w*.35,h);ctx.lineTo(w*.47,ground);ctx.moveTo(w*.78,h);ctx.lineTo(w*.57,ground);ctx.stroke();
-  // Calçadas, meio-fio, entradas de garagem, faixa de pedestres e iluminação urbana.
-  ctx.strokeStyle=night?'#6e7b80':'#d6d0c2';ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(w*.337,h);ctx.lineTo(w*.462,ground);ctx.moveTo(w*.793,h);ctx.lineTo(w*.578,ground);ctx.stroke();
-  ctx.strokeStyle=night?'#a4adb0':'#f0ece4';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(w*.347,h);ctx.lineTo(w*.467,ground);ctx.moveTo(w*.783,h);ctx.lineTo(w*.573,ground);ctx.stroke();
-  [[.23,.78,.36,.80],[.70,.72,.77,.73],[.84,.84,.79,.85]].forEach(([x1,y1,x2,y2])=>{ctx.strokeStyle=night?'#666d70':'#bbb6aa';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(w*x1,h*y1);ctx.lineTo(w*x2,h*y2);ctx.stroke();});
-  for(let i=0;i<5;i++){const yy=ground+24+i*7,x1=w*.47-(yy-ground)*.16,x2=w*.57+(yy-ground)*.28;ctx.strokeStyle='rgba(245,245,238,.82)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x1,yy);ctx.lineTo(x2,yy);ctx.stroke();}
-  [[.47,.78,'#d94b45'],[.64,.87,'#2f80c5']].forEach(([px,py,color])=>{const x=w*px,y=h*py;ctx.fillStyle=color;ctx.strokeStyle='#17212b';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?.(x-15,y-7,30,14,4);ctx.fill();ctx.stroke();ctx.fillStyle='#9fd5ed';ctx.fillRect(x-8,y-6,15,5);ctx.fillStyle='#111';[-9,9].forEach(dx=>{ctx.beginPath();ctx.arc(x+dx,y+8,3,0,Math.PI*2);ctx.fill();});});
+  // Estrada principal mais estreita, com acostamento e faixa central.
+  ctx.fillStyle='#4d5457';ctx.beginPath();ctx.moveTo(w*.40,h);ctx.lineTo(w*.482,ground);ctx.lineTo(w*.558,ground);ctx.lineTo(w*.70,h);ctx.closePath();ctx.fill();
+  const asphalt=ctx.createLinearGradient(0,ground,0,h);asphalt.addColorStop(0,night?'#343b40':'#60686c');asphalt.addColorStop(1,night?'#20272b':'#3e4549');ctx.fillStyle=asphalt;ctx.beginPath();ctx.moveTo(w*.41,h);ctx.lineTo(w*.486,ground);ctx.lineTo(w*.554,ground);ctx.lineTo(w*.69,h);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#e7d98b';ctx.lineWidth=3;ctx.setLineDash([18,15]);ctx.beginPath();ctx.moveTo(w*.55,h);ctx.lineTo(w*.52,ground);ctx.stroke();ctx.setLineDash([]);
+  ctx.strokeStyle='#c9d0d1';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(w*.40,h);ctx.lineTo(w*.482,ground);ctx.moveTo(w*.70,h);ctx.lineTo(w*.558,ground);ctx.stroke();
+  // Calçadas, meio-fio, entradas de garagem e iluminação urbana.
+  ctx.strokeStyle=night?'#6e7b80':'#d6d0c2';ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(w*.39,h);ctx.lineTo(w*.474,ground);ctx.moveTo(w*.71,h);ctx.lineTo(w*.566,ground);ctx.stroke();
+  ctx.strokeStyle=night?'#a4adb0':'#f0ece4';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(w*.398,h);ctx.lineTo(w*.479,ground);ctx.moveTo(w*.702,h);ctx.lineTo(w*.561,ground);ctx.stroke();
+  [[.23,.78,.41,.80],[.70,.72,.66,.73],[.84,.84,.70,.85]].forEach(([x1,y1,x2,y2])=>{ctx.strokeStyle=night?'#666d70':'#bbb6aa';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(w*x1,h*y1);ctx.lineTo(w*x2,h*y2);ctx.stroke();});
+  [[.49,.78,'#d94b45'],[.59,.87,'#2f80c5']].forEach(([px,py,color])=>{const x=w*px,y=h*py;ctx.fillStyle=color;ctx.strokeStyle='#17212b';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?.(x-15,y-7,30,14,4);ctx.fill();ctx.stroke();ctx.fillStyle='#9fd5ed';ctx.fillRect(x-8,y-6,15,5);ctx.fillStyle='#111';[-9,9].forEach(dx=>{ctx.beginPath();ctx.arc(x+dx,y+8,3,0,Math.PI*2);ctx.fill();});});
   const lampPoints=[[.18,.66],[.32,.72],[.70,.68],[.86,.74],[.94,.82]];ctx.strokeStyle=night?'#687982':'#5c666b';ctx.lineWidth=2;lampPoints.forEach(([px,py],i)=>{const x=w*px,y=h*py;ctx.beginPath();ctx.moveTo(x,y+34);ctx.lineTo(x,y);ctx.lineTo(x+9,y);ctx.stroke();ctx.fillStyle=night||sunset?'#fff3a6':'#d6dde0';ctx.beginPath();ctx.arc(x+11,y,3.5,0,Math.PI*2);ctx.fill();if(night||sunset){const lg=ctx.createRadialGradient(x+11,y,2,x+11,y,32);lg.addColorStop(0,'rgba(255,238,140,.34)');lg.addColorStop(1,'rgba(255,238,140,0)');ctx.fillStyle=lg;ctx.beginPath();ctx.arc(x+11,y,32,0,Math.PI*2);ctx.fill();}if(i<lampPoints.length-1){const nx=w*lampPoints[i+1][0],ny=h*lampPoints[i+1][1];ctx.strokeStyle='rgba(45,55,62,.7)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y+4);ctx.quadraticCurveTo((x+nx)/2,(y+ny)/2+12,nx,ny+4);ctx.stroke();}});
   // Árvores distribuídas nas encostas e no bairro.
-  const treeCount=cityScene.vegetation==='high'?38:cityScene.vegetation==='low'?12:22;for(let i=0;i<treeCount;i++){const x=(i*83+37)%Math.max(1,w),y=ground-5+((i*47)%75);if(x>w*.34&&x<w*.79&&y>h*.72)continue;const s=.55+(i%4)*.13;ctx.fillStyle='#59452c';ctx.fillRect(x-2*s,y,4*s,12*s);ctx.fillStyle=night?(i%3?'#173a2b':'#214a32'):(i%3?'#285d35':'#367244');ctx.beginPath();ctx.arc(x,y-5*s,9*s,0,Math.PI*2);ctx.arc(x-6*s,y,7*s,0,Math.PI*2);ctx.arc(x+6*s,y,7*s,0,Math.PI*2);ctx.fill();}
+  const treeCount=cityScene.vegetation==='high'?38:cityScene.vegetation==='low'?12:22;for(let i=0;i<treeCount;i++){const x=(i*83+37)%Math.max(1,w),y=ground-5+((i*47)%75),progress=Math.max(0,Math.min(1,(y-ground)/Math.max(1,h-ground))),roadLeft=w*(.482-(.482-.40)*progress),roadRight=w*(.558+(.70-.558)*progress);if(x>roadLeft-20&&x<roadRight+20)continue;const s=.55+(i%4)*.13;ctx.fillStyle='#59452c';ctx.fillRect(x-2*s,y,4*s,12*s);ctx.fillStyle=night?(i%3?'#173a2b':'#214a32'):(i%3?'#285d35':'#367244');ctx.beginPath();ctx.arc(x,y-5*s,9*s,0,Math.PI*2);ctx.arc(x-6*s,y,7*s,0,Math.PI*2);ctx.arc(x+6*s,y,7*s,0,Math.PI*2);ctx.fill();}
   // Construções distantes permanecem nos bairros laterais, nunca sobre o asfalto.
   const distantHomes=[.05,.11,.18,.25,.32,.68,.75,.82,.89,.95];
   distantHomes.forEach((px,i)=>{const x=w*px,y=ground+10+(i%2)*7,ww=22+(i%3)*5,hh=18+(i%4)*4;ctx.fillStyle=night?'#27343b':['#e6d8bf','#d3e0e8','#e4c4b8'][i%3];ctx.fillRect(x-ww/2,y-hh,ww,hh);ctx.fillStyle=night?'#19272d':['#8b4b3e','#536d7a','#76604d'][i%3];ctx.beginPath();ctx.moveTo(x-ww/2-3,y-hh);ctx.lineTo(x,y-hh-10);ctx.lineTo(x+ww/2+3,y-hh);ctx.closePath();ctx.fill();ctx.fillStyle=night&&i%3!==0?'#ffd36b':'#8fc7e5';ctx.fillRect(x-ww/2+5,y-hh+6,5,6);ctx.fillRect(x+ww/2-10,y-hh+6,5,6);});
@@ -2549,7 +2548,7 @@ function cityHouseLotPosition(x,y){
   const w=canvas.width,h=canvas.height,ground=h*.60;
   y=Math.max(ground+38,Math.min(h-58,y));x=Math.max(52,Math.min(w-52,x));
   const progress=Math.max(0,Math.min(1,(y-ground)/Math.max(1,h-ground)));
-  const roadLeft=w*(.47-.12*progress),roadRight=w*(.57+.21*progress),safeMargin=58;
+  const roadLeft=w*(.482-(.482-.40)*progress),roadRight=w*(.558+(.70-.558)*progress),safeMargin=48;
   if(x>roadLeft-safeMargin&&x<roadRight+safeMargin)x=Math.abs(x-roadLeft)<Math.abs(x-roadRight)?roadLeft-safeMargin:roadRight+safeMargin;
   return{x:Math.max(52,Math.min(w-52,x)),y};
 }
