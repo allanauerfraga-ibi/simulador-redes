@@ -1866,29 +1866,21 @@ function drawCitySceneBackground(){
   ctx.fillStyle='rgba(225,238,223,.72)';ctx.beginPath();ctx.moveTo(w*.17,h*.31);ctx.lineTo(w*.23,h*.25);ctx.lineTo(w*.285,h*.36);ctx.lineTo(w*.235,h*.32);ctx.closePath();ctx.fill();
   // Área urbana no vale.
   const grass=ctx.createLinearGradient(0,ground,0,h);grass.addColorStop(0,night?'#365548':sunset?'#697c50':'#71935d');grass.addColorStop(1,night?'#172d28':'#33513c');ctx.fillStyle=grass;ctx.fillRect(0,ground,w,h-ground);
-  // Bairro seco e urbanizado: lotes gramados, sem rio atravessando as residências.
-  const lotColor=night?'rgba(42,70,57,.62)':sunset?'rgba(120,130,78,.52)':'rgba(134,166,102,.55)';
-  ctx.fillStyle=lotColor;[[.035,.64,.28,.32],[.72,.64,.245,.32]].forEach(([x,y,lw,lh])=>ctx.fillRect(w*x,h*y,w*lw,h*lh));
-  ctx.strokeStyle=night?'rgba(108,132,118,.38)':'rgba(220,226,190,.58)';ctx.lineWidth=1;
-  [[.15,.64,.15,.96],[.27,.64,.27,.96],[.75,.64,.75,.96],[.87,.64,.87,.96]].forEach(([x1,y1,x2,y2])=>{ctx.beginPath();ctx.moveTo(w*x1,h*y1);ctx.lineTo(w*x2,h*y2);ctx.stroke();});
+  // Gramado contínuo e uniforme nas duas laterais da estrada.
   // Estrada principal mais estreita, com acostamento e faixa central.
   ctx.fillStyle='#4d5457';ctx.beginPath();ctx.moveTo(w*.43,h);ctx.lineTo(w*.49,ground);ctx.lineTo(w*.55,ground);ctx.lineTo(w*.67,h);ctx.closePath();ctx.fill();
   const asphalt=ctx.createLinearGradient(0,ground,0,h);asphalt.addColorStop(0,night?'#343b40':'#60686c');asphalt.addColorStop(1,night?'#20272b':'#3e4549');ctx.fillStyle=asphalt;ctx.beginPath();ctx.moveTo(w*.44,h);ctx.lineTo(w*.493,ground);ctx.lineTo(w*.547,ground);ctx.lineTo(w*.66,h);ctx.closePath();ctx.fill();
   ctx.strokeStyle='#e7d98b';ctx.lineWidth=3;ctx.setLineDash([18,15]);ctx.beginPath();ctx.moveTo(w*.54,h);ctx.lineTo(w*.52,ground);ctx.stroke();ctx.setLineDash([]);
   ctx.strokeStyle='#c9d0d1';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(w*.43,h);ctx.lineTo(w*.49,ground);ctx.moveTo(w*.67,h);ctx.lineTo(w*.55,ground);ctx.stroke();
-  // Calçadas, meio-fio, entradas de garagem e iluminação urbana.
+  // Calçadas, meio-fio e iluminação urbana.
   ctx.strokeStyle=night?'#6e7b80':'#d6d0c2';ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(w*.42,h);ctx.lineTo(w*.484,ground);ctx.moveTo(w*.68,h);ctx.lineTo(w*.556,ground);ctx.stroke();
   ctx.strokeStyle=night?'#a4adb0':'#f0ece4';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(w*.428,h);ctx.lineTo(w*.487,ground);ctx.moveTo(w*.672,h);ctx.lineTo(w*.553,ground);ctx.stroke();
-  [[.23,.78,.43,.80],[.70,.72,.63,.73],[.84,.84,.67,.85]].forEach(([x1,y1,x2,y2])=>{ctx.strokeStyle=night?'#666d70':'#bbb6aa';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(w*x1,h*y1);ctx.lineTo(w*x2,h*y2);ctx.stroke();});
   [[.49,.78,'#d94b45'],[.57,.87,'#2f80c5']].forEach(([px,py,color])=>{const x=w*px,y=h*py;ctx.fillStyle=color;ctx.strokeStyle='#17212b';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?.(x-15,y-7,30,14,4);ctx.fill();ctx.stroke();ctx.fillStyle='#9fd5ed';ctx.fillRect(x-8,y-6,15,5);ctx.fillStyle='#111';[-9,9].forEach(dx=>{ctx.beginPath();ctx.arc(x+dx,y+8,3,0,Math.PI*2);ctx.fill();});});
   // Postes e fios em circuitos separados nas duas laterais, sem cruzar a estrada.
-  const lampLines=[[[.18,.66],[.32,.72]],[[.70,.68],[.86,.74],[.94,.82]]];
+  const lampLines=[[[.465,.67],[.44,.77],[.415,.88]],[[.59,.67],[.615,.77],[.655,.88]]];
   lampLines.forEach(lampPoints=>lampPoints.forEach(([px,py],i)=>{const x=w*px,y=h*py;ctx.strokeStyle=night?'#687982':'#5c666b';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y+34);ctx.lineTo(x,y);ctx.lineTo(x+9,y);ctx.stroke();ctx.fillStyle=night||sunset?'#fff3a6':'#d6dde0';ctx.beginPath();ctx.arc(x+11,y,3.5,0,Math.PI*2);ctx.fill();if(night||sunset){const lg=ctx.createRadialGradient(x+11,y,2,x+11,y,32);lg.addColorStop(0,'rgba(255,238,140,.34)');lg.addColorStop(1,'rgba(255,238,140,0)');ctx.fillStyle=lg;ctx.beginPath();ctx.arc(x+11,y,32,0,Math.PI*2);ctx.fill();}if(i<lampPoints.length-1){const nx=w*lampPoints[i+1][0],ny=h*lampPoints[i+1][1];ctx.strokeStyle='rgba(45,55,62,.7)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y+4);ctx.quadraticCurveTo((x+nx)/2,(y+ny)/2+12,nx,ny+4);ctx.stroke();}}));
   // Árvores distribuídas nas encostas e no bairro.
   const treeCount=cityScene.vegetation==='high'?38:cityScene.vegetation==='low'?12:22;for(let i=0;i<treeCount;i++){const x=(i*83+37)%Math.max(1,w),y=ground-5+((i*47)%75),progress=Math.max(0,Math.min(1,(y-ground)/Math.max(1,h-ground))),roadLeft=w*(.49-(.49-.43)*progress),roadRight=w*(.55+(.67-.55)*progress);if(x>roadLeft-20&&x<roadRight+20)continue;const s=.55+(i%4)*.13;ctx.fillStyle='#59452c';ctx.fillRect(x-2*s,y,4*s,12*s);ctx.fillStyle=night?(i%3?'#173a2b':'#214a32'):(i%3?'#285d35':'#367244');ctx.beginPath();ctx.arc(x,y-5*s,9*s,0,Math.PI*2);ctx.arc(x-6*s,y,7*s,0,Math.PI*2);ctx.arc(x+6*s,y,7*s,0,Math.PI*2);ctx.fill();}
-  // Construções distantes permanecem nos bairros laterais, nunca sobre o asfalto.
-  const distantHomes=[.05,.11,.18,.25,.32,.68,.75,.82,.89,.95];
-  distantHomes.forEach((px,i)=>{const x=w*px,y=ground+10+(i%2)*7,ww=22+(i%3)*5,hh=18+(i%4)*4;ctx.fillStyle=night?'#27343b':['#e6d8bf','#d3e0e8','#e4c4b8'][i%3];ctx.fillRect(x-ww/2,y-hh,ww,hh);ctx.fillStyle=night?'#19272d':['#8b4b3e','#536d7a','#76604d'][i%3];ctx.beginPath();ctx.moveTo(x-ww/2-3,y-hh);ctx.lineTo(x,y-hh-10);ctx.lineTo(x+ww/2+3,y-hh);ctx.closePath();ctx.fill();ctx.fillStyle=night&&i%3!==0?'#ffd36b':'#8fc7e5';ctx.fillRect(x-ww/2+5,y-hh+6,5,6);ctx.fillRect(x+ww/2-10,y-hh+6,5,6);});
   // Chuva animada no modo nublado, com gotas sobre a cidade e pequenos respingos no solo.
   if(cloudy){const rainPhase=performance.now()*.34;ctx.lineCap='round';for(let i=0;i<115;i++){const x=(i*97+31)%Math.max(1,w),speed=1+(i%4)*.14,y=(i*61+rainPhase*speed)%(h+90)-45,len=7+(i%5)*2;ctx.strokeStyle=night?'rgba(170,210,245,.48)':'rgba(70,145,190,.43)';ctx.lineWidth=i%7===0?1.45:.85;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-3,y+len);ctx.stroke();if(y>ground&&y<h-8&&i%8===0){ctx.strokeStyle=night?'rgba(185,220,250,.32)':'rgba(90,160,200,.34)';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(x-7,y+len+2);ctx.quadraticCurveTo(x,y+len-1,x+7,y+len+2);ctx.stroke();}}ctx.lineCap='butt';}
   // Identificação discreta da sala.
