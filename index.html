@@ -656,7 +656,7 @@ let history=[];// undo stack [{devices, connections}]
 let cityScene={active:false,name:'Cidade Conectada',terrain:'mountains',time:'day',weather:'clear',vegetation:'medium',showCoverage:true,showLabels:true};
 let classroom={role:'student',studentName:'',activity:null,subnetColors:false,lastScore:null,faults:[],faultSnapshot:null};
 let teacherExamSession=null;
-const EMPTY_EXAM_STATE=Object.freeze({active:false,locked:false,attemptToken:'',examId:'',examSetId:'',versionNumber:null,stageNumber:null,totalSetScore:null,title:'',activity:'',assessmentType:'prova',customPrompt:'',knowledgeLevel:'',studentName:'',studentName2:'',isPair:false,studentGrade:'',studentClass:'',studentSchool:'',deadline:'',maxScore:10});
+const EMPTY_EXAM_STATE=Object.freeze({active:false,locked:false,attemptToken:'',examId:'',examSetId:'',versionNumber:null,stageNumber:null,totalSetScore:null,title:'',activity:'',assessmentType:'prova',customPrompt:'',customRules:{},knowledgeLevel:'',studentName:'',studentName2:'',isPair:false,studentGrade:'',studentClass:'',studentSchool:'',deadline:'',maxScore:10});
 let examState={...EMPTY_EXAM_STATE};
 try{examState={...examState,...JSON.parse(sessionStorage.getItem('allannet-exam-state')||'{}')};sessionStorage.removeItem('allannet-teacher-session');}catch(e){}
 if(examState.studentSchool==='narceu')examState.studentClass='UNICA';
@@ -2804,7 +2804,7 @@ function syncClassroomUI(){
 }
 function knowledgeLevelName(value){return({basico:'Básico',intermediario:'Intermediário',avancado:'Avançado',profissional:'Profissional'})[String(value||'').toLowerCase()]||'Personalizado';}
 function currentActivityDefinition(){
-  if(examState.active&&examState.activity==='gerada')return{room:'exam',level:knowledgeLevelName(examState.knowledgeLevel),title:examState.title||'Atividade inédita',desc:examState.customPrompt||'Monte a rede solicitada pelo professor.',examRules:{}};
+  if(examState.active&&examState.activity==='gerada')return{room:'exam',level:knowledgeLevelName(examState.knowledgeLevel),title:examState.title||'Atividade inédita',desc:examState.customPrompt||'Monte a rede solicitada pelo professor.',examRules:examState.customRules||{}};
   return CLASS_ACTIVITIES[classroom.activity]||null;
 }
 function syncActivityBar(){
@@ -2934,7 +2934,12 @@ function activityChecks(key){
   if(activity.examRules){
     const rules=activity.examRules,clients=[...pcs,...phones],checks=[];
     const atLeast=(label,current,required)=>{if(required)checks.push([`${label}: pelo menos ${required}`,current>=required]);};
-    atLeast('Computadores',pcs.length,rules.pc);atLeast('Celulares',phones.length,rules.phone);atLeast('Switches',switches.length,rules.switch);atLeast('Roteadores',routers.length,rules.router);atLeast('Servidores',servers.length,rules.server);atLeast('Firewalls',firewalls.length,rules.firewall);atLeast('Roteadores sem fio',wirelessRouters.length,rules.wirelessRouter);atLeast('Patch panels',patchPanels.length,rules.patchPanel);atLeast('Racks',racks.length,rules.rack);atLeast('Nuvens/Internet',clouds.length,rules.cloud);
+    atLeast('Computadores',pcs.length,rules.pc);atLeast('Celulares',phones.length,rules.phone);atLeast('Switches',switches.length,rules.switch);atLeast('Roteadores',routers.length,rules.router);atLeast('Servidores',servers.length,rules.server);atLeast('Firewalls',firewalls.length,rules.firewall);atLeast('Roteadores sem fio',wirelessRouters.length,rules.wirelessRouter);atLeast('Patch panels',patchPanels.length,rules.patchPanel);atLeast('Racks',racks.length,rules.rack);atLeast('Nuvens/Internet',clouds.length,rules.cloud);atLeast('Torres 4G/5G',cityTowers.length,rules.cellTower);atLeast('Residências',houses.length,rules.house);atLeast('Pessoas com celular',people.length,rules.person);atLeast('Data Centers',dataCenters.length,rules.dataCenter);atLeast('Satélites',satellites.length,rules.satellite);
+    if(rules.cityScene)checks.push(['Cenário da Sala Cidade ativado',cityScene.active]);
+    if(rules.allCityClientsConnected)checks.push(['Todos os assinantes conectados por 4G/5G',cityClients.length>0&&cellularClients.length===cityClients.length]);
+    if(rules.minServingTowers)checks.push([`Assinantes distribuídos entre pelo menos ${rules.minServingTowers} torres`,servingTowerIds.size>=rules.minServingTowers]);
+    if(rules.orbitalTowers)checks.push([`Torres com backhaul orbital: pelo menos ${rules.orbitalTowers}`,orbitalTowerIds.size>=rules.orbitalTowers]);
+    if(rules.orbitalDataCenters){const linkedDataCenters=new Set(connections.filter(c=>c.kind==='satellite'&&c.dataCenterBackhaul).flatMap(c=>[c.from,c.to]).filter(id=>dataCenters.some(dataCenter=>dataCenter.id===id)));checks.push([`Data Centers conectados a satélite: pelo menos ${rules.orbitalDataCenters}`,linkedDataCenters.size>=rules.orbitalDataCenters]);}
     if(rules.mixedComputers)checks.push(['Notebook e Computador presentes',mixedComputers]);
     if(rules.desktopSwitch8)checks.push(['Switch de mesa com pelo menos 8 portas',desktopSwitches.some(sw=>(sw.portCount||0)>=8)]);
     if(rules.towerServer)checks.push(['Servidor do tipo torre presente',towerServers.length>=1]);
@@ -3233,8 +3238,8 @@ function resetExamWorkspace(){
 function activateExamData(data,studentName,studentName2='',isPair=false){
   const generated=data.activity_key==='gerada'&&typeof data.custom_prompt==='string'&&data.custom_prompt.trim().length>0;
   if(!CLASS_ACTIVITIES[data.activity_key]&&!generated)throw new Error('A atividade vinculada à prova não existe nesta versão do simulador.');
-  examState={active:true,locked:false,attemptToken:data.attempt_token,examId:data.exam_id,examSetId:data.exam_set_id||'',versionNumber:data.version_number||null,stageNumber:data.stage_number||null,totalSetScore:Number(data.total_set_score)||null,title:data.title,activity:data.activity_key,assessmentType:data.assessment_type||'prova',customPrompt:data.custom_prompt||'',knowledgeLevel:data.knowledge_level||'',studentName,studentName2:data.student_name_2||studentName2||'',isPair:Boolean(data.is_pair??isPair),studentGrade:SCHOOL_EXAM_GRADE,studentClass:examState.studentClass||'',studentSchool:data.school_code||examState.studentSchool||'',deadline:data.deadline,maxScore:Number(data.max_score)||10};persistExamState();
-  classroom.role='student';classroom.studentName=examState.isPair?`${studentName} e ${examState.studentName2}`:studentName;classroom.activity=data.activity_key;classroom.lastScore=null;resetExamWorkspace();syncClassroomUI();updateExamTimer();
+  examState={active:true,locked:false,attemptToken:data.attempt_token,examId:data.exam_id,examSetId:data.exam_set_id||'',versionNumber:data.version_number||null,stageNumber:data.stage_number||null,totalSetScore:Number(data.total_set_score)||null,title:data.title,activity:data.activity_key,assessmentType:data.assessment_type||'prova',customPrompt:data.custom_prompt||'',customRules:data.custom_rules&&typeof data.custom_rules==='object'?data.custom_rules:{},knowledgeLevel:data.knowledge_level||'',studentName,studentName2:data.student_name_2||studentName2||'',isPair:Boolean(data.is_pair??isPair),studentGrade:SCHOOL_EXAM_GRADE,studentClass:examState.studentClass||'',studentSchool:data.school_code||examState.studentSchool||'',deadline:data.deadline,maxScore:Number(data.max_score)||10};persistExamState();
+  classroom.role='student';classroom.studentName=examState.isPair?`${studentName} e ${examState.studentName2}`:studentName;classroom.activity=data.activity_key;classroom.lastScore=null;resetExamWorkspace();if(examState.customRules.cityScene||/^Sala Cidade:/i.test(examState.customPrompt))cityScene=citySceneDefaults({...cityScene,active:true});syncClassroomUI();updateExamTimer();
 }
 async function enterExamRoom(){
   const btn=document.getElementById('exam-entry-btn'),error=document.getElementById('exam-entry-error');if(!btn||!error)return;
@@ -3362,16 +3367,35 @@ function showExamDeliveries(id){
 let generatedActivityDraft=null;
 function generatedRandomInt(min,max){const data=new Uint32Array(1);crypto.getRandomValues(data);return min+(data[0]%(max-min+1));}
 function generatedChoice(items){return items[generatedRandomInt(0,items.length-1)];}
-function buildGeneratedActivity(level='intermediario'){
+function buildGeneratedActivity(level='intermediario',area='rede'){
   const normalized=['basico','intermediario','avancado','profissional'].includes(level)?level:'intermediario';
-  const contexts={
+  const normalizedArea=area==='cidade'?'cidade':'rede';
+  const networkContexts={
     basico:['Sala de leitura conectada','Laboratório de iniciação digital','Espaço de estudos colaborativos','Oficina escolar de tecnologia','Sala de apoio pedagógico'],
     intermediario:['Biblioteca digital integrada','Sala maker conectada','Centro de mídia escolar','Feira de ciências interativa','Laboratório móvel de aprendizagem','Auditório multimídia'],
     avancado:['Campus escolar convergente','Laboratório avançado de inovação','Centro de produção multimídia','Ambiente escolar de alta disponibilidade','Núcleo tecnológico integrado','Mostra regional de tecnologia'],
     profissional:['Campus multissetorial segmentado','Núcleo corporativo de alta capacidade','Centro de dados educacional segmentado','Rede metropolitana entre departamentos','Infraestrutura convergente de missão crítica','Backbone institucional com VLANs']
   };
-  const context=generatedChoice(contexts[normalized]);let rules,requirements=[];
-  if(normalized==='basico'){
+  const cityContexts={
+    basico:['Bairro residencial conectado','Comunidade rural com Internet móvel','Vila atendida por torre 5G','Praça pública e residências conectadas','Pequeno distrito digital','Condomínio com acesso móvel'],
+    intermediario:['Cidade com dois setores de cobertura','Distrito urbano com telefonia móvel','Município conectado por duas torres','Corredor urbano de comunicação','Região turística conectada','Bairros integrados por 4G/5G'],
+    avancado:['Cidade inteligente com enlace orbital','Município conectado a Data Center','Cidade com satélite e cobertura integrada','Região metropolitana digital','Cidade resiliente com backhaul orbital','Infraestrutura urbana de alta cobertura'],
+    profissional:['Cidade inteligente de alta disponibilidade','Rede municipal com Data Centers redundantes','Operação metropolitana multissatélite','Infraestrutura urbana de missão crítica','Cidade conectada com cobertura redundante','Ecossistema digital urbano integrado']
+  };
+  const context=generatedChoice((normalizedArea==='cidade'?cityContexts:networkContexts)[normalized]);let rules,requirements=[];
+  if(normalizedArea==='cidade'&&normalized==='basico'){
+    rules={cityScene:true,cellTower:1,house:3,allCityClientsConnected:true,minServingTowers:1};
+    requirements=['cenário da Sala Cidade ativado','1 torre 4G/5G em região elevada','3 residências dentro da área de cobertura','todas as residências conectadas à torre'];
+  }else if(normalizedArea==='cidade'&&normalized==='intermediario'){
+    rules={cityScene:true,cellTower:2,house:4,person:4,allCityClientsConnected:true,minServingTowers:2};
+    requirements=['2 torres 4G/5G','4 residências','4 pessoas com celular','todos os assinantes conectados','clientes distribuídos entre as duas torres'];
+  }else if(normalizedArea==='cidade'&&normalized==='avancado'){
+    rules={cityScene:true,dataCenter:1,cellTower:2,satellite:1,house:4,person:6,orbitalDataCenters:1,orbitalTowers:2,allCityClientsConnected:true,minServingTowers:2};
+    requirements=['1 Data Center e 1 satélite','2 torres conectadas ao satélite','4 residências e 6 pessoas com celular','Data Center conectado ao satélite','todos os assinantes com cobertura','clientes distribuídos entre as duas torres'];
+  }else if(normalizedArea==='cidade'){
+    rules={cityScene:true,dataCenter:2,cellTower:3,satellite:2,house:6,person:8,orbitalDataCenters:2,orbitalTowers:3,allCityClientsConnected:true,minServingTowers:3};
+    requirements=['2 Data Centers conectados por enlaces orbitais','2 satélites e 3 torres com backhaul orbital','6 residências e 8 pessoas com celular','todos os assinantes com cobertura 4G/5G','clientes distribuídos entre pelo menos 3 torres','infraestrutura urbana com redundância'];
+  }else if(normalized==='basico'){
     rules={pc:4,phone:3,switch:1,wirelessRouter:1,notebook:1,pcWire:true,wifi:true,sameSubnet:true,routerSwitch:true,reach:true};
     requirements=[`${rules.pc} computadores, incluindo pelo menos 1 Notebook`,`${rules.phone} celulares conectados por Wi-Fi`,'1 switch e 1 roteador sem fio','computadores ligados por cabo ao switch','computadores na mesma rede /24','comunicação entre todos os clientes'];
   }else if(normalized==='intermediario'){
@@ -3385,15 +3409,15 @@ function buildGeneratedActivity(level='intermediario'){
     rules={pc:10,phone:6,switch:4,wirelessRouter:2,server:2,firewall:1,notebook:1,desktopComputer:1,pcWire:true,wifi:true,switchesLinked:true,routerSwitch:true,minSubnets:vlanTotal,minAssigned:assignedTotal,minVlans:vlanTotal,minBackbones:backboneTotal,backboneSpeed:10000,reach:true};
     requirements=[`${rules.pc} computadores, incluindo Notebook e Computador`,`${rules.phone} celulares conectados por Wi-Fi`,`${rules.switch} switches e 2 roteadores sem fio`,'2 servidores e 1 firewall',`${assignedTotal} clientes ou servidores atribuídos a pelo menos ${vlanTotal} VLANs`,`pelo menos ${vlanTotal} redes /24`,`${backboneTotal} enlaces de backbone`,'backbone principal de no mínimo 10 Gb/s','comunicação entre todos os clientes e servidores'];
   }
-  const key=`allannet-${normalized}-${crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2)}`;
+  const key=`allannet-${normalizedArea}-${normalized}-${crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2)}`;
   const title=`${context} — desafio ${knowledgeLevelName(normalized)}`;
-  const prompt=`Cenário: ${context}. Projete uma rede híbrida LAN e sem fio inédita contendo ${requirements.join('; ')}. Organize a topologia com clareza e utilize os meios de conexão adequados.`;
-  return{title,prompt,rules,level:normalized,generationKey:key};
+  const prompt=normalizedArea==='cidade'?`Sala Cidade: ${context}. Construa um cenário urbano inédito contendo ${requirements.join('; ')}. Organize os elementos com clareza e utilize os enlaces adequados.`:`Cenário: ${context}. Projete uma rede híbrida LAN e sem fio inédita contendo ${requirements.join('; ')}. Organize a topologia com clareza e utilize os meios de conexão adequados.`;
+  return{title,prompt,rules,level:normalized,area:normalizedArea,generationKey:key};
 }
-function buildGeneratedActivityBatch(level='intermediario'){
+function buildGeneratedActivityBatch(level='intermediario',area='rede'){
   const seen=new Map();
   return Array.from({length:15},(_,index)=>{
-    const draft=buildGeneratedActivity(level),base=draft.title.replace(/\s+—\s+desafio.*$/i,''),repeat=(seen.get(base)||0)+1;seen.set(base,repeat);
+    const draft=buildGeneratedActivity(level,area),base=draft.title.replace(/\s+—\s+desafio.*$/i,''),repeat=(seen.get(base)||0)+1;seen.set(base,repeat);
     const version=String(index+1).padStart(2,'0'),variation=repeat>1?` · setor ${repeat}`:'';
     return{...draft,title:`${base}${variation} — desafio ${knowledgeLevelName(draft.level)}`,prompt:`${draft.prompt} Identificação interna do cenário: ${version}.`,version:index+1};
   });
@@ -3403,16 +3427,16 @@ function generatedClassOptions(school,selected=''){
   return `<option value="">Selecione a turma</option>${shared}`+(EXAM_CLASSES_BY_SCHOOL[school]||[]).map(item=>`<option value="${item.value}" ${item.value===selected?'selected':''}>${item.label}</option>`).join('');
 }
 function syncGeneratedClassSelect(){const school=document.getElementById('generated-school')?.value||'',field=document.getElementById('generated-class');if(field)field.innerHTML=generatedClassOptions(school,'TODAS');}
-function showGeneratedActivityModal(level='intermediario'){
-  generatedActivityDraft=buildGeneratedActivityBatch(level);
+function showGeneratedActivityModal(level='intermediario',area='rede'){
+  generatedActivityDraft=buildGeneratedActivityBatch(level,area);
   const draft=generatedActivityDraft[0],start=new Date(Date.now()-3*60000),end=new Date(Date.now()+24*60*60000),local=date=>new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
   const selectedSchool=window._examSchoolFilter||'narceu',criteria=Object.entries(draft.rules).map(([key,value])=>`<span style="display:inline-block;margin:2px;padding:3px 6px;border-radius:10px;background:#23354a;color:#cfe8ff;font-size:9px">${escapeReport(key)}: ${escapeReport(value)}</span>`).join('');
   showModal(`<h3>✨ Gerar atividade inédita para todos</h3>
-    <div class="edu-note">Serão criadas <b>15 atividades inéditas com o mesmo nível de dificuldade</b>. O professor informa uma única senha e o sistema entrega automaticamente uma versão diferente para cada aluno ou dupla. No nível <b>Profissional</b>, as versões também utilizam Backbone e Segmentação com VLANs.</div>
-    <label>Nível de conhecimento</label><select id="generated-level" onchange="showGeneratedActivityModal(this.value)"><option value="basico" ${draft.level==='basico'?'selected':''}>Básico</option><option value="intermediario" ${draft.level==='intermediario'?'selected':''}>Intermediário</option><option value="avancado" ${draft.level==='avancado'?'selected':''}>Avançado</option><option value="profissional" ${draft.level==='profissional'?'selected':''}>Profissional — Backbone e Segmentação</option></select>
+    <div class="edu-note">Serão criadas <b>15 atividades inéditas com o mesmo nível de dificuldade</b>. O professor informa uma única senha e o sistema entrega automaticamente uma versão diferente para cada aluno ou dupla. A opção <b>Cidade</b> utiliza torres, residências, pessoas com celular, Data Centers e satélites conforme o nível escolhido.</div>
+    <div class="exam-grid"><div><label>Ambiente da atividade</label><select id="generated-area" onchange="showGeneratedActivityModal(document.getElementById('generated-level').value,this.value)"><option value="rede" ${draft.area==='rede'?'selected':''}>LAN, Wi-Fi, Backbone e Segmentação</option><option value="cidade" ${draft.area==='cidade'?'selected':''}>🏙️ Cidade</option></select></div><div><label>Nível de conhecimento</label><select id="generated-level" onchange="showGeneratedActivityModal(this.value,document.getElementById('generated-area').value)"><option value="basico" ${draft.level==='basico'?'selected':''}>Básico</option><option value="intermediario" ${draft.level==='intermediario'?'selected':''}>Intermediário</option><option value="avancado" ${draft.level==='avancado'?'selected':''}>Avançado</option><option value="profissional" ${draft.level==='profissional'?'selected':''}>Profissional</option></select></div></div>
     <div class="exam-status"><strong>Amostra do nível escolhido: ${escapeReport(draft.title)}</strong><br><br>${escapeReport(draft.prompt)}<div style="margin-top:8px">${criteria}</div></div>
-    <div class="modal-btns" style="justify-content:flex-start"><button onclick="showGeneratedActivityModal('${draft.level}')">🔄 Gerar outra proposta deste nível</button></div>
-    <label>Título do conjunto de atividades</label><input id="generated-title" value="Atividade inédita — ${escapeReport(knowledgeLevelName(draft.level))}">
+    <div class="modal-btns" style="justify-content:flex-start"><button onclick="showGeneratedActivityModal('${draft.level}','${draft.area}')">🔄 Gerar outra proposta deste nível</button></div>
+    <label>Título do conjunto de atividades</label><input id="generated-title" value="Atividade inédita — ${draft.area==='cidade'?'Sala Cidade · ':''}${escapeReport(knowledgeLevelName(draft.level))}">
     <div class="exam-grid"><div class="full"><label>Escola</label><select id="generated-school" onchange="syncGeneratedClassSelect()">${examSchoolOptions(selectedSchool)}</select></div><div class="full"><label>Alunos participantes</label><select id="generated-class">${generatedClassOptions(selectedSchool,'TODAS')}</select></div><div><label>Valor (pontos)</label><input id="generated-max-score" type="number" min="0.1" max="1000" step="0.1" value="10"></div><div><label>Duração (minutos)</label><input id="generated-duration" type="number" min="5" max="240" value="50"></div><div class="full"><label>Senha única da atividade</label><input id="generated-password" type="password" minlength="8" autocomplete="new-password" placeholder="Mínimo de 8 caracteres"></div><div><label>Início</label><input id="generated-start" type="datetime-local" value="${local(start)}"></div><div><label>Expira em</label><input id="generated-end" type="datetime-local" value="${local(end)}"></div></div>
     <div class="modal-btns"><button onclick="loadTeacherExamDashboard()">Cancelar</button><button id="create-generated-btn" class="green" onclick="createGeneratedActivityOnline()">✨ Criar e liberar 15 atividades</button></div>`);
 }
