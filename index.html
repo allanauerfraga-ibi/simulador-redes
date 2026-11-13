@@ -2878,30 +2878,45 @@ const OBJECTIVE_ACTIVITY={
   ]
 };
 let objectiveStudent=null,objectiveQuestionOrder=[],objectiveOptionOrders=[];
-let objectiveSecurity={active:false,violations:0,lastViolationAt:0,submitting:false,lastReason:''};
+let objectiveSecurity={active:false,armed:false,awayCycle:false,violations:0,lastViolationAt:0,submitting:false,lastReason:''};
 function objectiveShuffle(values){
   const shuffled=[...values];for(let index=shuffled.length-1;index>0;index--){const data=new Uint32Array(1);crypto.getRandomValues(data);const target=data[0]%(index+1);[shuffled[index],shuffled[target]]=[shuffled[target],shuffled[index]];}return shuffled;
 }
 function updateObjectiveSecurityStatus(){
   const status=document.getElementById('objective-security-status');if(!status)return;
   const remaining=Math.max(0,2-objectiveSecurity.violations);
-  status.innerHTML=objectiveSecurity.violations?`<b>⚠️ Ocorrência registrada: ${objectiveSecurity.violations}/2.</b> ${escapeReport(objectiveSecurity.lastReason)} ${remaining?`Mais uma saída causará a entrega automática.`:'A atividade está sendo entregue automaticamente.'} <button onclick="resumeObjectiveFullscreen()" style="margin-left:6px">⛶ Voltar à tela cheia</button>`:'<b>🔒 Controle ativo.</b> A atividade está em tela cheia. Minimizar, trocar de aba, abrir outra janela ou sair da tela cheia será registrado.';
-  status.style.borderColor=objectiveSecurity.violations?'#f0883e':'#2e7046';status.style.color=objectiveSecurity.violations?'#ffd2a8':'#b8f5c8';
+  const outsideFullscreen=objectiveSecurity.active&&!document.fullscreenElement;
+  if(!objectiveSecurity.armed){status.innerHTML='<b>⛶ Ative a tela cheia para começar.</b> As respostas ficarão bloqueadas até a autorização. <button class="green" onclick="resumeObjectiveFullscreen()" style="margin-left:6px">⛶ Ativar tela cheia</button>';}
+  else if(objectiveSecurity.violations){status.innerHTML=`<b>⚠️ Ocorrência registrada: ${objectiveSecurity.violations}/2.</b> ${escapeReport(objectiveSecurity.lastReason)} ${remaining?'Mais uma saída causará a entrega automática.':'A atividade está sendo entregue automaticamente.'}${outsideFullscreen?' <button class="green" onclick="resumeObjectiveFullscreen()" style="margin-left:6px">⛶ Retornar à tela cheia</button>':''}`;}
+  else status.innerHTML='<b>🔒 Controle ativo.</b> A atividade está em tela cheia. Minimizar, trocar de aba, abrir outra janela ou sair da tela cheia será registrado.';
+  status.style.position='sticky';status.style.top='0';status.style.zIndex='8';status.style.borderColor=objectiveSecurity.violations?'#f0883e':'#2e7046';status.style.color=objectiveSecurity.violations?'#ffd2a8':'#b8f5c8';
+  const locked=objectiveSecurity.active&&!document.fullscreenElement&&!objectiveSecurity.submitting;
+  document.querySelectorAll('.objective-question input').forEach(field=>field.disabled=locked);
+  const submit=document.getElementById('objective-submit-btn');if(submit&&!objectiveSecurity.submitting)submit.disabled=locked;
 }
 async function resumeObjectiveFullscreen(){
-  try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();updateObjectiveSecurityStatus();}catch(err){rackNotice('Tela cheia necessária','Autorize a tela cheia para continuar a atividade.','err');}
+  try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();objectiveSecurity.armed=true;objectiveSecurity.awayCycle=false;updateObjectiveSecurityStatus();}catch(err){updateObjectiveSecurityStatus();rackNotice('Tela cheia necessária','Autorize a tela cheia para continuar a atividade.','err');}
 }
 function recordObjectiveSecurityViolation(reason){
-  if(!objectiveSecurity.active||objectiveSecurity.submitting)return;
-  const now=Date.now();if(now-objectiveSecurity.lastViolationAt<1800)return;
-  objectiveSecurity.lastViolationAt=now;objectiveSecurity.violations++;objectiveSecurity.lastReason=reason;updateObjectiveSecurityStatus();
-  if(objectiveSecurity.violations>=2){objectiveSecurity.submitting=true;setTimeout(()=>submitObjectiveActivity(true,reason),50);}
+  if(!objectiveSecurity.active||!objectiveSecurity.armed||objectiveSecurity.submitting)return;
+  if(objectiveSecurity.awayCycle){updateObjectiveSecurityStatus();return;}
+  objectiveSecurity.awayCycle=true;objectiveSecurity.lastViolationAt=Date.now();objectiveSecurity.violations++;objectiveSecurity.lastReason=reason;updateObjectiveSecurityStatus();
+  if(objectiveSecurity.violations>=2){objectiveSecurity.submitting=true;void submitObjectiveActivity(true,reason);}
   else rackNotice('Saída da atividade registrada','Esta foi a primeira ocorrência. Na próxima saída, a atividade será entregue automaticamente.','err');
 }
-document.addEventListener('visibilitychange',()=>{if(document.hidden)recordObjectiveSecurityViolation('A aba foi ocultada ou o navegador foi minimizado.');});
-window.addEventListener('blur',()=>{if(objectiveSecurity.active)setTimeout(()=>{if(!document.hasFocus())recordObjectiveSecurityViolation('A janela da atividade perdeu o foco.');},250);});
-window.addEventListener('focus',()=>updateObjectiveSecurityStatus());
-document.addEventListener('fullscreenchange',()=>{if(objectiveSecurity.active&&!document.fullscreenElement)recordObjectiveSecurityViolation('O modo de tela cheia foi encerrado.');});
+function syncObjectiveSecurityPresence(){
+  if(!objectiveSecurity.active||objectiveSecurity.submitting)return;
+  if(document.hidden)return recordObjectiveSecurityViolation('A aba foi ocultada ou o navegador foi minimizado.');
+  if(!document.hasFocus())return recordObjectiveSecurityViolation('A janela da atividade perdeu o foco.');
+  if(objectiveSecurity.armed&&!document.fullscreenElement)return recordObjectiveSecurityViolation('O modo de tela cheia foi encerrado.');
+  if(document.fullscreenElement){objectiveSecurity.armed=true;objectiveSecurity.awayCycle=false;}
+  updateObjectiveSecurityStatus();
+}
+document.addEventListener('visibilitychange',syncObjectiveSecurityPresence);
+window.addEventListener('blur',()=>{if(objectiveSecurity.active)setTimeout(syncObjectiveSecurityPresence,120);});
+window.addEventListener('focus',syncObjectiveSecurityPresence);
+document.addEventListener('fullscreenchange',syncObjectiveSecurityPresence);
+setInterval(syncObjectiveSecurityPresence,500);
 document.addEventListener('copy',event=>{if(objectiveSecurity.active){event.preventDefault();rackNotice('Cópia bloqueada','Não é permitido copiar o conteúdo durante a atividade.','err');}});
 document.addEventListener('contextmenu',event=>{if(objectiveSecurity.active){event.preventDefault();rackNotice('Menu bloqueado','O botão direito está desativado durante a atividade.','err');}});
 document.addEventListener('keydown',event=>{if(!objectiveSecurity.active)return;const key=event.key.toLowerCase();if(event.key==='F12'||(event.ctrlKey&&['c','l','t','n','w','u'].includes(key))||(event.altKey&&key==='tab')){event.preventDefault();rackNotice('Atalho bloqueado','Permaneça na atividade até realizar a entrega.','err');}});
@@ -2913,8 +2928,8 @@ async function startObjectiveActivity(){
   if(name.length<3||!school||!studentClass){if(error){error.textContent='Informe o nome completo, a escola e a turma.';error.style.display='block';}return;}
   objectiveStudent={name,school,studentClass};classroom.studentName=name;
   objectiveQuestionOrder=objectiveShuffle(OBJECTIVE_ACTIVITY.questions.map((_,index)=>index));objectiveOptionOrders=OBJECTIVE_ACTIVITY.questions.map(question=>objectiveShuffle(question.options.map((_,index)=>index)));
-  objectiveSecurity={active:true,violations:0,lastViolationAt:0,submitting:false,lastReason:''};renderObjectiveActivity();
-  try{await document.documentElement.requestFullscreen();}catch(err){updateObjectiveSecurityStatus();rackNotice('Ative a tela cheia','Clique em “Voltar à tela cheia” antes de responder.','err');}
+  objectiveSecurity={active:true,armed:false,awayCycle:false,violations:0,lastViolationAt:0,submitting:false,lastReason:''};renderObjectiveActivity();
+  try{await document.documentElement.requestFullscreen();objectiveSecurity.armed=true;objectiveSecurity.awayCycle=false;updateObjectiveSecurityStatus();}catch(err){updateObjectiveSecurityStatus();rackNotice('Ative a tela cheia','Clique em “Ativar tela cheia” para liberar as respostas.','err');}
 }
 function renderObjectiveActivity(){
   if(!objectiveStudent){showObjectiveActivityModal();return;}
@@ -2936,7 +2951,7 @@ async function submitObjectiveActivity(forced=false,securityReason=''){
   objectiveSecurity.submitting=true;if(btn){btn.disabled=true;btn.textContent=forced?'Entrega automática em andamento...':'Enviando respostas...';}
   try{
     const reason=securityReason||objectiveSecurity.lastReason||'';
-    const result=await supabaseRequest('/rest/v1/rpc/submit_objective_activity_secure',{method:'POST',body:{p_student_name:objectiveStudent.name,p_student_school:objectiveStudent.school,p_student_class:objectiveStudent.studentClass,p_answers:answers,p_security_violations:objectiveSecurity.violations,p_security_reason:reason}}),data=Array.isArray(result)?result[0]:result,score=Number(data?.score)||0,correct=Number(data?.correct_answers)||0;
+    const result=await supabaseRequest('/rest/v1/rpc/submit_objective_activity_secure',{method:'POST',body:{p_student_name:objectiveStudent.name,p_student_school:objectiveStudent.school,p_student_class:objectiveStudent.studentClass,p_answers:answers,p_security_violations:objectiveSecurity.violations,p_security_reason:reason},keepalive:forced}),data=Array.isArray(result)?result[0]:result,score=Number(data?.score)||0,correct=Number(data?.correct_answers)||0;
     objectiveSecurity.active=false;if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
     const letters=['A','B','C','D','E'],review=OBJECTIVE_ACTIVITY.questions.map((question,index)=>{const selected=answers[index],ok=selected===question.answer;return `<section class="objective-question"><strong>${index+1}. ${escapeReport(question.text)} — ${ok?'✅ Acertou':'❌ Errou'}</strong>${question.options.map((option,optionIndex)=>`<div class="objective-option ${optionIndex===question.answer?'correct':optionIndex===selected&&!ok?'wrong':''}"><span><b>${letters[optionIndex]})</b> ${escapeReport(option)}${optionIndex===question.answer?' — resposta correta':''}</span></div>`).join('')}</section>`;}).join('');
     const securityNote=objectiveSecurity.violations?`<div class="edu-note" style="border-color:#f0883e;color:#ffd2a8"><b>⚠️ Entrega com ${objectiveSecurity.violations} ocorrência(s) de saída.</b> ${escapeReport(reason)}${forced?' A entrega foi realizada automaticamente.':''}</div>`:'';
@@ -3292,13 +3307,13 @@ function examSettings(){
 function examConfigured(){const s=examSettings();return /^https:\/\//.test(s.url)&&s.anonKey.length>20;}
 function persistExamState(){try{sessionStorage.setItem('allannet-exam-state',JSON.stringify(examState));}catch(e){}}
 function persistTeacherSession(){try{sessionStorage.removeItem('allannet-teacher-session');}catch(e){}}
-async function supabaseRequest(path,{method='GET',body=null,token=''}={}){
+async function supabaseRequest(path,{method='GET',body=null,token='',keepalive=false}={}){
   const cfg=examSettings();if(!examConfigured())throw new Error('A Sala de Prova ainda não foi conectada ao banco de dados pelo professor.');
   const retryable=method==='GET'||path.startsWith('/auth/v1/token')||path.includes('/rpc/teacher_access'),retryDelays=retryable?[0,1500,3000,5000,8000,12000]:[0],attempts=retryDelays.length;
   for(let attempt=0;attempt<attempts;attempt++){
     if(retryDelays[attempt])await new Promise(resolve=>setTimeout(resolve,retryDelays[attempt]));
     let response;
-    try{response=await fetch(cfg.url+path,{method,headers:{apikey:cfg.anonKey,Authorization:`Bearer ${token||cfg.anonKey}`,'Content-Type':'application/json',Prefer:method==='POST'?'return=representation':'return=minimal'},body:body===null?null:JSON.stringify(body)});}
+    try{response=await fetch(cfg.url+path,{method,headers:{apikey:cfg.anonKey,Authorization:`Bearer ${token||cfg.anonKey}`,'Content-Type':'application/json',Prefer:method==='POST'?'return=representation':'return=minimal'},body:body===null?null:JSON.stringify(body),keepalive});}
     catch(err){
       if(attempt<attempts-1)continue;
       if(navigator.onLine===false)throw new Error('Sem conexão com a Internet. Verifique a rede e tente novamente.');
