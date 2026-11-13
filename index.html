@@ -137,6 +137,8 @@ canvas{display:block;}
 .modal h3{color:#58a6ff;margin-bottom:12px;font-size:14px;}
 .modal label{font-size:11px;color:#8b949e;display:block;margin-bottom:3px;}
 .modal input,.modal select{width:100%;background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:6px 8px;border-radius:5px;font-size:11px;margin-bottom:9px;}
+.password-toggle{display:flex!important;align-items:center;gap:7px;margin:-2px 0 10px!important;color:#a8c7e6!important;font-size:10px!important;cursor:pointer;user-select:none;}
+.password-toggle input{width:auto!important;margin:0!important;accent-color:#3fb950;}
 .modal-btns{display:flex;gap:6px;justify-content:flex-end;margin-top:4px;}
 
 /* TOOLTIP */
@@ -2796,7 +2798,15 @@ function loadTopology(){
 // =========================================================
 // MODALS
 // =========================================================
-function showModal(html){const box=document.getElementById('modal-box');box.innerHTML=html;box.classList.toggle('exam-dashboard-wide',html.includes('Planejamento — Provas e Atividades')||html.includes('Atividade objetiva — Revisão geral')||html.includes('Resultados das atividades objetivas'));document.getElementById('modal-bg').classList.add('show');}
+function addPasswordVisibilityToggle(box){
+  const fields=[...box.querySelectorAll('input[type="password"]')];if(!fields.length)return;
+  const label=document.createElement('label');label.className='password-toggle';
+  const check=document.createElement('input');check.type='checkbox';check.setAttribute('aria-label','Mostrar senha digitada');
+  const text=document.createElement('span');text.textContent='👁 Mostrar senha digitada';
+  check.addEventListener('change',()=>{fields.forEach(field=>field.type=check.checked?'text':'password');text.textContent=check.checked?'🙈 Ocultar senha':'👁 Mostrar senha digitada';});
+  label.append(check,text);fields.at(-1).insertAdjacentElement('afterend',label);
+}
+function showModal(html){const box=document.getElementById('modal-box');box.innerHTML=html;box.classList.toggle('exam-dashboard-wide',html.includes('Planejamento — Provas e Atividades')||html.includes('Atividade objetiva — Revisão geral')||html.includes('Resultados das atividades objetivas'));addPasswordVisibilityToggle(box);document.getElementById('modal-bg').classList.add('show');}
 function closeModal(){document.getElementById('modal-bg').classList.remove('show');}
 function devOpts(sel2nd){return devices.map((d,i)=>`<option value="${d.id}"${i===(sel2nd?1:0)?' selected':''}>${d.name} (${d.ip})</option>`).join('');}
 
