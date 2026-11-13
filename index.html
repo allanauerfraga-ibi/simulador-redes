@@ -254,6 +254,8 @@ canvas{display:block;}
 .rack-assets{margin-top:8px;padding:8px;border:1px solid #2b3745;border-radius:7px;background:#0f151d;font-size:9px;line-height:1.7;color:#aeb9c6;}
 .rack-notice{position:fixed;right:318px;top:72px;z-index:1200;width:min(360px,calc(100vw - 30px));padding:12px 14px;border-radius:9px;background:#1b222c;border:1px solid #d29922;box-shadow:0 12px 35px rgba(0,0,0,.45);color:#dce5ef;animation:rackNoticeIn .18s ease-out;}
 .rack-notice.ok{border-color:#3fb950}.rack-notice.err{border-color:#f85149}
+.rack-notice.security{background:#fff3cd;border:2px solid #d97706;color:#3d2300;box-shadow:0 12px 35px rgba(80,45,0,.32)}
+.rack-notice.security b,.rack-notice.security span{color:#3d2300;font-weight:800}
 .rack-notice b{display:block;color:#fff;font-size:11px;margin-bottom:4px}.rack-notice span{font-size:10px;line-height:1.45;color:#b7c2cf}
 @keyframes rackNoticeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 .backbone-concept{margin:0 0 12px;padding:11px 12px;border:1px solid #5b3f91;border-left:4px solid #a371f7;border-radius:8px;background:linear-gradient(135deg,#1d1530,#121721);font-size:10px;line-height:1.55;color:#c9d1d9;}
@@ -2878,7 +2880,7 @@ const OBJECTIVE_ACTIVITY={
   ]
 };
 let objectiveStudent=null,objectiveQuestionOrder=[],objectiveOptionOrders=[];
-let objectiveSecurity={active:false,armed:false,awayCycle:false,violations:0,lastViolationAt:0,submitting:false,lastReason:''};
+let objectiveSecurity={active:false,armed:false,awayCycle:false,returnNoticePending:false,violations:0,lastViolationAt:0,submitting:false,lastReason:''};
 function objectiveShuffle(values){
   const shuffled=[...values];for(let index=shuffled.length-1;index>0;index--){const data=new Uint32Array(1);crypto.getRandomValues(data);const target=data[0]%(index+1);[shuffled[index],shuffled[target]]=[shuffled[target],shuffled[index]];}return shuffled;
 }
@@ -2889,7 +2891,7 @@ function updateObjectiveSecurityStatus(){
   if(!objectiveSecurity.armed){status.innerHTML='<b>⛶ Ative a tela cheia para começar.</b> As respostas ficarão bloqueadas até a autorização. <button class="green" onclick="resumeObjectiveFullscreen()" style="margin-left:6px">⛶ Ativar tela cheia</button>';}
   else if(objectiveSecurity.violations){status.innerHTML=`<b>⚠️ Ocorrência registrada: ${objectiveSecurity.violations}/2.</b> ${escapeReport(objectiveSecurity.lastReason)} ${remaining?'Mais uma saída causará a entrega automática.':'A atividade está sendo entregue automaticamente.'}${outsideFullscreen?' <button class="green" onclick="resumeObjectiveFullscreen()" style="margin-left:6px">⛶ Retornar à tela cheia</button>':''}`;}
   else status.innerHTML='<b>🔒 Controle ativo.</b> A atividade está em tela cheia. Minimizar, trocar de aba, abrir outra janela ou sair da tela cheia será registrado.';
-  status.style.position='sticky';status.style.top='0';status.style.zIndex='8';status.style.borderColor=objectiveSecurity.violations?'#f0883e':'#2e7046';status.style.color=objectiveSecurity.violations?'#ffd2a8':'#b8f5c8';
+  status.style.position='sticky';status.style.top='0';status.style.zIndex='8';status.style.borderColor=objectiveSecurity.violations?'#d97706':'#2e7046';status.style.background=objectiveSecurity.violations?'#fff3cd':'#101a26';status.style.color=objectiveSecurity.violations?'#3d2300':'#b8f5c8';
   const locked=objectiveSecurity.active&&!document.fullscreenElement&&!objectiveSecurity.submitting;
   document.querySelectorAll('.objective-question input').forEach(field=>field.disabled=locked);
   const submit=document.getElementById('objective-submit-btn');if(submit&&!objectiveSecurity.submitting)submit.disabled=locked;
@@ -2897,12 +2899,22 @@ function updateObjectiveSecurityStatus(){
 async function resumeObjectiveFullscreen(){
   try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();objectiveSecurity.armed=true;objectiveSecurity.awayCycle=false;updateObjectiveSecurityStatus();}catch(err){updateObjectiveSecurityStatus();rackNotice('Tela cheia necessária','Autorize a tela cheia para continuar a atividade.','err');}
 }
+async function autoResumeObjectiveFullscreen(){
+  if(!objectiveSecurity.active||objectiveSecurity.submitting||objectiveSecurity.violations!==1||document.hidden||!document.hasFocus()||document.fullscreenElement)return;
+  try{await document.documentElement.requestFullscreen();objectiveSecurity.awayCycle=false;updateObjectiveSecurityStatus();}
+  catch(err){updateObjectiveSecurityStatus();}
+}
+function notifyObjectiveReturn(){
+  if(!objectiveSecurity.active||objectiveSecurity.submitting||document.hidden||!document.hasFocus())return;
+  if(objectiveSecurity.returnNoticePending){objectiveSecurity.returnNoticePending=false;rackNotice('⚠️ Primeiro aviso registrado','Você saiu da atividade. O sistema está retornando à tela cheia. Uma nova saída entregará a atividade automaticamente.','security');}
+  void autoResumeObjectiveFullscreen();
+}
 function recordObjectiveSecurityViolation(reason){
   if(!objectiveSecurity.active||!objectiveSecurity.armed||objectiveSecurity.submitting)return;
   if(objectiveSecurity.awayCycle){updateObjectiveSecurityStatus();return;}
-  objectiveSecurity.awayCycle=true;objectiveSecurity.lastViolationAt=Date.now();objectiveSecurity.violations++;objectiveSecurity.lastReason=reason;updateObjectiveSecurityStatus();
+  objectiveSecurity.awayCycle=true;objectiveSecurity.lastViolationAt=Date.now();objectiveSecurity.violations++;objectiveSecurity.lastReason=reason;objectiveSecurity.returnNoticePending=objectiveSecurity.violations===1;updateObjectiveSecurityStatus();
   if(objectiveSecurity.violations>=2){objectiveSecurity.submitting=true;void submitObjectiveActivity(true,reason);}
-  else rackNotice('Saída da atividade registrada','Esta foi a primeira ocorrência. Na próxima saída, a atividade será entregue automaticamente.','err');
+  else if(!document.hidden&&document.hasFocus())notifyObjectiveReturn();
 }
 function syncObjectiveSecurityPresence(){
   if(!objectiveSecurity.active||objectiveSecurity.submitting)return;
@@ -2912,23 +2924,25 @@ function syncObjectiveSecurityPresence(){
   if(document.fullscreenElement){objectiveSecurity.armed=true;objectiveSecurity.awayCycle=false;}
   updateObjectiveSecurityStatus();
 }
-document.addEventListener('visibilitychange',syncObjectiveSecurityPresence);
+document.addEventListener('visibilitychange',()=>{syncObjectiveSecurityPresence();if(!document.hidden)setTimeout(notifyObjectiveReturn,0);});
 window.addEventListener('blur',()=>{if(objectiveSecurity.active)setTimeout(syncObjectiveSecurityPresence,120);});
-window.addEventListener('focus',syncObjectiveSecurityPresence);
+window.addEventListener('focus',()=>{syncObjectiveSecurityPresence();setTimeout(notifyObjectiveReturn,0);});
 document.addEventListener('fullscreenchange',syncObjectiveSecurityPresence);
+document.addEventListener('pointerdown',()=>{if(objectiveSecurity.active&&objectiveSecurity.violations===1&&!document.fullscreenElement)void resumeObjectiveFullscreen();},{capture:true});
+document.addEventListener('keydown',()=>{if(objectiveSecurity.active&&objectiveSecurity.violations===1&&!document.fullscreenElement)void resumeObjectiveFullscreen();},{capture:true});
 setInterval(syncObjectiveSecurityPresence,500);
 document.addEventListener('copy',event=>{if(objectiveSecurity.active){event.preventDefault();rackNotice('Cópia bloqueada','Não é permitido copiar o conteúdo durante a atividade.','err');}});
 document.addEventListener('contextmenu',event=>{if(objectiveSecurity.active){event.preventDefault();rackNotice('Menu bloqueado','O botão direito está desativado durante a atividade.','err');}});
 document.addEventListener('keydown',event=>{if(!objectiveSecurity.active)return;const key=event.key.toLowerCase();if(event.key==='F12'||(event.ctrlKey&&['c','l','t','n','w','u'].includes(key))||(event.altKey&&key==='tab')){event.preventDefault();rackNotice('Atalho bloqueado','Permaneça na atividade até realizar a entrega.','err');}});
 function showObjectiveActivityModal(){
-  showModal(`<h3>📋 Atividade objetiva — Revisão geral</h3><div class="edu-note">Esta atividade possui <b>15 questões com cinco alternativas</b> sobre LAN, Wi-Fi, cabos, diagnóstico, VLAN, backbone, rack, servidores, Sala Cidade e satélites. As questões e alternativas serão embaralhadas para cada aluno.</div><div class="edu-note" style="border-color:#f0883e;color:#ffd2a8"><b>🔒 Controle de consulta:</b> ao começar, a atividade abrirá em tela cheia. Minimizar, trocar de aba, abrir outra janela ou sair da tela cheia registra uma ocorrência. Na segunda ocorrência, a atividade será entregue automaticamente com as respostas marcadas.</div><div class="exam-grid"><div class="full"><label>Nome completo do aluno</label><input id="objective-student-name" value="${escapeReport(classroom.studentName||'')}" autocomplete="name" placeholder="Nome completo"></div><div class="full"><label>Escola</label><select id="objective-school" onchange="syncExamClassSelect('objective-school','objective-class')">${examSchoolOptions()}</select></div><div class="full"><label>Turma</label><select id="objective-class">${examClassOptions()}</select></div></div><div id="objective-entry-error" style="display:none;margin-top:8px;color:#f85149;font-weight:700"></div><div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="startObjectiveActivity()">⛶ Começar em tela cheia</button></div>`);
+  showModal(`<h3>📋 Atividade objetiva — Revisão geral</h3><div class="edu-note">Esta atividade possui <b>15 questões com cinco alternativas</b> sobre LAN, Wi-Fi, cabos, diagnóstico, VLAN, backbone, rack, servidores, Sala Cidade e satélites. As questões e alternativas serão embaralhadas para cada aluno.</div><div class="edu-note" style="border:2px solid #d97706;background:#fff3cd;color:#3d2300"><b>🔒 Controle de consulta:</b> ao começar, a atividade abrirá em tela cheia. Minimizar, trocar de aba, abrir outra janela ou sair da tela cheia registra uma ocorrência. Após o primeiro aviso, o sistema retorna à tela cheia. Na segunda ocorrência, a atividade será entregue automaticamente com as respostas marcadas.</div><div class="exam-grid"><div class="full"><label>Nome completo do aluno</label><input id="objective-student-name" value="${escapeReport(classroom.studentName||'')}" autocomplete="name" placeholder="Nome completo"></div><div class="full"><label>Escola</label><select id="objective-school" onchange="syncExamClassSelect('objective-school','objective-class')">${examSchoolOptions()}</select></div><div class="full"><label>Turma</label><select id="objective-class">${examClassOptions()}</select></div></div><div id="objective-entry-error" style="display:none;margin-top:8px;color:#f85149;font-weight:700"></div><div class="modal-btns"><button onclick="closeModal()">Cancelar</button><button class="green" onclick="startObjectiveActivity()">⛶ Começar em tela cheia</button></div>`);
 }
 async function startObjectiveActivity(){
   const name=document.getElementById('objective-student-name')?.value.trim()||'',school=document.getElementById('objective-school')?.value||'',studentClass=document.getElementById('objective-class')?.value||'',error=document.getElementById('objective-entry-error');
   if(name.length<3||!school||!studentClass){if(error){error.textContent='Informe o nome completo, a escola e a turma.';error.style.display='block';}return;}
   objectiveStudent={name,school,studentClass};classroom.studentName=name;
   objectiveQuestionOrder=objectiveShuffle(OBJECTIVE_ACTIVITY.questions.map((_,index)=>index));objectiveOptionOrders=OBJECTIVE_ACTIVITY.questions.map(question=>objectiveShuffle(question.options.map((_,index)=>index)));
-  objectiveSecurity={active:true,armed:false,awayCycle:false,violations:0,lastViolationAt:0,submitting:false,lastReason:''};renderObjectiveActivity();
+  objectiveSecurity={active:true,armed:false,awayCycle:false,returnNoticePending:false,violations:0,lastViolationAt:0,submitting:false,lastReason:''};renderObjectiveActivity();
   try{await document.documentElement.requestFullscreen();objectiveSecurity.armed=true;objectiveSecurity.awayCycle=false;updateObjectiveSecurityStatus();}catch(err){updateObjectiveSecurityStatus();rackNotice('Ative a tela cheia','Clique em “Ativar tela cheia” para liberar as respostas.','err');}
 }
 function renderObjectiveActivity(){
@@ -2954,7 +2968,7 @@ async function submitObjectiveActivity(forced=false,securityReason=''){
     const result=await supabaseRequest('/rest/v1/rpc/submit_objective_activity_secure',{method:'POST',body:{p_student_name:objectiveStudent.name,p_student_school:objectiveStudent.school,p_student_class:objectiveStudent.studentClass,p_answers:answers,p_security_violations:objectiveSecurity.violations,p_security_reason:reason},keepalive:forced}),data=Array.isArray(result)?result[0]:result,score=Number(data?.score)||0,correct=Number(data?.correct_answers)||0;
     objectiveSecurity.active=false;if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
     const letters=['A','B','C','D','E'],review=OBJECTIVE_ACTIVITY.questions.map((question,index)=>{const selected=answers[index],ok=selected===question.answer;return `<section class="objective-question"><strong>${index+1}. ${escapeReport(question.text)} — ${ok?'✅ Acertou':'❌ Errou'}</strong>${question.options.map((option,optionIndex)=>`<div class="objective-option ${optionIndex===question.answer?'correct':optionIndex===selected&&!ok?'wrong':''}"><span><b>${letters[optionIndex]})</b> ${escapeReport(option)}${optionIndex===question.answer?' — resposta correta':''}</span></div>`).join('')}</section>`;}).join('');
-    const securityNote=objectiveSecurity.violations?`<div class="edu-note" style="border-color:#f0883e;color:#ffd2a8"><b>⚠️ Entrega com ${objectiveSecurity.violations} ocorrência(s) de saída.</b> ${escapeReport(reason)}${forced?' A entrega foi realizada automaticamente.':''}</div>`:'';
+    const securityNote=objectiveSecurity.violations?`<div class="edu-note" style="border:2px solid #d97706;background:#fff3cd;color:#3d2300"><b>⚠️ Entrega com ${objectiveSecurity.violations} ocorrência(s) de saída.</b> ${escapeReport(reason)}${forced?' A entrega foi realizada automaticamente.':''}</div>`:'';
     showModal(`<h3>✅ Atividade entregue</h3><div class="edu-score">${score}%</div><div class="exam-status"><strong>${escapeReport(objectiveStudent.name)}</strong><br>Acertos: <b>${correct} de ${OBJECTIVE_ACTIVITY.questions.length}</b><br>Entrega registrada em: <b>${escapeReport(formatExamDateTime(data?.submitted_at||new Date().toISOString()))}</b></div>${securityNote}<div class="edu-note">A atividade foi corrigida automaticamente e o resultado já está disponível para o professor.</div><details class="activity-room"><summary><span>Conferir correção das 15 questões</span><small>${correct} acertos</small></summary><div style="padding:8px">${review}</div></details><div class="modal-btns"><button class="green" onclick="exitObjectiveActivity()">🚪 Sair</button></div>`);
   }catch(err){objectiveSecurity.submitting=false;if(error){error.textContent=err.message;error.style.display='block';}if(btn){btn.disabled=false;btn.textContent='📨 Entregar atividade';}}
 }
